@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetCare AI Receptionist — Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  [x-cloak] { display: none; }
+  .tab-active   { border-bottom: 2px solid #1d4ed8; color: #1d4ed8; font-weight:600; }
+  .tab-inactive { border-bottom: 2px solid transparent; color:#6b7280; }
+  .badge-appointment { background:#dbeafe; color:#1d4ed8; }
+  .badge-message     { background:#fef3c7; color:#92400e; }
+  .badge-emergency   { background:#fee2e2; color:#991b1b; }
+  .badge-unknown     { background:#f3f4f6; color:#374151; }
+  .badge-en          { background:#d1fae5; color:#065f46; }
+  .badge-es          { background:#ede9fe; color:#5b21b6; }
+  .badge-urgent      { background:#fee2e2; color:#991b1b; }
+  .badge-routine     { background:#d1fae5; color:#065f46; }
+  .badge-pending     { background:#fef3c7; color:#92400e; }
+  .badge-completed   { background:#d1fae5; color:#065f46; }
+  .badge-abandoned   { background:#f3f4f6; color:#6b7280; }
+  .transcript-patient   { background:#f0f9ff; border-left:3px solid #0ea5e9; }
+  .transcript-assistant { background:#f0fdf4; border-left:3px solid #22c55e; }
+  #modal-backdrop { transition: opacity .15s ease; }
+  .stat-card { transition: transform .1s ease; }
+  .stat-card:hover { transform: translateY(-2px); }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13
+                   a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0
+                   01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-gray-900 leading-tight">NetCare AI Receptionist</h1>
+        <p class="text-xs text-gray-500">Admin Dashboard</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="last-updated" class="text-xs text-gray-400"></span>
+      <button onclick="loadAll()" class="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg transition-colors">
+        ↻ Refresh
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="max-w-7xl mx-auto px-4 pt-6 pb-4">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="stats-grid">
+    <div class="stat-card bg-white rounded-xl p-4 shadow-sm border border-gray-100 col-span-2 md:col-span-1">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Total Calls</p>
+      <p class="text-3xl font-bold text-gray-900 mt-1" id="stat-total">—</p>
+      <p class="text-xs text-blue-600 mt-1" id="stat-today">— today</p>
+    </div>
+    <div class="stat-card bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Appointments</p>
+      <p class="text-3xl font-bold text-blue-700 mt-1" id="stat-appts">—</p>
+      <p class="text-xs text-orange-500 mt-1" id="stat-appts-pending">— pending</p>
+    </div>
+    <div class="stat-card bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Doctor Messages</p>
+      <p class="text-3xl font-bold text-yellow-700 mt-1" id="stat-msgs">—</p>
+      <p class="text-xs text-red-500 mt-1" id="stat-urgent">— urgent</p>
+    </div>
+    <div class="stat-card bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Spanish Calls</p>
+      <p class="text-3xl font-bold text-purple-700 mt-1" id="stat-es">—</p>
+      <p class="text-xs text-gray-400 mt-1">bilingual sessions</p>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs & Filters -->
+<div class="max-w-7xl mx-auto px-4">
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <!-- Tab bar -->
+    <div class="flex border-b border-gray-200 px-4">
+      <button onclick="switchTab('calls')"       id="tab-calls"       class="tab-active   px-4 py-3 text-sm mr-1">Call History</button>
+      <button onclick="switchTab('appointments')" id="tab-appointments" class="tab-inactive px-4 py-3 text-sm mr-1">Appointments</button>
+      <button onclick="switchTab('messages')"     id="tab-messages"     class="tab-inactive px-4 py-3 text-sm">Doctor Messages</button>
+    </div>
+
+    <!-- Filters (calls tab only) -->
+    <div id="filter-bar" class="flex flex-wrap gap-3 p-4 bg-gray-50 border-b border-gray-100">
+      <select id="filter-type" onchange="loadCalls()" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+        <option value="">All Types</option>
+        <option value="appointment">Appointments</option>
+        <option value="message">Messages</option>
+        <option value="unknown">Unknown</option>
+        <option value="emergency">Emergency</option>
+      </select>
+      <input type="date" id="filter-start" onchange="loadCalls()" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+      <input type="date" id="filter-end"   onchange="loadCalls()" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+      <button onclick="clearFilters()" class="text-sm text-gray-500 hover:text-gray-800 px-2">Clear</button>
+      <span id="result-count" class="ml-auto text-xs text-gray-400 self-center"></span>
+    </div>
+
+    <!-- Call History table -->
+    <div id="tab-content-calls">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-100">
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wide">
+              <th class="px-4 py-3">Date / Time</th>
+              <th class="px-4 py-3">Patient</th>
+              <th class="px-4 py-3">Phone</th>
+              <th class="px-4 py-3">Type</th>
+              <th class="px-4 py-3">Lang</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Duration</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody id="calls-tbody" class="divide-y divide-gray-50">
+            <tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Appointments table -->
+    <div id="tab-content-appointments" class="hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-100">
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wide">
+              <th class="px-4 py-3">Requested</th>
+              <th class="px-4 py-3">Patient</th>
+              <th class="px-4 py-3">Phone</th>
+              <th class="px-4 py-3">Preferred Date</th>
+              <th class="px-4 py-3">Preferred Time</th>
+              <th class="px-4 py-3">Reason</th>
+              <th class="px-4 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody id="appts-tbody" class="divide-y divide-gray-50">
+            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Doctor Messages table -->
+    <div id="tab-content-messages" class="hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-100">
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wide">
+              <th class="px-4 py-3">Received</th>
+              <th class="px-4 py-3">Patient</th>
+              <th class="px-4 py-3">Phone</th>
+              <th class="px-4 py-3">Message</th>
+              <th class="px-4 py-3">Urgency</th>
+              <th class="px-4 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody id="msgs-tbody" class="divide-y divide-gray-50">
+            <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Call Detail Modal -->
+<div id="modal-backdrop" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center p-4"
+     onclick="if(event.target===this) closeModal()">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-900" id="modal-title">Call Details</h2>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">✕</button>
+    </div>
+    <div class="overflow-y-auto flex-1 px-6 py-4" id="modal-body">
+      <p class="text-gray-400 text-sm">Loading...</p>
+    </div>
+  </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-gray-400">
+  NetCare AI Receptionist v1.0 &bull; Auto-refreshes every 60 seconds
+</div>
+
+<script>
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmt(dt) {
+  if (!dt) return '—';
+  const d = new Date(dt.endsWith('Z') ? dt : dt + 'Z');
+  return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true });
+}
+
+function dur(s) {
+  if (!s) return '—';
+  const m = Math.floor(s / 60), sec = s % 60;
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+function badge(cls, text) {
+  return `<span class="badge-${cls} text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap">${text}</span>`;
+}
+
+function typeBadge(t) {
+  const map = { appointment:'Appointment', message:'Message', emergency:'Emergency', unknown:'Unknown' };
+  return badge(t || 'unknown', map[t] || t || 'Unknown');
+}
+
+function statusBadge(s) {
+  const map = { completed:'Completed', abandoned:'Abandoned', in_progress:'In Progress', emergency:'Emergency', pending:'Pending', synced:'Synced' };
+  return badge(s || 'unknown', map[s] || s);
+}
+
+async function apiFetch(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────────
+
+async function loadStats() {
+  try {
+    const s = await apiFetch('/api/stats');
+    document.getElementById('stat-total').textContent  = s.totalCalls;
+    document.getElementById('stat-today').textContent  = `${s.callsToday} today`;
+    document.getElementById('stat-appts').textContent  = s.appointmentsTotal;
+    document.getElementById('stat-appts-pending').textContent = `${s.pendingAppointments} pending`;
+    document.getElementById('stat-msgs').textContent   = s.messagesTotal;
+    document.getElementById('stat-urgent').textContent = `${s.urgentMessages} urgent`;
+    document.getElementById('stat-es').textContent     = s.spanishCalls;
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    console.error('Stats error:', e);
+  }
+}
+
+// ── Calls ──────────────────────────────────────────────────────────────────────
+
+async function loadCalls() {
+  const tbody = document.getElementById('calls-tbody');
+  const type  = document.getElementById('filter-type').value;
+  const start = document.getElementById('filter-start').value;
+  const end   = document.getElementById('filter-end').value;
+
+  let url = '/api/calls?limit=200';
+  if (type)  url += `&callType=${encodeURIComponent(type)}`;
+  if (start) url += `&startDate=${start}`;
+  if (end)   url += `&endDate=${end}`;
+
+  tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>';
+
+  try {
+    const calls = await apiFetch(url);
+    document.getElementById('result-count').textContent = `${calls.length} records`;
+
+    if (!calls.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">No calls found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = calls.map(c => `
+      <tr class="hover:bg-gray-50 cursor-pointer" onclick="openCall(${c.id})">
+        <td class="px-4 py-3 text-gray-600 whitespace-nowrap">${fmt(c.created_at)}</td>
+        <td class="px-4 py-3 font-medium text-gray-900">${c.patient_name || '<span class="text-gray-400 font-normal">—</span>'}</td>
+        <td class="px-4 py-3 text-gray-600 whitespace-nowrap">${c.patient_phone || c.caller_number || '—'}</td>
+        <td class="px-4 py-3">${typeBadge(c.call_type)}</td>
+        <td class="px-4 py-3">${badge(c.language || 'en', (c.language || 'en').toUpperCase())}</td>
+        <td class="px-4 py-3">${statusBadge(c.status)}</td>
+        <td class="px-4 py-3 text-gray-500">${dur(c.duration)}</td>
+        <td class="px-4 py-3 text-right">
+          <span class="text-blue-600 text-xs hover:underline">View →</span>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// ── Appointments ───────────────────────────────────────────────────────────────
+
+async function loadAppointments() {
+  const tbody = document.getElementById('appts-tbody');
+  try {
+    const appts = await apiFetch('/api/appointments?limit=100');
+    if (!appts.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">No appointments yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = appts.map(a => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-gray-600 whitespace-nowrap">${fmt(a.created_at)}</td>
+        <td class="px-4 py-3 font-medium text-gray-900">${a.patient_name}</td>
+        <td class="px-4 py-3 text-gray-600">${a.patient_phone}</td>
+        <td class="px-4 py-3 text-gray-700">${a.preferred_date || '—'}</td>
+        <td class="px-4 py-3 text-gray-700">${a.preferred_time || '—'}</td>
+        <td class="px-4 py-3 text-gray-700 max-w-xs truncate" title="${a.reason || ''}">${a.reason || '—'}</td>
+        <td class="px-4 py-3">${statusBadge(a.status)}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// ── Doctor Messages ────────────────────────────────────────────────────────────
+
+async function loadMessages() {
+  const tbody = document.getElementById('msgs-tbody');
+  try {
+    const msgs = await apiFetch('/api/messages?limit=100');
+    if (!msgs.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No messages yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = msgs.map(m => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-gray-600 whitespace-nowrap">${fmt(m.created_at)}</td>
+        <td class="px-4 py-3 font-medium text-gray-900">${m.patient_name}</td>
+        <td class="px-4 py-3 text-gray-600">${m.patient_phone}</td>
+        <td class="px-4 py-3 text-gray-700 max-w-xs">${m.message_content}</td>
+        <td class="px-4 py-3">${badge(m.urgency || 'routine', (m.urgency || 'routine').charAt(0).toUpperCase() + (m.urgency||'routine').slice(1))}</td>
+        <td class="px-4 py-3">${statusBadge(m.status)}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+
+let currentTab = 'calls';
+
+function switchTab(tab) {
+  currentTab = tab;
+  ['calls','appointments','messages'].forEach(t => {
+    document.getElementById(`tab-${t}`).className         = t === tab ? 'tab-active px-4 py-3 text-sm mr-1'   : 'tab-inactive px-4 py-3 text-sm mr-1';
+    document.getElementById(`tab-content-${t}`).className = t === tab ? '' : 'hidden';
+  });
+  document.getElementById('filter-bar').style.display = tab === 'calls' ? '' : 'none';
+
+  if (tab === 'appointments') loadAppointments();
+  if (tab === 'messages')     loadMessages();
+}
+
+function clearFilters() {
+  document.getElementById('filter-type').value  = '';
+  document.getElementById('filter-start').value = '';
+  document.getElementById('filter-end').value   = '';
+  loadCalls();
+}
+
+// ── Call Detail Modal ─────────────────────────────────────────────────────────
+
+async function openCall(id) {
+  const modal = document.getElementById('modal-backdrop');
+  const body  = document.getElementById('modal-body');
+  const title = document.getElementById('modal-title');
+
+  modal.classList.remove('hidden');
+  body.innerHTML = '<p class="text-gray-400 text-sm py-8 text-center">Loading call details…</p>';
+
+  try {
+    const c = await apiFetch(`/api/calls/${id}`);
+    title.textContent = `Call #${c.id} — ${c.patient_name || 'Unknown Patient'}`;
+
+    const apptBlock = c.appointment ? `
+      <div class="mt-4 p-3 bg-blue-50 rounded-lg">
+        <p class="text-xs font-semibold text-blue-800 mb-2 uppercase tracking-wide">Appointment Request</p>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <div><span class="text-gray-500">Date:</span> <span class="font-medium">${c.appointment.preferred_date || '—'}</span></div>
+          <div><span class="text-gray-500">Time:</span> <span class="font-medium">${c.appointment.preferred_time || '—'}</span></div>
+          <div class="col-span-2"><span class="text-gray-500">Reason:</span> <span class="font-medium">${c.appointment.reason || '—'}</span></div>
+          <div><span class="text-gray-500">Status:</span> ${statusBadge(c.appointment.status)}</div>
+        </div>
+      </div>
+    ` : '';
+
+    const msgBlock = c.doctorMessage ? `
+      <div class="mt-4 p-3 bg-yellow-50 rounded-lg">
+        <p class="text-xs font-semibold text-yellow-800 mb-2 uppercase tracking-wide">Doctor Message</p>
+        <p class="text-sm text-gray-700">${c.doctorMessage.message_content}</p>
+        <p class="text-xs text-gray-500 mt-1">Urgency: ${badge(c.doctorMessage.urgency || 'routine', c.doctorMessage.urgency || 'routine')}</p>
+      </div>
+    ` : '';
+
+    const transcriptHtml = (c.transcript || []).map(t => `
+      <div class="mb-2 p-3 rounded-lg text-sm ${t.role === 'patient' ? 'transcript-patient' : 'transcript-assistant'}">
+        <p class="text-xs font-semibold mb-1 ${t.role === 'patient' ? 'text-sky-700' : 'text-green-700'}">
+          ${t.role === 'patient' ? '🧑 Patient' : '🤖 Receptionist'}
+          <span class="text-gray-400 font-normal ml-2">${fmt(t.created_at)}</span>
+        </p>
+        <p class="text-gray-800">${t.content}</p>
+      </div>
+    `).join('');
+
+    body.innerHTML = `
+      <div class="grid grid-cols-2 gap-3 text-sm mb-4">
+        <div><span class="text-gray-500">Caller number:</span><br><span class="font-medium">${c.caller_number || '—'}</span></div>
+        <div><span class="text-gray-500">Patient phone:</span><br><span class="font-medium">${c.patient_phone || '—'}</span></div>
+        <div><span class="text-gray-500">Type:</span><br>${typeBadge(c.call_type)}</div>
+        <div><span class="text-gray-500">Language:</span><br>${badge(c.language || 'en', (c.language || 'en').toUpperCase())}</div>
+        <div><span class="text-gray-500">Status:</span><br>${statusBadge(c.status)}</div>
+        <div><span class="text-gray-500">Duration:</span><br><span class="font-medium">${dur(c.duration)}</span></div>
+        <div><span class="text-gray-500">Received:</span><br><span class="font-medium">${fmt(c.created_at)}</span></div>
+        <div><span class="text-gray-500">Call SID:</span><br><span class="text-xs text-gray-400 font-mono break-all">${c.call_sid}</span></div>
+      </div>
+      ${apptBlock}${msgBlock}
+      <div class="mt-5">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Full Transcript</p>
+        ${transcriptHtml || '<p class="text-gray-400 text-sm">No transcript recorded</p>'}
+      </div>
+    `;
+  } catch(e) {
+    body.innerHTML = `<p class="text-red-500 text-sm">Failed to load: ${e.message}</p>`;
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.add('hidden');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Init & auto-refresh ────────────────────────────────────────────────────────
+
+async function loadAll() {
+  await Promise.all([loadStats(), loadCalls()]);
+}
+
+loadAll();
+setInterval(loadAll, 60_000);
+</script>
+</body>
+</html>
