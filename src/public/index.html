@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetCare AI Receptionist</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --brand: #1d4ed8; --brand-dark: #1e3a8a; }
+    html { scroll-behavior: smooth; }
+    .hero-bg {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #0369a1 100%);
+    }
+    .card-hover { transition: transform .15s ease, box-shadow .15s ease; }
+    .card-hover:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+    .lang-btn.active { background: white; color: #1d4ed8; font-weight: 700; }
+    .lang-btn        { color: rgba(255,255,255,.75); }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(29,78,216,.15);
+    }
+    .success-check { animation: pop .35s ease; }
+    @keyframes pop { 0%{transform:scale(0)} 70%{transform:scale(1.15)} 100%{transform:scale(1)} }
+    #form-success { display: none; }
+  </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+
+<!-- ── NAV ────────────────────────────────────────────────────────────────── -->
+<nav class="hero-bg sticky top-0 z-50 shadow-lg">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12
+               7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+        </svg>
+      </div>
+      <div>
+        <span class="text-white font-bold text-lg leading-none block">NetCare</span>
+        <span class="text-blue-200 text-xs" data-t="nav-sub">AI Medical Receptionist</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <a href="#request" class="hidden sm:block text-white/90 hover:text-white text-sm transition-colors" data-t="nav-appt">Book Appointment</a>
+      <a href="/admin" class="hidden sm:block text-white/70 hover:text-white text-sm transition-colors" data-t="nav-admin">Staff Login</a>
+      <!-- Language toggle -->
+      <div class="flex items-center bg-white/15 rounded-full p-0.5">
+        <button onclick="setLang('en')" id="btn-en" class="lang-btn active px-3 py-1 rounded-full text-sm transition-all">EN</button>
+        <button onclick="setLang('es')" id="btn-es" class="lang-btn px-3 py-1 rounded-full text-sm transition-all">ES</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ───────────────────────────────────────────────────────────────── -->
+<section class="hero-bg text-white pt-20 pb-28 px-4">
+  <div class="max-w-4xl mx-auto text-center">
+    <div class="inline-flex items-center gap-2 bg-white/15 rounded-full px-4 py-1.5 text-sm mb-6">
+      <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+      <span data-t="hero-badge">Available 24/7 — English &amp; Spanish</span>
+    </div>
+    <h1 class="text-4xl md:text-5xl font-extrabold leading-tight mb-4" data-t="hero-title">
+      Your AI Medical Receptionist,<br>Always Ready to Help
+    </h1>
+    <p class="text-lg text-blue-100 max-w-2xl mx-auto mb-8" data-t="hero-sub">
+      Schedule appointments, send messages to your doctor, and get clinic information — any time of day, in English or Spanish.
+    </p>
+    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="#request"
+        class="bg-white text-blue-700 font-semibold px-7 py-3 rounded-xl hover:bg-blue-50 transition-colors shadow-lg"
+        data-t="hero-cta">Request an Appointment</a>
+      <a href="tel:+1-800-000-0000"
+        class="border border-white/50 text-white font-semibold px-7 py-3 rounded-xl hover:bg-white/10 transition-colors"
+        data-t="hero-call">Call Us Now</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── WAVE DIVIDER ───────────────────────────────────────────────────────── -->
+<div class="-mt-12 overflow-hidden">
+  <svg viewBox="0 0 1440 48" xmlns="http://www.w3.org/2000/svg" class="w-full block" style="margin-bottom:-2px">
+    <path d="M0,48 C360,0 1080,0 1440,48 L1440,48 L0,48 Z" fill="#f9fafb"/>
+  </svg>
+</div>
+
+<!-- ── FEATURES ───────────────────────────────────────────────────────────── -->
+<section class="max-w-6xl mx-auto px-4 py-16">
+  <div class="text-center mb-12">
+    <h2 class="text-3xl font-bold text-gray-900 mb-3" data-t="feat-title">How We Help You</h2>
+    <p class="text-gray-500 max-w-xl mx-auto" data-t="feat-sub">Our AI receptionist handles your needs around the clock so our medical staff can focus on patient care.</p>
+  </div>
+  <div class="grid md:grid-cols-3 gap-6">
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 card-hover">
+      <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2
+               2v12a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <h3 class="font-bold text-lg mb-2" data-t="f1-title">Easy Scheduling</h3>
+      <p class="text-gray-500 text-sm" data-t="f1-desc">Request an appointment online or by phone. We'll confirm your preferred date and time within one business day.</p>
+    </div>
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 card-hover">
+      <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21
+               l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502
+               l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+        </svg>
+      </div>
+      <h3 class="font-bold text-lg mb-2" data-t="f2-title">24/7 AI Phone Line</h3>
+      <p class="text-gray-500 text-sm" data-t="f2-desc">Call anytime and speak with our AI receptionist in English or Spanish. It understands your needs and routes you correctly.</p>
+    </div>
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 card-hover">
+      <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7
+               a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <h3 class="font-bold text-lg mb-2" data-t="f3-title">Doctor Messages</h3>
+      <p class="text-gray-500 text-sm" data-t="f3-desc">Leave a message for your doctor and our staff will follow up. Urgent concerns are flagged immediately.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── APPOINTMENT FORM ────────────────────────────────────────────────────── -->
+<section id="request" class="bg-white py-16 px-4 border-t border-gray-100">
+  <div class="max-w-2xl mx-auto">
+    <div class="text-center mb-10">
+      <h2 class="text-3xl font-bold text-gray-900 mb-2" data-t="form-title">Request an Appointment</h2>
+      <p class="text-gray-500" data-t="form-sub">Fill in the form below and we'll confirm your visit within one business day.</p>
+    </div>
+
+    <!-- Success state -->
+    <div id="form-success" class="text-center py-10">
+      <div class="success-check w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
+        <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <h3 class="text-xl font-bold text-gray-900 mb-2" data-t="success-title">Request Received!</h3>
+      <p class="text-gray-500 max-w-sm mx-auto" data-t="success-body">Thank you. A member of our team will contact you within one business day to confirm your appointment.</p>
+      <button onclick="resetForm()" class="mt-6 text-blue-600 hover:underline text-sm" data-t="success-another">Submit another request</button>
+    </div>
+
+    <!-- Form -->
+    <form id="appt-form" onsubmit="submitForm(event)" class="space-y-5">
+      <!-- hidden language field -->
+      <input type="hidden" id="form-lang" name="language" value="en">
+
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-first">First Name *</label>
+          <input type="text" name="firstName" required
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all"
+            data-placeholder="first" placeholder="Maria">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-last">Last Name *</label>
+          <input type="text" name="lastName" required
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all"
+            data-placeholder="last" placeholder="Garcia">
+        </div>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-phone">Phone Number *</label>
+          <input type="tel" name="phone" required
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all"
+            placeholder="(555) 000-0000">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-email">Email</label>
+          <input type="email" name="email"
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all"
+            placeholder="maria@email.com">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-dob">Date of Birth</label>
+        <input type="date" name="dateOfBirth"
+          class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all">
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-date">Preferred Date</label>
+          <input type="date" name="preferredDate"
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-time">Preferred Time</label>
+          <select name="preferredTime"
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all bg-white">
+            <option value="" data-t="time-any">Any time</option>
+            <option value="morning" data-t="time-morning">Morning (8am – 12pm)</option>
+            <option value="afternoon" data-t="time-afternoon">Afternoon (12pm – 4pm)</option>
+            <option value="evening" data-t="time-evening">Evening (4pm – 7pm)</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" data-t="lbl-reason">Reason for Visit</label>
+        <textarea name="reason" rows="3"
+          class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm transition-all resize-none"
+          data-placeholder="reason"
+          placeholder="Briefly describe the reason for your visit (optional)"></textarea>
+      </div>
+
+      <div id="form-error" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3"></div>
+
+      <button type="submit" id="submit-btn"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm shadow-md">
+        <span id="submit-label" data-t="btn-submit">Submit Request</span>
+      </button>
+
+      <p class="text-xs text-gray-400 text-center" data-t="form-note">
+        Your information is kept confidential and used only to schedule your appointment.
+      </p>
+    </form>
+  </div>
+</section>
+
+<!-- ── INFO STRIP ─────────────────────────────────────────────────────────── -->
+<section class="bg-blue-700 text-white py-10 px-4">
+  <div class="max-w-5xl mx-auto grid sm:grid-cols-3 gap-8 text-center">
+    <div>
+      <div class="text-2xl font-bold mb-1">24/7</div>
+      <div class="text-blue-200 text-sm" data-t="strip-1">AI Receptionist Available</div>
+    </div>
+    <div>
+      <div class="text-2xl font-bold mb-1">EN / ES</div>
+      <div class="text-blue-200 text-sm" data-t="strip-2">Bilingual Support</div>
+    </div>
+    <div>
+      <div class="text-2xl font-bold mb-1">&lt; 1 Day</div>
+      <div class="text-blue-200 text-sm" data-t="strip-3">Appointment Confirmation</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────────────── -->
+<footer class="bg-gray-900 text-gray-400 py-10 px-4">
+  <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+        </svg>
+      </div>
+      <span class="text-white font-semibold text-sm">NetCare AI Receptionist</span>
+    </div>
+    <p class="text-xs" data-t="footer-copy">&copy; 2026 NetCare Clinic. All rights reserved.</p>
+    <a href="/admin" class="text-xs hover:text-white transition-colors" data-t="footer-admin">Staff Portal</a>
+  </div>
+</footer>
+
+<!-- ── I18N + FORM LOGIC ──────────────────────────────────────────────────── -->
+<script>
+const T = {
+  en: {
+    'nav-sub':        'AI Medical Receptionist',
+    'nav-appt':       'Book Appointment',
+    'nav-admin':      'Staff Login',
+    'hero-badge':     'Available 24/7 — English & Spanish',
+    'hero-title':     'Your AI Medical Receptionist,<br>Always Ready to Help',
+    'hero-sub':       'Schedule appointments, send messages to your doctor, and get clinic information — any time of day, in English or Spanish.',
+    'hero-cta':       'Request an Appointment',
+    'hero-call':      'Call Us Now',
+    'feat-title':     'How We Help You',
+    'feat-sub':       'Our AI receptionist handles your needs around the clock so our medical staff can focus on patient care.',
+    'f1-title':       'Easy Scheduling',
+    'f1-desc':        'Request an appointment online or by phone. We\'ll confirm your preferred date and time within one business day.',
+    'f2-title':       '24/7 AI Phone Line',
+    'f2-desc':        'Call anytime and speak with our AI receptionist in English or Spanish. It understands your needs and routes you correctly.',
+    'f3-title':       'Doctor Messages',
+    'f3-desc':        'Leave a message for your doctor and our staff will follow up. Urgent concerns are flagged immediately.',
+    'form-title':     'Request an Appointment',
+    'form-sub':       'Fill in the form below and we\'ll confirm your visit within one business day.',
+    'lbl-first':      'First Name *',
+    'lbl-last':       'Last Name *',
+    'lbl-phone':      'Phone Number *',
+    'lbl-email':      'Email',
+    'lbl-dob':        'Date of Birth',
+    'lbl-date':       'Preferred Date',
+    'lbl-time':       'Preferred Time',
+    'lbl-reason':     'Reason for Visit',
+    'time-any':       'Any time',
+    'time-morning':   'Morning (8am – 12pm)',
+    'time-afternoon': 'Afternoon (12pm – 4pm)',
+    'time-evening':   'Evening (4pm – 7pm)',
+    'btn-submit':     'Submit Request',
+    'form-note':      'Your information is kept confidential and used only to schedule your appointment.',
+    'success-title':  'Request Received!',
+    'success-body':   'Thank you. A member of our team will contact you within one business day to confirm your appointment.',
+    'success-another':'Submit another request',
+    'strip-1':        'AI Receptionist Available',
+    'strip-2':        'Bilingual Support',
+    'strip-3':        'Appointment Confirmation',
+    'footer-copy':    '© 2026 NetCare Clinic. All rights reserved.',
+    'footer-admin':   'Staff Portal',
+    'ph-first':       'Maria',
+    'ph-last':        'Garcia',
+    'ph-reason':      'Briefly describe the reason for your visit (optional)',
+  },
+  es: {
+    'nav-sub':        'Recepcionista Médica IA',
+    'nav-appt':       'Solicitar Cita',
+    'nav-admin':      'Acceso Personal',
+    'hero-badge':     'Disponible 24/7 — Inglés y Español',
+    'hero-title':     'Su Recepcionista Médica IA,<br>Siempre Lista para Ayudar',
+    'hero-sub':       'Programe citas, envíe mensajes a su médico y obtenga información de la clínica — a cualquier hora del día, en inglés o español.',
+    'hero-cta':       'Solicitar una Cita',
+    'hero-call':      'Llámenos Ahora',
+    'feat-title':     'Cómo Le Ayudamos',
+    'feat-sub':       'Nuestra recepcionista IA atiende sus necesidades las 24 horas para que el personal médico pueda enfocarse en su atención.',
+    'f1-title':       'Citas Fáciles',
+    'f1-desc':        'Solicite una cita en línea o por teléfono. Confirmaremos su fecha y hora preferidas en un día hábil.',
+    'f2-title':       'Línea IA 24/7',
+    'f2-desc':        'Llame en cualquier momento y hable con nuestra recepcionista IA en inglés o español. Entiende sus necesidades.',
+    'f3-title':       'Mensajes al Médico',
+    'f3-desc':        'Deje un mensaje para su médico y nuestro personal hará seguimiento. Los casos urgentes se marcan de inmediato.',
+    'form-title':     'Solicitar una Cita',
+    'form-sub':       'Complete el formulario y confirmaremos su visita en un día hábil.',
+    'lbl-first':      'Nombre *',
+    'lbl-last':       'Apellido *',
+    'lbl-phone':      'Teléfono *',
+    'lbl-email':      'Correo Electrónico',
+    'lbl-dob':        'Fecha de Nacimiento',
+    'lbl-date':       'Fecha Preferida',
+    'lbl-time':       'Horario Preferido',
+    'lbl-reason':     'Motivo de la Visita',
+    'time-any':       'Cualquier horario',
+    'time-morning':   'Mañana (8am – 12pm)',
+    'time-afternoon': 'Tarde (12pm – 4pm)',
+    'time-evening':   'Noche (4pm – 7pm)',
+    'btn-submit':     'Enviar Solicitud',
+    'form-note':      'Su información es confidencial y se usa únicamente para programar su cita.',
+    'success-title':  '¡Solicitud Recibida!',
+    'success-body':   'Gracias. Un miembro de nuestro equipo se comunicará con usted en un día hábil para confirmar su cita.',
+    'success-another':'Enviar otra solicitud',
+    'strip-1':        'Recepcionista IA Disponible',
+    'strip-2':        'Atención Bilingüe',
+    'strip-3':        'Confirmación de Cita',
+    'footer-copy':    '© 2026 Clínica NetCare. Todos los derechos reservados.',
+    'footer-admin':   'Portal del Personal',
+    'ph-first':       'María',
+    'ph-last':        'García',
+    'ph-reason':      'Describa brevemente el motivo de su visita (opcional)',
+  }
+};
+
+let currentLang = 'en';
+
+function setLang(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang;
+  document.getElementById('form-lang').value = lang;
+
+  document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+  document.getElementById('btn-es').classList.toggle('active', lang === 'es');
+
+  const dict = T[lang];
+  document.querySelectorAll('[data-t]').forEach(el => {
+    const key = el.getAttribute('data-t');
+    if (dict[key] !== undefined) el.innerHTML = dict[key];
+  });
+
+  // Placeholders on inputs/textareas
+  const phFirst  = document.querySelector('[data-placeholder="first"]');
+  const phLast   = document.querySelector('[data-placeholder="last"]');
+  const phReason = document.querySelector('[data-placeholder="reason"]');
+  if (phFirst)  phFirst.placeholder  = dict['ph-first'];
+  if (phLast)   phLast.placeholder   = dict['ph-last'];
+  if (phReason) phReason.placeholder = dict['ph-reason'];
+}
+
+async function submitForm(e) {
+  e.preventDefault();
+  const form   = document.getElementById('appt-form');
+  const errBox = document.getElementById('form-error');
+  const btn    = document.getElementById('submit-btn');
+  const lbl    = document.getElementById('submit-label');
+
+  errBox.classList.add('hidden');
+  btn.disabled = true;
+  lbl.textContent = currentLang === 'es' ? 'Enviando…' : 'Sending…';
+
+  const data = Object.fromEntries(new FormData(form));
+
+  try {
+    const res  = await fetch('/public/request', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(data),
+    });
+    const json = await res.json();
+
+    if (!res.ok) throw new Error(json.error || 'Unknown error');
+
+    form.style.display       = 'none';
+    const success = document.getElementById('form-success');
+    success.style.display    = 'block';
+    setLang(currentLang); // re-apply translations to success block
+
+  } catch (err) {
+    errBox.textContent = err.message;
+    errBox.classList.remove('hidden');
+    btn.disabled  = false;
+    lbl.setAttribute('data-t', 'btn-submit');
+    setLang(currentLang);
+  }
+}
+
+function resetForm() {
+  document.getElementById('appt-form').reset();
+  document.getElementById('appt-form').style.display = '';
+  document.getElementById('form-success').style.display = 'none';
+  document.getElementById('submit-btn').disabled = false;
+}
+
+// Set min date to today on date inputs
+document.querySelectorAll('input[type="date"]').forEach(el => {
+  if (el.name === 'preferredDate') el.min = new Date().toISOString().slice(0,10);
+});
+</script>
+</body>
+</html>

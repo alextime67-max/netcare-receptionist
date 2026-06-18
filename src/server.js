@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/webhook', require('./routes/webhook'));
 app.use('/admin',   require('./routes/admin'));
 app.use('/api',     require('./routes/api'));
+app.use('/public',  require('./routes/public'));
 
 // Health check (public — Replit keep-alive pings hit this)
 app.get('/', (_req, res) => {

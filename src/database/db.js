@@ -64,9 +64,25 @@ function initDb() {
       FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS idx_calls_created_at ON calls(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_calls_call_type  ON calls(call_type);
-    CREATE INDEX IF NOT EXISTS idx_transcripts_call ON transcripts(call_id);
+    CREATE TABLE IF NOT EXISTS web_requests (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_name     TEXT NOT NULL,
+      last_name      TEXT NOT NULL,
+      phone          TEXT NOT NULL,
+      email          TEXT,
+      date_of_birth  TEXT,
+      preferred_date TEXT,
+      preferred_time TEXT,
+      reason         TEXT,
+      language       TEXT DEFAULT 'en',
+      status         TEXT DEFAULT 'pending',
+      created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_calls_created_at  ON calls(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_calls_call_type   ON calls(call_type);
+    CREATE INDEX IF NOT EXISTS idx_transcripts_call  ON transcripts(call_id);
+    CREATE INDEX IF NOT EXISTS idx_web_requests_date ON web_requests(created_at DESC);
   `);
 
   console.log('[DB] Database initialized at', path.join(DATA_DIR, 'netcare.db'));
@@ -197,6 +213,23 @@ function addTranscript(callId, role, content) {
   db.prepare('INSERT INTO transcripts (call_id, role, content) VALUES (?, ?, ?)').run(callId, role, content);
 }
 
+// ── Web Requests ─────────────────────────────────────────────────────────────
+
+function saveWebRequest(data) {
+  return db.prepare(`
+    INSERT INTO web_requests (first_name, last_name, phone, email, date_of_birth, preferred_date, preferred_time, reason, language)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.firstName, data.lastName, data.phone, data.email || null,
+    data.dateOfBirth || null, data.preferredDate || null,
+    data.preferredTime || null, data.reason || null, data.language || 'en'
+  ).lastInsertRowid;
+}
+
+function getWebRequests(limit = 50) {
+  return db.prepare('SELECT * FROM web_requests ORDER BY created_at DESC LIMIT ?').all(limit);
+}
+
 module.exports = {
   db,
   initDb,
@@ -212,4 +245,6 @@ module.exports = {
   createDoctorMessage,
   getDoctorMessages,
   addTranscript,
+  saveWebRequest,
+  getWebRequests,
 };
