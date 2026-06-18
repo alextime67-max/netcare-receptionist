@@ -1,5 +1,6 @@
 const express = require('express');
 const router  = express.Router();
+const twilio  = require('twilio');
 
 const {
   initSession, getSession, setSessionDbId, endSession,
@@ -12,6 +13,27 @@ const {
 } = require('../database/db');
 
 const { sendAppointmentNotification, sendDoctorMessageNotification } = require('../services/email');
+
+// ── Twilio request signature validation (enable with TWILIO_VALIDATE=true) ────
+
+router.use((req, res, next) => {
+  if (process.env.TWILIO_VALIDATE !== 'true') return next();
+
+  const token  = process.env.TWILIO_AUTH_TOKEN;
+  const appUrl = process.env.APP_URL;
+  if (!token || !appUrl) return next();
+
+  const signature = req.headers['x-twilio-signature'] || '';
+  const url       = `${appUrl.replace(/\/$/, '')}${req.originalUrl}`;
+
+  if (!twilio.validateRequest(token, signature, url, req.body)) {
+    console.warn(`[Webhook] Rejected request with invalid Twilio signature — ${req.originalUrl}`);
+    return res.status(403).type('text/xml').send(
+      '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Unauthorized</Say></Response>'
+    );
+  }
+  next();
+});
 
 // ── TwiML helpers ─────────────────────────────────────────────────────────────
 

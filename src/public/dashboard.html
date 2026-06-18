@@ -88,7 +88,8 @@
     <div class="flex border-b border-gray-200 px-4">
       <button onclick="switchTab('calls')"       id="tab-calls"       class="tab-active   px-4 py-3 text-sm mr-1">Call History</button>
       <button onclick="switchTab('appointments')" id="tab-appointments" class="tab-inactive px-4 py-3 text-sm mr-1">Appointments</button>
-      <button onclick="switchTab('messages')"     id="tab-messages"     class="tab-inactive px-4 py-3 text-sm">Doctor Messages</button>
+      <button onclick="switchTab('messages')"     id="tab-messages"     class="tab-inactive px-4 py-3 text-sm mr-1">Doctor Messages</button>
+      <button onclick="switchTab('phone')"        id="tab-phone"        class="tab-inactive px-4 py-3 text-sm ml-auto">⚙ Phone Setup</button>
     </div>
 
     <!-- Filters (calls tab only) -->
@@ -171,6 +172,117 @@
         </table>
       </div>
     </div>
+
+    <!-- Phone Setup tab -->
+    <div id="tab-content-phone" class="hidden p-6 space-y-7">
+
+      <!-- Config status grid -->
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Configuration Status</p>
+        <div id="phone-config-status" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div class="text-gray-400">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Test connection -->
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Connection Test</p>
+        <button id="test-btn" onclick="testTwilio()"
+          class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Test Twilio Connection
+        </button>
+        <div id="test-result" class="mt-3"></div>
+      </div>
+
+      <!-- Webhook URLs -->
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Webhook URLs</p>
+        <p class="text-xs text-gray-400 mb-3">Paste these into your Twilio console under Phone Numbers → Manage → your number.</p>
+        <div class="space-y-3">
+
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div>
+                <p class="text-xs font-semibold text-gray-700">Voice &amp; Fax — "A Call Comes In"</p>
+                <p class="text-xs text-gray-400 mt-0.5">Method: <strong>HTTP POST</strong></p>
+              </div>
+              <button onclick="copyUrl('url-voice')" class="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-2 py-1 rounded-lg whitespace-nowrap transition-colors">
+                Copy
+              </button>
+            </div>
+            <p id="url-voice" class="font-mono text-sm text-gray-800 break-all mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              Loading…
+            </p>
+          </div>
+
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <div>
+                <p class="text-xs font-semibold text-gray-700">Call Status Changes</p>
+                <p class="text-xs text-gray-400 mt-0.5">Method: <strong>HTTP POST</strong></p>
+              </div>
+              <button onclick="copyUrl('url-status')" class="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-2 py-1 rounded-lg whitespace-nowrap transition-colors">
+                Copy
+              </button>
+            </div>
+            <p id="url-status" class="font-mono text-sm text-gray-800 break-all mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              Loading…
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Setup checklist -->
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Setup Checklist</p>
+        <ol class="space-y-3 text-sm text-gray-700">
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">1</span>
+            <span>Create a <strong>Twilio account</strong> at <span class="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">twilio.com</span> and verify your email.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">2</span>
+            <span>Buy a <strong>phone number</strong> with Voice capability (Phone Numbers → Buy a Number). Choose a local or toll-free number.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">3</span>
+            <span>Add your credentials to <span class="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">.env</span>:<br>
+              <span class="font-mono text-xs text-gray-500 block mt-1">TWILIO_ACCOUNT_SID=ACxxxxx…<br>TWILIO_AUTH_TOKEN=your_token<br>TWILIO_PHONE_NUMBER=+1XXXXXXXXXX</span>
+            </span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">4</span>
+            <span>Set <span class="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">APP_URL</span> in <span class="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">.env</span> to your public deployment URL (e.g. your Replit or Railway URL). This is used to generate the webhook URLs above.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">5</span>
+            <span>In the Twilio console go to <strong>Phone Numbers → Manage → Active Numbers → your number</strong>.<br>
+              Under <em>Voice &amp; Fax</em> set <em>"A Call Comes In"</em> to the <strong>Voice webhook URL</strong> above (HTTP POST).<br>
+              Under <em>Call Status Changes</em> paste the <strong>Status callback URL</strong> above.
+            </span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">6</span>
+            <span>Click <strong>Test Twilio Connection</strong> above — it should report your account name, account status, and confirm the phone number is found.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">7</span>
+            <span><strong>(Production)</strong> Set <span class="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">TWILIO_VALIDATE=true</span> in <span class="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">.env</span> to enable request-signature verification — this ensures only real Twilio calls reach your webhooks.</span>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Security note -->
+      <div id="validate-notice" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
+        <strong>Security tip:</strong> Twilio request validation is currently <strong>disabled</strong>. Set <span class="font-mono text-xs bg-yellow-100 px-1 py-0.5 rounded">TWILIO_VALIDATE=true</span> in your <span class="font-mono text-xs bg-yellow-100 px-1 py-0.5 rounded">.env</span> before going live to prevent spoofed webhook calls.
+      </div>
+
+    </div><!-- /tab-content-phone -->
 
   </div>
 </div>
@@ -346,14 +458,21 @@ let currentTab = 'calls';
 
 function switchTab(tab) {
   currentTab = tab;
-  ['calls','appointments','messages'].forEach(t => {
-    document.getElementById(`tab-${t}`).className         = t === tab ? 'tab-active px-4 py-3 text-sm mr-1'   : 'tab-inactive px-4 py-3 text-sm mr-1';
-    document.getElementById(`tab-content-${t}`).className = t === tab ? '' : 'hidden';
+  ['calls','appointments','messages','phone'].forEach(t => {
+    const btn = document.getElementById(`tab-${t}`);
+    const pane = document.getElementById(`tab-content-${t}`);
+    const isActive = t === tab;
+    const isLast = t === 'phone';
+    btn.className  = isActive
+      ? `tab-active px-4 py-3 text-sm${isLast ? ' ml-auto' : ' mr-1'}`
+      : `tab-inactive px-4 py-3 text-sm${isLast ? ' ml-auto' : ' mr-1'}`;
+    pane.className = isActive ? (t === 'phone' ? 'p-6 space-y-7' : '') : 'hidden';
   });
   document.getElementById('filter-bar').style.display = tab === 'calls' ? '' : 'none';
 
   if (tab === 'appointments') loadAppointments();
   if (tab === 'messages')     loadMessages();
+  if (tab === 'phone')        loadPhoneConfig();
 }
 
 function clearFilters() {
@@ -434,6 +553,107 @@ function closeModal() {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Phone Setup ────────────────────────────────────────────────────────────────
+
+function checkIcon(ok) {
+  return ok
+    ? `<svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>`
+    : `<svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>`;
+}
+
+async function loadPhoneConfig() {
+  try {
+    const c = await apiFetch('/api/config/twilio');
+
+    document.getElementById('url-voice').textContent  = c.webhookVoice;
+    document.getElementById('url-status').textContent = c.webhookStatus;
+
+    const checks = c.checks;
+    const rows = [
+      { label: 'Account SID',    ok: checks.hasAccountSid,  value: c.accountSid  || 'Not set' },
+      { label: 'Auth Token',     ok: checks.hasAuthToken,   value: c.authToken   || 'Not set' },
+      { label: 'Phone Number',   ok: checks.hasPhoneNumber, value: c.phoneNumber || 'Not set' },
+      { label: 'App URL',        ok: checks.hasAppUrl,      value: c.appUrl      || 'Not set — set APP_URL in .env' },
+      { label: 'Sig Validation', ok: checks.validateEnabled, value: checks.validateEnabled ? 'Enabled (secure)' : 'Disabled — enable for production' },
+    ];
+
+    document.getElementById('phone-config-status').innerHTML = rows.map(r => `
+      <div class="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-4 py-3">
+        ${checkIcon(r.ok)}
+        <div class="min-w-0">
+          <p class="text-xs text-gray-500">${r.label}</p>
+          <p class="text-sm font-medium text-gray-800 font-mono truncate">${r.value}</p>
+        </div>
+      </div>
+    `).join('');
+
+    if (!checks.validateEnabled) {
+      document.getElementById('validate-notice').classList.remove('hidden');
+    }
+  } catch (e) {
+    document.getElementById('phone-config-status').innerHTML =
+      `<div class="col-span-2 text-red-400 text-sm">Failed to load config: ${e.message}</div>`;
+  }
+}
+
+async function testTwilio() {
+  const btn    = document.getElementById('test-btn');
+  const result = document.getElementById('test-result');
+  btn.disabled = true;
+  btn.textContent = 'Testing…';
+  result.innerHTML = '';
+
+  try {
+    const r = await fetch('/api/config/test-twilio', { method: 'POST' });
+    const d = await r.json();
+
+    if (d.ok) {
+      const phoneHtml = d.phoneInfo
+        ? d.phoneInfo.found
+          ? `<div class="mt-2 text-xs text-gray-600 space-y-1">
+               <div><span class="text-gray-400">Number name:</span> ${d.phoneInfo.friendlyName}</div>
+               <div><span class="text-gray-400">Voice URL set:</span> ${d.phoneInfo.voiceUrl ? `<span class="text-green-600">${d.phoneInfo.voiceUrl}</span>` : '<span class="text-yellow-600">Not configured yet</span>'}</div>
+               <div><span class="text-gray-400">Status URL set:</span> ${d.phoneInfo.statusUrl ? `<span class="text-green-600">${d.phoneInfo.statusUrl}</span>` : '<span class="text-yellow-600">Not configured yet</span>'}</div>
+               <div><span class="text-gray-400">Voice capable:</span> ${d.phoneInfo.capabilities?.voice ? '<span class="text-green-600">Yes</span>' : '<span class="text-red-500">No</span>'}</div>
+             </div>`
+          : `<p class="mt-1 text-xs text-yellow-700">Phone number not found on this account — verify TWILIO_PHONE_NUMBER.</p>`
+        : '';
+
+      result.innerHTML = `
+        <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+          <p class="text-sm font-semibold text-green-800">Connected successfully</p>
+          <div class="mt-2 text-xs text-gray-600 space-y-1">
+            <div><span class="text-gray-400">Account name:</span> ${d.accountName}</div>
+            <div><span class="text-gray-400">Account status:</span> <span class="${d.accountStatus === 'active' ? 'text-green-600' : 'text-yellow-600'}">${d.accountStatus}</span></div>
+          </div>
+          ${phoneHtml}
+        </div>`;
+    } else {
+      result.innerHTML = `
+        <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+          <p class="text-sm font-semibold text-red-800">Connection failed</p>
+          <p class="text-xs text-red-600 mt-1">${d.error}</p>
+        </div>`;
+    }
+  } catch (e) {
+    result.innerHTML = `<div class="text-red-500 text-sm">Request failed: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Test Twilio Connection`;
+  }
+}
+
+function copyUrl(id) {
+  const text = document.getElementById(id).textContent.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.classList.add('text-green-600','border-green-300');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('text-green-600','border-green-300'); }, 1500);
+  });
+}
 
 // ── Init & auto-refresh ────────────────────────────────────────────────────────
 
