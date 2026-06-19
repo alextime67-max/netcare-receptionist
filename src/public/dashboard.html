@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NetCare AI Receptionist — Admin</title>
+<title id="page-title">Admin Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   [x-cloak] { display: none; }
@@ -18,7 +18,11 @@
   .badge-urgent      { background:#fee2e2; color:#991b1b; }
   .badge-routine     { background:#d1fae5; color:#065f46; }
   .badge-pending     { background:#fef3c7; color:#92400e; }
+  .badge-confirmed   { background:#d1fae5; color:#065f46; }
   .badge-completed   { background:#d1fae5; color:#065f46; }
+  .badge-cancelled   { background:#fee2e2; color:#991b1b; }
+  .badge-read        { background:#dbeafe; color:#1e40af; }
+  .badge-resolved    { background:#d1fae5; color:#065f46; }
   .badge-abandoned   { background:#f3f4f6; color:#6b7280; }
   .transcript-patient   { background:#f0f9ff; border-left:3px solid #0ea5e9; }
   .transcript-assistant { background:#f0fdf4; border-left:3px solid #22c55e; }
@@ -78,6 +82,11 @@
       <p class="text-3xl font-bold text-purple-700 mt-1" id="stat-es">—</p>
       <p class="text-xs text-gray-400 mt-1">bilingual sessions</p>
     </div>
+    <div class="stat-card bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <p class="text-xs text-gray-500 uppercase tracking-wide">Web Requests</p>
+      <p class="text-3xl font-bold text-teal-700 mt-1" id="stat-web">—</p>
+      <p class="text-xs text-orange-500 mt-1" id="stat-web-pending">— pending</p>
+    </div>
   </div>
 </div>
 
@@ -86,10 +95,11 @@
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
     <!-- Tab bar -->
     <div class="flex border-b border-gray-200 px-4">
-      <button onclick="switchTab('calls')"       id="tab-calls"       class="tab-active   px-4 py-3 text-sm mr-1">Call History</button>
-      <button onclick="switchTab('appointments')" id="tab-appointments" class="tab-inactive px-4 py-3 text-sm mr-1">Appointments</button>
-      <button onclick="switchTab('messages')"     id="tab-messages"     class="tab-inactive px-4 py-3 text-sm mr-1">Doctor Messages</button>
-      <button onclick="switchTab('phone')"        id="tab-phone"        class="tab-inactive px-4 py-3 text-sm ml-auto">⚙ Phone Setup</button>
+      <button onclick="switchTab('calls')"        id="tab-calls"        class="tab-active   px-4 py-3 text-sm mr-1">Call History</button>
+      <button onclick="switchTab('appointments')"  id="tab-appointments"  class="tab-inactive px-4 py-3 text-sm mr-1">Appointments</button>
+      <button onclick="switchTab('messages')"      id="tab-messages"      class="tab-inactive px-4 py-3 text-sm mr-1">Doctor Messages</button>
+      <button onclick="switchTab('webrequests')"   id="tab-webrequests"   class="tab-inactive px-4 py-3 text-sm mr-1">Web Requests</button>
+      <button onclick="switchTab('phone')"         id="tab-phone"         class="tab-inactive px-4 py-3 text-sm ml-auto">⚙ Phone Setup</button>
     </div>
 
     <!-- Filters (calls tab only) -->
@@ -143,10 +153,11 @@
               <th class="px-4 py-3">Preferred Time</th>
               <th class="px-4 py-3">Reason</th>
               <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Action</th>
             </tr>
           </thead>
           <tbody id="appts-tbody" class="divide-y divide-gray-50">
-            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+            <tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -164,10 +175,36 @@
               <th class="px-4 py-3">Message</th>
               <th class="px-4 py-3">Urgency</th>
               <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Action</th>
             </tr>
           </thead>
           <tbody id="msgs-tbody" class="divide-y divide-gray-50">
-            <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Web Requests table -->
+    <div id="tab-content-webrequests" class="hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-100">
+            <tr class="text-left text-xs text-gray-500 uppercase tracking-wide">
+              <th class="px-4 py-3">Submitted</th>
+              <th class="px-4 py-3">Patient</th>
+              <th class="px-4 py-3">Phone</th>
+              <th class="px-4 py-3">Email</th>
+              <th class="px-4 py-3">Preferred Date</th>
+              <th class="px-4 py-3">Preferred Time</th>
+              <th class="px-4 py-3">Reason</th>
+              <th class="px-4 py-3">Lang</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Action</th>
+            </tr>
+          </thead>
+          <tbody id="webreq-tbody" class="divide-y divide-gray-50">
+            <tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -302,10 +339,18 @@
 </div>
 
 <div class="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-gray-400">
-  NetCare AI Receptionist v1.0 &bull; Auto-refreshes every 60 seconds
+  NetCare AI Receptionist v2.0 &bull; Auto-refreshes every 60 seconds
 </div>
 
 <script>
+// ── Clinic context ────────────────────────────────────────────────────────────
+
+const SLUG = document.querySelector('meta[name="clinic-slug"]')?.content || 'netcare';
+const CLINIC_NAME = document.querySelector('meta[name="clinic-name"]')?.content || 'NetCare';
+
+document.querySelector('h1').textContent = CLINIC_NAME + ' AI Receptionist';
+document.getElementById('page-title').textContent = CLINIC_NAME + ' — Admin Dashboard';
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(dt) {
@@ -330,12 +375,18 @@ function typeBadge(t) {
 }
 
 function statusBadge(s) {
-  const map = { completed:'Completed', abandoned:'Abandoned', in_progress:'In Progress', emergency:'Emergency', pending:'Pending', synced:'Synced' };
+  const map = {
+    completed:'Completed', abandoned:'Abandoned', in_progress:'In Progress',
+    emergency:'Emergency', pending:'Pending', synced:'Synced',
+    confirmed:'Confirmed', cancelled:'Cancelled',
+    read:'Read', resolved:'Resolved',
+  };
   return badge(s || 'unknown', map[s] || s);
 }
 
-async function apiFetch(path) {
-  const r = await fetch(path);
+async function apiFetch(endpoint) {
+  const url = `/api/${SLUG}${endpoint}`;
+  const r   = await fetch(url);
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.json();
 }
@@ -344,7 +395,7 @@ async function apiFetch(path) {
 
 async function loadStats() {
   try {
-    const s = await apiFetch('/api/stats');
+    const s = await apiFetch('/stats');
     document.getElementById('stat-total').textContent  = s.totalCalls;
     document.getElementById('stat-today').textContent  = `${s.callsToday} today`;
     document.getElementById('stat-appts').textContent  = s.appointmentsTotal;
@@ -352,6 +403,8 @@ async function loadStats() {
     document.getElementById('stat-msgs').textContent   = s.messagesTotal;
     document.getElementById('stat-urgent').textContent = `${s.urgentMessages} urgent`;
     document.getElementById('stat-es').textContent     = s.spanishCalls;
+    document.getElementById('stat-web').textContent    = s.webRequestsTotal;
+    document.getElementById('stat-web-pending').textContent = `${s.pendingWebRequests} pending`;
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   } catch(e) {
     console.error('Stats error:', e);
@@ -366,7 +419,7 @@ async function loadCalls() {
   const start = document.getElementById('filter-start').value;
   const end   = document.getElementById('filter-end').value;
 
-  let url = '/api/calls?limit=200';
+  let url = '/calls?limit=200';
   if (type)  url += `&callType=${encodeURIComponent(type)}`;
   if (start) url += `&startDate=${start}`;
   if (end)   url += `&endDate=${end}`;
@@ -403,12 +456,32 @@ async function loadCalls() {
 
 // ── Appointments ───────────────────────────────────────────────────────────────
 
+function apptActionBtn(id, status) {
+  if (status === 'confirmed') {
+    return `<button onclick="setApptStatus(${id},'cancelled',event)" class="text-xs text-red-600 hover:underline">Cancel</button>`;
+  }
+  if (status === 'cancelled') {
+    return `<button onclick="setApptStatus(${id},'confirmed',event)" class="text-xs text-green-600 hover:underline">Restore</button>`;
+  }
+  return `<button onclick="setApptStatus(${id},'confirmed',event)" class="text-xs bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-lg">Confirm</button>
+          <button onclick="setApptStatus(${id},'cancelled',event)" class="ml-1 text-xs bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded-lg">Cancel</button>`;
+}
+
+async function setApptStatus(id, status, e) {
+  e.stopPropagation();
+  try {
+    await fetch(`/api/${SLUG}/appointments/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) });
+    loadAppointments();
+    loadStats();
+  } catch(err) { alert('Update failed: ' + err.message); }
+}
+
 async function loadAppointments() {
   const tbody = document.getElementById('appts-tbody');
   try {
-    const appts = await apiFetch('/api/appointments?limit=100');
+    const appts = await apiFetch('/appointments?limit=100');
     if (!appts.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">No appointments yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">No appointments yet</td></tr>';
       return;
     }
     tbody.innerHTML = appts.map(a => `
@@ -420,21 +493,42 @@ async function loadAppointments() {
         <td class="px-4 py-3 text-gray-700">${a.preferred_time || '—'}</td>
         <td class="px-4 py-3 text-gray-700 max-w-xs truncate" title="${a.reason || ''}">${a.reason || '—'}</td>
         <td class="px-4 py-3">${statusBadge(a.status)}</td>
+        <td class="px-4 py-3 whitespace-nowrap">${apptActionBtn(a.id, a.status)}</td>
       </tr>
     `).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
   }
 }
 
 // ── Doctor Messages ────────────────────────────────────────────────────────────
 
+function msgActionBtn(id, status) {
+  if (status === 'resolved') {
+    return `<span class="text-xs text-gray-400">Resolved</span>`;
+  }
+  if (status === 'read') {
+    return `<button onclick="setMsgStatus(${id},'resolved',event)" class="text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-lg">Resolve</button>`;
+  }
+  return `<button onclick="setMsgStatus(${id},'read',event)" class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-lg">Mark Read</button>
+          <button onclick="setMsgStatus(${id},'resolved',event)" class="ml-1 text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded-lg">Resolve</button>`;
+}
+
+async function setMsgStatus(id, status, e) {
+  e.stopPropagation();
+  try {
+    await fetch(`/api/${SLUG}/messages/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) });
+    loadMessages();
+    loadStats();
+  } catch(err) { alert('Update failed: ' + err.message); }
+}
+
 async function loadMessages() {
   const tbody = document.getElementById('msgs-tbody');
   try {
-    const msgs = await apiFetch('/api/messages?limit=100');
+    const msgs = await apiFetch('/messages?limit=100');
     if (!msgs.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No messages yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">No messages yet</td></tr>';
       return;
     }
     tbody.innerHTML = msgs.map(m => `
@@ -445,10 +539,60 @@ async function loadMessages() {
         <td class="px-4 py-3 text-gray-700 max-w-xs">${m.message_content}</td>
         <td class="px-4 py-3">${badge(m.urgency || 'routine', (m.urgency || 'routine').charAt(0).toUpperCase() + (m.urgency||'routine').slice(1))}</td>
         <td class="px-4 py-3">${statusBadge(m.status)}</td>
+        <td class="px-4 py-3 whitespace-nowrap">${msgActionBtn(m.id, m.status)}</td>
       </tr>
     `).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// ── Web Requests ───────────────────────────────────────────────────────────────
+
+function webReqActionBtn(id, status) {
+  if (status === 'confirmed') {
+    return `<button onclick="setWebReqStatus(${id},'cancelled',event)" class="text-xs text-red-600 hover:underline">Cancel</button>`;
+  }
+  if (status === 'cancelled') {
+    return `<button onclick="setWebReqStatus(${id},'confirmed',event)" class="text-xs text-green-600 hover:underline">Restore</button>`;
+  }
+  return `<button onclick="setWebReqStatus(${id},'confirmed',event)" class="text-xs bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-lg">Confirm</button>
+          <button onclick="setWebReqStatus(${id},'cancelled',event)" class="ml-1 text-xs bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded-lg">Cancel</button>`;
+}
+
+async function setWebReqStatus(id, status, e) {
+  e.stopPropagation();
+  try {
+    await fetch(`/api/${SLUG}/web-requests/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) });
+    loadWebRequests();
+    loadStats();
+  } catch(err) { alert('Update failed: ' + err.message); }
+}
+
+async function loadWebRequests() {
+  const tbody = document.getElementById('webreq-tbody');
+  try {
+    const reqs = await apiFetch('/web-requests?limit=100');
+    if (!reqs.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">No web requests yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = reqs.map(r => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-gray-600 whitespace-nowrap">${fmt(r.created_at)}</td>
+        <td class="px-4 py-3 font-medium text-gray-900">${r.first_name} ${r.last_name}</td>
+        <td class="px-4 py-3 text-gray-600 whitespace-nowrap">${r.phone}</td>
+        <td class="px-4 py-3 text-gray-600">${r.email || '—'}</td>
+        <td class="px-4 py-3 text-gray-700">${r.preferred_date || '—'}</td>
+        <td class="px-4 py-3 text-gray-700">${r.preferred_time || '—'}</td>
+        <td class="px-4 py-3 text-gray-700 max-w-xs truncate" title="${r.reason || ''}">${r.reason || '—'}</td>
+        <td class="px-4 py-3">${badge(r.language || 'en', (r.language || 'en').toUpperCase())}</td>
+        <td class="px-4 py-3">${statusBadge(r.status)}</td>
+        <td class="px-4 py-3 whitespace-nowrap">${webReqActionBtn(r.id, r.status)}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -458,11 +602,11 @@ let currentTab = 'calls';
 
 function switchTab(tab) {
   currentTab = tab;
-  ['calls','appointments','messages','phone'].forEach(t => {
-    const btn = document.getElementById(`tab-${t}`);
+  ['calls','appointments','messages','webrequests','phone'].forEach(t => {
+    const btn  = document.getElementById(`tab-${t}`);
     const pane = document.getElementById(`tab-content-${t}`);
     const isActive = t === tab;
-    const isLast = t === 'phone';
+    const isLast   = t === 'phone';
     btn.className  = isActive
       ? `tab-active px-4 py-3 text-sm${isLast ? ' ml-auto' : ' mr-1'}`
       : `tab-inactive px-4 py-3 text-sm${isLast ? ' ml-auto' : ' mr-1'}`;
@@ -472,6 +616,7 @@ function switchTab(tab) {
 
   if (tab === 'appointments') loadAppointments();
   if (tab === 'messages')     loadMessages();
+  if (tab === 'webrequests')  loadWebRequests();
   if (tab === 'phone')        loadPhoneConfig();
 }
 
@@ -493,7 +638,7 @@ async function openCall(id) {
   body.innerHTML = '<p class="text-gray-400 text-sm py-8 text-center">Loading call details…</p>';
 
   try {
-    const c = await apiFetch(`/api/calls/${id}`);
+    const c = await apiFetch(`/calls/${id}`);
     title.textContent = `Call #${c.id} — ${c.patient_name || 'Unknown Patient'}`;
 
     const apptBlock = c.appointment ? `
@@ -564,7 +709,7 @@ function checkIcon(ok) {
 
 async function loadPhoneConfig() {
   try {
-    const c = await apiFetch('/api/config/twilio');
+    const c = await apiFetch('/config/twilio');
 
     document.getElementById('url-voice').textContent  = c.webhookVoice;
     document.getElementById('url-status').textContent = c.webhookStatus;
@@ -605,7 +750,7 @@ async function testTwilio() {
   result.innerHTML = '';
 
   try {
-    const r = await fetch('/api/config/test-twilio', { method: 'POST' });
+    const r = await fetch(`/api/${SLUG}/config/test-twilio`, { method: 'POST' });
     const d = await r.json();
 
     if (d.ok) {

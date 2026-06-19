@@ -1,26 +1,36 @@
 const nodemailer = require('nodemailer');
 
-function createTransporter() {
-  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+function createTransporter(clinic) {
+  // clinic can be a DB clinic row or null (falls back to env vars)
+  const gmailUser = clinic?.gmail_user       || process.env.GMAIL_USER;
+  const gmailPass = clinic?.gmail_app_pass   || process.env.GMAIL_APP_PASSWORD;
+  const smtpHost  = clinic?.smtp_host        || process.env.SMTP_HOST;
+
+  if (gmailUser && gmailPass) {
     return nodemailer.createTransport({
       service: 'gmail',
-      auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
+      auth: { user: gmailUser, pass: gmailPass },
     });
   }
 
-  if (process.env.SMTP_HOST) {
+  if (smtpHost) {
     return nodemailer.createTransport({
-      host:   process.env.SMTP_HOST,
-      port:   parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      host:   smtpHost,
+      port:   parseInt(clinic?.smtp_port || process.env.SMTP_PORT || '587'),
+      secure: !!(clinic?.smtp_secure || process.env.SMTP_SECURE === 'true'),
+      auth: {
+        user: clinic?.smtp_user || process.env.SMTP_USER,
+        pass: clinic?.smtp_pass || process.env.SMTP_PASS,
+      },
     });
   }
 
   return null;
 }
 
-function baseHtmlLayout(title, body) {
+function baseHtmlLayout(title, body, clinic) {
+  const adminUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const slug     = clinic?.slug || 'netcare';
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><style>
@@ -37,8 +47,8 @@ function baseHtmlLayout(title, body) {
 <h2>${title}</h2>
 ${body}
 <div class="footer">
-  NetCare AI Receptionist &bull;
-  <a href="${process.env.APP_URL || 'http://localhost:3000'}/admin">Open Admin Dashboard</a>
+  ${clinic?.name || 'NetCare'} AI Receptionist &bull;
+  <a href="${adminUrl}/admin/${slug}">Open Admin Dashboard</a>
 </div>
 </body></html>`;
 }
@@ -47,8 +57,11 @@ function row(label, value) {
   return `<tr><td>${label}</td><td>${value || '<em>Not provided</em>'}</td></tr>`;
 }
 
-async function sendAppointmentNotification(callId, data) {
-  const transporter = createTransporter();
+async function sendAppointmentNotification(callId, data, clinic) {
+  const transporter = createTransporter(clinic);
+  const toEmail     = clinic?.clinic_email || process.env.CLINIC_EMAIL;
+  const fromEmail   = clinic?.email_from   || process.env.EMAIL_FROM || 'receptionist@netcare.com';
+
   if (!transporter) {
     console.log('[Email] No transporter configured — appointment notification logged only.');
     console.log('[Email] Appointment:', JSON.stringify({ callId, ...data }, null, 2));
@@ -57,7 +70,7 @@ async function sendAppointmentNotification(callId, data) {
 
   const langLabel = data.language === 'es' ? 'Spanish / Español' : 'English';
   const html = baseHtmlLayout(
-    '📅 New Appointment Request — NetCare',
+    `📅 New Appointment Request — ${clinic?.name || 'NetCare'}`,
     `<table>
       ${row('Patient Name',   data.name)}
       ${row('Phone Number',   data.phone)}
@@ -67,21 +80,25 @@ async function sendAppointmentNotification(callId, data) {
       ${row('Language',       langLabel)}
       ${row('Call ID',        callId)}
       ${row('Received',       new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))}
-    </table>`
+    </table>`,
+    clinic
   );
 
   await transporter.sendMail({
-    from:    process.env.EMAIL_FROM || 'receptionist@netcare.com',
-    to:      process.env.CLINIC_EMAIL,
-    subject: `[NetCare] Appointment Request — ${data.name}`,
+    from:    fromEmail,
+    to:      toEmail,
+    subject: `[${clinic?.name || 'NetCare'}] Appointment Request — ${data.name}`,
     html,
   });
 
   console.log(`[Email] Appointment notification sent for call ${callId}`);
 }
 
-async function sendDoctorMessageNotification(callId, data) {
-  const transporter = createTransporter();
+async function sendDoctorMessageNotification(callId, data, clinic) {
+  const transporter = createTransporter(clinic);
+  const toEmail     = clinic?.clinic_email || process.env.CLINIC_EMAIL;
+  const fromEmail   = clinic?.email_from   || process.env.EMAIL_FROM || 'receptionist@netcare.com';
+
   if (!transporter) {
     console.log('[Email] No transporter configured — doctor message notification logged only.');
     console.log('[Email] Message:', JSON.stringify({ callId, ...data }, null, 2));
@@ -91,11 +108,11 @@ async function sendDoctorMessageNotification(callId, data) {
   const urgencyBadge = data.urgency === 'urgent'
     ? '<span class="badge-urgent">URGENT</span>'
     : '<span class="badge-routine">Routine</span>';
-  const langLabel = data.language === 'es' ? 'Spanish / Español' : 'English';
-  const subjectPrefix = data.urgency === 'urgent' ? '[URGENT] ' : '';
+  const langLabel      = data.language === 'es' ? 'Spanish / Español' : 'English';
+  const subjectPrefix  = data.urgency === 'urgent' ? '[URGENT] ' : '';
 
   const html = baseHtmlLayout(
-    `📋 Doctor Message ${urgencyBadge} — NetCare`,
+    `📋 Doctor Message ${urgencyBadge} — ${clinic?.name || 'NetCare'}`,
     `<table>
       ${row('Patient Name',  data.name)}
       ${row('Phone Number',  data.phone)}
@@ -104,17 +121,58 @@ async function sendDoctorMessageNotification(callId, data) {
       ${row('Language',      langLabel)}
       ${row('Call ID',       callId)}
       ${row('Received',      new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))}
-    </table>`
+    </table>`,
+    clinic
   );
 
   await transporter.sendMail({
-    from:    process.env.EMAIL_FROM || 'receptionist@netcare.com',
-    to:      process.env.CLINIC_EMAIL,
-    subject: `${subjectPrefix}[NetCare] Doctor Message — ${data.name}`,
+    from:    fromEmail,
+    to:      toEmail,
+    subject: `${subjectPrefix}[${clinic?.name || 'NetCare'}] Doctor Message — ${data.name}`,
     html,
   });
 
   console.log(`[Email] Doctor message notification sent for call ${callId} (${data.urgency})`);
 }
 
-module.exports = { sendAppointmentNotification, sendDoctorMessageNotification };
+async function sendWebRequestNotification(requestId, data, clinic) {
+  const transporter = createTransporter(clinic);
+  const toEmail     = clinic?.clinic_email || process.env.CLINIC_EMAIL;
+  const fromEmail   = clinic?.email_from   || process.env.EMAIL_FROM || 'receptionist@netcare.com';
+
+  if (!transporter) {
+    console.log('[Email] No transporter configured — web request notification logged only.');
+    console.log('[Email] Web request:', JSON.stringify({ requestId, ...data }, null, 2));
+    return;
+  }
+
+  const langLabel = data.language === 'es' ? 'Spanish / Español' : 'English';
+  const html = baseHtmlLayout(
+    `🌐 New Web Appointment Request — ${clinic?.name || 'NetCare'}`,
+    `<table>
+      ${row('First Name',      data.firstName)}
+      ${row('Last Name',       data.lastName)}
+      ${row('Phone',           data.phone)}
+      ${row('Email',           data.email)}
+      ${row('Date of Birth',   data.dateOfBirth)}
+      ${row('Preferred Date',  data.preferredDate)}
+      ${row('Preferred Time',  data.preferredTime)}
+      ${row('Reason',          data.reason)}
+      ${row('Language',        langLabel)}
+      ${row('Request ID',      requestId)}
+      ${row('Received',        new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))}
+    </table>`,
+    clinic
+  );
+
+  await transporter.sendMail({
+    from:    fromEmail,
+    to:      toEmail,
+    subject: `[${clinic?.name || 'NetCare'}] Web Request — ${data.firstName} ${data.lastName}`,
+    html,
+  });
+
+  console.log(`[Email] Web request notification sent for request ${requestId}`);
+}
+
+module.exports = { sendAppointmentNotification, sendDoctorMessageNotification, sendWebRequestNotification };

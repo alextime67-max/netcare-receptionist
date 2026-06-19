@@ -5,7 +5,8 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // In-memory sessions keyed by Twilio CallSid
 const sessions = new Map();
 
-const SYSTEM_PROMPT = `You are the AI receptionist for NetCare medical clinic. You handle inbound phone calls.
+function buildSystemPrompt(clinicName) {
+  return `You are the AI receptionist for ${clinicName}. You handle inbound phone calls.
 
 ════════════════════════════════════════
 MISSION: Collect patient information and route their request.
@@ -77,20 +78,22 @@ Turn 2 assistant: {"speak":"I'd be happy to help schedule that. May I have your 
 EXAMPLE — Spanish message flow:
 Patient says: "necesito dejar un mensaje"
 assistant: {"speak":"Con gusto le ayudo. ¿Podría decirme su nombre completo?","language":"es","intent":"collecting","collected":{"callType":"message",...},"complete":false}`;
+}
 
 // ── Session management ────────────────────────────────────────────────────────
 
-function initSession(callSid, callerPhone) {
+function initSession(callSid, callerPhone, clinicName) {
   sessions.set(callSid, {
-    messages:  [],
+    messages:   [],
     collected: {
       name: null, phone: callerPhone || null, callType: null,
       reason: null, appointmentDate: null, appointmentTime: null,
       messageContent: null, urgency: null,
     },
-    language:  'en',
-    dbId:      null,
-    turnCount: 0,
+    language:   'en',
+    clinicName: clinicName || 'NetCare Clinic',
+    dbId:       null,
+    turnCount:  0,
   });
 }
 
@@ -130,7 +133,7 @@ async function processMessage(callSid, patientSpeech) {
     const response = await client.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: 600,
-      system:     SYSTEM_PROMPT,
+      system:     buildSystemPrompt(session.clinicName),
       messages:   session.messages,
     });
 
@@ -183,8 +186,9 @@ async function processMessage(callSid, patientSpeech) {
 
 // ── Canned strings ────────────────────────────────────────────────────────────
 
-function getInitialGreeting() {
-  return 'Thank you for calling NetCare! Para español, diga español. How can I help you today?';
+function getInitialGreeting(clinicName) {
+  const name = clinicName || 'NetCare';
+  return `Thank you for calling ${name}! Para español, diga español. How can I help you today?`;
 }
 
 function getErrorMessage(lang) {

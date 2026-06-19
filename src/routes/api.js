@@ -1,127 +1,159 @@
-const express    = require('express');
-const router     = express.Router();
-const basicAuth  = require('express-basic-auth');
-const twilio     = require('twilio');
+const express   = require('express');
+const router    = express.Router();
+const basicAuth = require('express-basic-auth');
+const twilio    = require('twilio');
 
 const {
+  getClinicBySlug,
   getCalls, getCallWithTranscript, getStats,
   getAppointments, getDoctorMessages,
+  updateAppointmentStatus, updateDoctorMessageStatus,
+  getWebRequests, updateWebRequestStatus,
 } = require('../database/db');
 
-const authMiddleware = basicAuth({
-  users:     { [process.env.ADMIN_USER || 'admin']: process.env.ADMIN_PASS || 'NetCare2024!' },
-  challenge: true,
-  realm:     'NetCare API',
+// ── Per-clinic auth middleware ────────────────────────────────────────────────
+
+function clinicAuth(req, res, next) {
+  const clinic = getClinicBySlug(req.params.slug);
+  if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+  req.clinic = clinic;
+
+  const check = basicAuth({
+    users:     { [clinic.admin_user]: clinic.admin_pass },
+    challenge: true,
+    realm:     `${clinic.name} Admin`,
+  });
+  check(req, res, next);
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+router.get('/:slug/stats', clinicAuth, (req, res) => {
+  try { res.json(getStats(req.clinic.id)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.use(authMiddleware);
+// ── Calls ─────────────────────────────────────────────────────────────────────
 
-router.get('/stats', (req, res) => {
-  try {
-    res.json(getStats());
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.get('/calls', (req, res) => {
+router.get('/:slug/calls', clinicAuth, (req, res) => {
   try {
     const { limit = 100, offset = 0, callType, startDate, endDate } = req.query;
-    res.json(getCalls(+limit, +offset, { callType, startDate, endDate }));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    res.json(getCalls(+limit, +offset, { clinicId: req.clinic.id, callType, startDate, endDate }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/calls/:id', (req, res) => {
+router.get('/:slug/calls/:id', clinicAuth, (req, res) => {
   try {
     const call = getCallWithTranscript(+req.params.id);
     if (!call) return res.status(404).json({ error: 'Call not found' });
+    if (call.clinic_id !== req.clinic.id) return res.status(403).json({ error: 'Forbidden' });
     res.json(call);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/appointments', (req, res) => {
+// ── Appointments ──────────────────────────────────────────────────────────────
+
+router.get('/:slug/appointments', clinicAuth, (req, res) => {
   try {
-    res.json(getAppointments(+req.query.limit || 50));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    res.json(getAppointments(+req.query.limit || 100, req.clinic.id));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/messages', (req, res) => {
+router.patch('/:slug/appointments/:id/status', clinicAuth, (req, res) => {
+  const { status } = req.body;
+  const allowed = ['pending', 'confirmed', 'cancelled', 'synced'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+  }
   try {
-    res.json(getDoctorMessages(+req.query.limit || 50));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    updateAppointmentStatus(+req.params.id, status, null, null);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Twilio configuration ───────────────────────────────────────────────────────
+// ── Doctor Messages ───────────────────────────────────────────────────────────
 
-router.get('/config/twilio', (req, res) => {
-  const sid    = process.env.TWILIO_ACCOUNT_SID  || '';
-  const token  = process.env.TWILIO_AUTH_TOKEN   || '';
-  const phone  = process.env.TWILIO_PHONE_NUMBER || '';
+router.get('/:slug/messages', clinicAuth, (req, res) => {
+  try {
+    res.json(getDoctorMessages(+req.query.limit || 100, req.clinic.id));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/:slug/messages/:id/status', clinicAuth, (req, res) => {
+  const { status } = req.body;
+  const allowed = ['pending', 'read', 'resolved'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+  }
+  try {
+    updateDoctorMessageStatus(+req.params.id, status);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Web Requests ──────────────────────────────────────────────────────────────
+
+router.get('/:slug/web-requests', clinicAuth, (req, res) => {
+  try {
+    res.json(getWebRequests(+req.query.limit || 100, req.clinic.id));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/:slug/web-requests/:id/status', clinicAuth, (req, res) => {
+  const { status } = req.body;
+  const allowed = ['pending', 'confirmed', 'cancelled'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+  }
+  try {
+    updateWebRequestStatus(+req.params.id, status);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Twilio config (per-clinic) ────────────────────────────────────────────────
+
+router.get('/:slug/config/twilio', clinicAuth, (req, res) => {
+  const c      = req.clinic;
   const appUrl = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-
-  const mask = s => s.length > 8 ? s.slice(0, 4) + '••••••••' + s.slice(-4) : (s ? '••••••••' : '');
+  const mask   = s => s && s.length > 8 ? s.slice(0, 4) + '••••••••' + s.slice(-4) : (s ? '••••••••' : '');
 
   res.json({
-    configured:      !!(sid && token && phone && process.env.APP_URL),
-    accountSid:      mask(sid),
-    authToken:       mask(token),
-    phoneNumber:     phone || null,
+    configured:    !!(c.twilio_sid && c.twilio_token && c.twilio_phone && process.env.APP_URL),
+    accountSid:    mask(c.twilio_sid),
+    authToken:     mask(c.twilio_token),
+    phoneNumber:   c.twilio_phone || null,
     appUrl,
-    webhookVoice:    `${appUrl}/webhook/voice`,
-    webhookStatus:   `${appUrl}/webhook/status`,
+    webhookVoice:  `${appUrl}/webhook/${c.slug}/voice`,
+    webhookStatus: `${appUrl}/webhook/${c.slug}/status`,
     checks: {
-      hasAccountSid:   !!sid,
-      hasAuthToken:    !!token,
-      hasPhoneNumber:  !!phone,
+      hasAccountSid:   !!c.twilio_sid,
+      hasAuthToken:    !!c.twilio_token,
+      hasPhoneNumber:  !!c.twilio_phone,
       hasAppUrl:       !!process.env.APP_URL,
-      validateEnabled: process.env.TWILIO_VALIDATE === 'true',
+      validateEnabled: !!c.twilio_validate,
     },
   });
 });
 
-router.post('/config/test-twilio', async (req, res) => {
-  const sid   = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const phone = process.env.TWILIO_PHONE_NUMBER;
-
-  if (!sid || !token) {
-    return res.json({ ok: false, error: 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set in environment' });
+router.post('/:slug/config/test-twilio', clinicAuth, async (req, res) => {
+  const c = req.clinic;
+  if (!c.twilio_sid || !c.twilio_token) {
+    return res.json({ ok: false, error: 'Twilio credentials not set for this clinic' });
   }
-
   try {
-    const client  = twilio(sid, token);
-    const account = await client.api.accounts(sid).fetch();
+    const client  = twilio(c.twilio_sid, c.twilio_token);
+    const account = await client.api.accounts(c.twilio_sid).fetch();
 
     let phoneInfo = null;
-    if (phone) {
-      const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: phone, limit: 1 });
-      if (numbers.length) {
-        phoneInfo = {
-          found:        true,
-          friendlyName: numbers[0].friendlyName,
-          voiceUrl:     numbers[0].voiceUrl  || null,
-          statusUrl:    numbers[0].statusCallback || null,
-          capabilities: numbers[0].capabilities,
-        };
-      } else {
-        phoneInfo = { found: false };
-      }
+    if (c.twilio_phone) {
+      const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: c.twilio_phone, limit: 1 });
+      phoneInfo = numbers.length
+        ? { found: true, friendlyName: numbers[0].friendlyName, voiceUrl: numbers[0].voiceUrl || null, statusUrl: numbers[0].statusCallback || null, capabilities: numbers[0].capabilities }
+        : { found: false };
     }
 
-    res.json({
-      ok:            true,
-      accountName:   account.friendlyName,
-      accountStatus: account.status,
-      phoneInfo,
-    });
+    res.json({ ok: true, accountName: account.friendlyName, accountStatus: account.status, phoneInfo });
   } catch (err) {
     res.json({ ok: false, error: err.message });
   }

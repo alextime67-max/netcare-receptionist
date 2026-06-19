@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetCare Phone — Super Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+  /* Sidebar */
+  #sidebar { width: 240px; min-width: 240px; }
+
+  /* Slide-over */
+  #slideover { transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); transform: translateX(100%); }
+  #slideover.open { transform: translateX(0); }
+  #overlay { transition: opacity 0.2s ease; }
+
+  /* Stat card hover */
+  .stat-card { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+  .stat-card:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+
+  /* Table row hover */
+  .client-row:hover { background: #f8fafc; }
+
+  /* Form inputs */
+  .form-input {
+    width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; color: #1e293b;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .form-input:focus {
+    outline: none; border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+  }
+  .form-label { display: block; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+
+  /* Tab buttons */
+  .tab-btn { border-bottom: 2px solid transparent; color: #64748b; font-size: 13px; padding: 8px 16px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .tab-btn.active { border-bottom-color: #3b82f6; color: #3b82f6; font-weight: 600; }
+  .tab-btn:hover:not(.active) { color: #334155; }
+
+  /* Badge */
+  .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+
+  /* Skeleton loader */
+  .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* Search highlight */
+  mark { background: #fef08a; padding: 0 2px; border-radius: 2px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-hidden flex">
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- SIDEBAR                                                                     -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<aside id="sidebar" class="bg-slate-900 flex flex-col h-screen flex-shrink-0">
+
+  <!-- Logo -->
+  <div class="px-5 py-5 border-b border-slate-700/60">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="text-white font-bold text-sm leading-tight">NetCare Phone</div>
+        <div class="text-slate-400 text-xs">Super Admin</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 px-3 py-4 space-y-0.5">
+    <button onclick="switchView('dashboard')" id="nav-dashboard"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zM14 13a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1h-4a1 1 0 01-1-1v-6z"/>
+      </svg>
+      Dashboard
+    </button>
+    <button onclick="switchView('clients')" id="nav-clients"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+      </svg>
+      Clients
+      <span id="nav-clients-count" class="ml-auto bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full hidden"></span>
+    </button>
+  </nav>
+
+  <!-- Bottom info -->
+  <div class="px-4 py-4 border-t border-slate-700/60">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+        <svg class="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <div class="text-slate-200 text-xs font-medium truncate">Super Administrator</div>
+        <div class="text-slate-500 text-xs truncate" id="sa-version">v2.0</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- MAIN CONTENT                                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="flex-1 flex flex-col h-screen overflow-hidden">
+
+  <!-- Top bar -->
+  <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between flex-shrink-0">
+    <div>
+      <h1 id="view-title" class="text-lg font-bold text-slate-900">Dashboard</h1>
+      <p id="view-sub" class="text-xs text-slate-400 mt-0.5">NetCare Phone platform overview</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="last-refresh" class="text-xs text-slate-400"></span>
+      <button onclick="refreshAll()" id="refresh-btn"
+        class="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Refresh
+      </button>
+      <button onclick="openAddModal()"
+        class="flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors shadow-sm">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Add Client
+      </button>
+    </div>
+  </header>
+
+  <!-- Scrollable body -->
+  <div id="main-body" class="flex-1 overflow-y-auto">
+
+    <!-- ── DASHBOARD VIEW ────────────────────────────────────────────────── -->
+    <div id="view-dashboard" class="p-6 space-y-6">
+
+      <!-- Global stats -->
+      <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4" id="global-stats">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Recent clients preview -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="font-semibold text-slate-800 text-sm">Recent Clients</h2>
+          <button onclick="switchView('clients')" class="text-xs text-blue-600 hover:underline">View all →</button>
+        </div>
+        <div id="recent-clients-table" class="overflow-x-auto">
+          <div class="p-6 text-center text-slate-400 text-sm">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CLIENTS VIEW ──────────────────────────────────────────────────── -->
+    <div id="view-clients" class="hidden p-6 space-y-4">
+
+      <!-- Search + filters -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap gap-3 items-center">
+        <div class="relative flex-1 min-w-48">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="text" id="search-input" placeholder="Search name, account, contact, email…"
+            oninput="renderTable()"
+            class="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+        </div>
+        <select id="filter-status" onchange="renderTable()" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400">
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="suspended">Suspended</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select id="filter-plan" onchange="renderTable()" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400">
+          <option value="">All Plans</option>
+          <option value="Starter">Starter</option>
+          <option value="Professional">Professional</option>
+          <option value="Enterprise">Enterprise</option>
+        </select>
+        <select id="filter-payment" onchange="renderTable()" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400">
+          <option value="">All Payments</option>
+          <option value="trial">Trial</option>
+          <option value="current">Current</option>
+          <option value="overdue">Overdue</option>
+          <option value="failed">Failed</option>
+        </select>
+        <button onclick="clearFilters()" class="text-sm text-slate-400 hover:text-slate-700 px-2">Clear</button>
+        <span id="filter-count" class="ml-auto text-xs text-slate-400"></span>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm min-w-[1100px]">
+            <thead>
+              <tr class="border-b border-slate-100 text-left text-xs text-slate-500 uppercase tracking-wide bg-slate-50/80">
+                <th class="px-4 py-3 font-semibold">Account</th>
+                <th class="px-4 py-3 font-semibold">Business / Contact</th>
+                <th class="px-4 py-3 font-semibold">Type</th>
+                <th class="px-4 py-3 font-semibold">Plan / Price</th>
+                <th class="px-4 py-3 font-semibold">Payment</th>
+                <th class="px-4 py-3 font-semibold">Status</th>
+                <th class="px-4 py-3 font-semibold text-center">Calls</th>
+                <th class="px-4 py-3 font-semibold text-center">Appts</th>
+                <th class="px-4 py-3 font-semibold">Twilio #</th>
+                <th class="px-4 py-3 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="clients-tbody">
+              <tr><td colspan="10" class="px-4 py-10 text-center text-slate-400">Loading clients…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main-body -->
+</div><!-- /main -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE-OVER PANEL                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="overlay" class="fixed inset-0 bg-black/40 z-40 hidden" onclick="closeSlider()"></div>
+<div id="slideover" class="fixed top-0 right-0 h-full w-full max-w-2xl bg-white z-50 shadow-2xl flex flex-col">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
+    <h2 class="font-bold text-slate-900 text-base" id="slider-title">Add Client</h2>
+    <button onclick="closeSlider()" class="text-slate-400 hover:text-slate-700 text-xl leading-none w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100">✕</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex border-b border-slate-200 px-6 flex-shrink-0 overflow-x-auto">
+    <button class="tab-btn active" onclick="switchTab('business',this)">Business Info</button>
+    <button class="tab-btn" onclick="switchTab('technical',this)">Technical Setup</button>
+    <button class="tab-btn" onclick="switchTab('billing',this)">Billing & Plan</button>
+    <button class="tab-btn" onclick="switchTab('notes',this)">Support Notes</button>
+  </div>
+
+  <!-- Scrollable form body -->
+  <div class="flex-1 overflow-y-auto">
+    <form id="clinic-form" onsubmit="saveClinic(event)" autocomplete="off">
+      <input type="hidden" id="edit-id">
+
+      <!-- ── TAB: Business Info ── -->
+      <div id="tab-business" class="p-6 space-y-5">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="form-label">Business Name *</label>
+            <input type="text" id="f-name" required placeholder="City Medical Clinic" class="form-input">
+          </div>
+          <div>
+            <label class="form-label">Slug * <span class="normal-case font-normal text-slate-400">(URL: /admin/slug)</span></label>
+            <input type="text" id="f-slug" required placeholder="city-med" pattern="[a-z0-9-]+" class="form-input font-mono">
+          </div>
+          <div>
+            <label class="form-label">Business Type</label>
+            <select id="f-business-type" class="form-input bg-white">
+              <option>Medical</option>
+              <option>Dental</option>
+              <option>Chiropractic</option>
+              <option>Mental Health</option>
+              <option>Physical Therapy</option>
+              <option>Vision / Optometry</option>
+              <option>Dermatology</option>
+              <option>Pediatrics</option>
+              <option>OB/GYN</option>
+              <option>Urgent Care</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Display Phone</label>
+            <input type="text" id="f-phone-display" placeholder="(555) 000-0000" class="form-input">
+          </div>
+          <div>
+            <label class="form-label">Status</label>
+            <select id="f-status" class="form-input bg-white">
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div class="border-t border-slate-100 pt-4">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Contact Person</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="form-label">Contact Name</label>
+              <input type="text" id="f-contact-person" placeholder="Dr. Maria Garcia" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">Contact Phone</label>
+              <input type="text" id="f-contact-phone" placeholder="(555) 000-0001" class="form-input">
+            </div>
+            <div class="col-span-2">
+              <label class="form-label">Contact Email</label>
+              <input type="email" id="f-contact-email" placeholder="contact@clinic.com" class="form-input">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── TAB: Technical Setup ── -->
+      <div id="tab-technical" class="hidden p-6 space-y-5">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Dashboard Credentials</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="form-label">Admin Username</label>
+              <input type="text" id="f-admin-user" placeholder="admin" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">Admin Password</label>
+              <input type="text" id="f-admin-pass" placeholder="StrongPassword123!" class="form-input">
+            </div>
+          </div>
+        </div>
+        <div class="border-t border-slate-100 pt-4">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Twilio Configuration</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="form-label">Account SID</label>
+              <input type="text" id="f-twilio-sid" placeholder="ACxxxxxxxxxxxxxxxx" class="form-input font-mono">
+            </div>
+            <div>
+              <label class="form-label">Auth Token</label>
+              <input type="text" id="f-twilio-token" placeholder="auth_token" class="form-input font-mono">
+            </div>
+            <div>
+              <label class="form-label">Phone Number</label>
+              <input type="text" id="f-twilio-phone" placeholder="+1XXXXXXXXXX" class="form-input font-mono">
+            </div>
+            <div>
+              <label class="form-label">Signature Validation</label>
+              <select id="f-twilio-validate" class="form-input bg-white">
+                <option value="0">Disabled</option>
+                <option value="1">Enabled (production)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="border-t border-slate-100 pt-4">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Email Notifications</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="form-label">Notify Email (to)</label>
+              <input type="email" id="f-clinic-email" placeholder="staff@clinic.com" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">From Address</label>
+              <input type="email" id="f-email-from" placeholder="receptionist@clinic.com" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">Gmail Address</label>
+              <input type="email" id="f-gmail-user" placeholder="clinic@gmail.com" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">Gmail App Password</label>
+              <input type="text" id="f-gmail-pass" placeholder="16-char app password" class="form-input font-mono">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── TAB: Billing & Plan ── -->
+      <div id="tab-billing" class="hidden p-6 space-y-5">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="form-label">Monthly Plan</label>
+            <select id="f-monthly-plan" class="form-input bg-white" onchange="updatePlanPrice()">
+              <option value="Starter">Starter</option>
+              <option value="Professional">Professional</option>
+              <option value="Enterprise">Enterprise</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Monthly Price ($)</label>
+            <input type="number" id="f-monthly-price" placeholder="99.00" step="0.01" min="0" class="form-input">
+          </div>
+          <div>
+            <label class="form-label">Payment Status</label>
+            <select id="f-payment-status" class="form-input bg-white">
+              <option value="trial">Trial</option>
+              <option value="current">Current</option>
+              <option value="overdue">Overdue</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Account Number</label>
+            <input type="text" id="f-account-number" placeholder="Auto-generated" class="form-input bg-slate-50 text-slate-400 font-mono" readonly>
+          </div>
+        </div>
+
+        <!-- Plan reference card -->
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <div class="bg-slate-50 px-4 py-2 border-b border-slate-200">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Plan Reference</p>
+          </div>
+          <div class="grid grid-cols-3 divide-x divide-slate-200 text-sm text-center">
+            <div class="p-4">
+              <div class="font-bold text-slate-800 mb-1">Starter</div>
+              <div class="text-blue-600 font-semibold text-lg">$99<span class="text-xs text-slate-400 font-normal">/mo</span></div>
+              <div class="text-slate-500 text-xs mt-2">1 clinic line<br>EN + ES<br>Email alerts</div>
+            </div>
+            <div class="p-4 bg-blue-50/50">
+              <div class="font-bold text-blue-700 mb-1">Professional</div>
+              <div class="text-blue-600 font-semibold text-lg">$199<span class="text-xs text-slate-400 font-normal">/mo</span></div>
+              <div class="text-slate-500 text-xs mt-2">3 clinic lines<br>Priority support<br>Analytics</div>
+            </div>
+            <div class="p-4">
+              <div class="font-bold text-slate-800 mb-1">Enterprise</div>
+              <div class="text-blue-600 font-semibold text-lg">$399<span class="text-xs text-slate-400 font-normal">/mo</span></div>
+              <div class="text-slate-500 text-xs mt-2">Unlimited lines<br>SLA guarantee<br>EHR integration</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── TAB: Support Notes ── -->
+      <div id="tab-notes" class="hidden p-6 space-y-4">
+        <div>
+          <label class="form-label">Internal Support Notes</label>
+          <p class="text-xs text-slate-400 mb-2">Visible to NetCare technicians only. Document issues, configurations, contact history.</p>
+          <textarea id="f-support-notes" rows="12" placeholder="2024-01-15: Onboarded. Twilio number +15550001234 assigned. Admin creds sent via email.&#10;&#10;2024-02-03: Client called about Spanish not working — resolved by checking GATHER hints." class="form-input resize-y" style="min-height:180px"></textarea>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <p class="text-xs text-amber-700"><strong>Internal use only.</strong> These notes are never visible to the clinic or their patients.</p>
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- Footer actions -->
+  <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-shrink-0 bg-slate-50">
+    <div id="form-error" class="hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex-1 mr-4"></div>
+    <div class="flex gap-3 ml-auto">
+      <button type="button" onclick="closeSlider()" class="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors">Cancel</button>
+      <button type="submit" form="clinic-form" id="save-btn"
+        class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+        Save Client
+      </button>
+    </div>
+  </div>
+
+</div><!-- /slideover -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- DELETE CONFIRM MODAL                                                         -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="del-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+    <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+      <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+      </svg>
+    </div>
+    <h3 class="font-bold text-slate-900 text-center mb-2">Delete Client?</h3>
+    <p class="text-sm text-slate-500 text-center mb-5" id="del-desc">All data including calls, appointments, and messages will be permanently deleted.</p>
+    <div class="flex gap-3">
+      <button onclick="closeDelModal()" class="flex-1 px-4 py-2.5 text-sm text-slate-700 border border-slate-300 rounded-xl hover:bg-slate-50 font-medium">Cancel</button>
+      <button onclick="confirmDelete()" class="flex-1 px-4 py-2.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT                                                                   -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let allClients = [];
+let deletingId = null;
+let currentView = 'dashboard';
+
+const PLAN_PRICES = { Starter: 99, Professional: 199, Enterprise: 399, Custom: 0 };
+
+// ── Formatting ────────────────────────────────────────────────────────────────
+
+function fmt(dt) {
+  if (!dt) return '—';
+  return new Date(dt.endsWith('Z') ? dt : dt + 'Z')
+    .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function money(n) {
+  return n != null ? `$${Number(n).toFixed(0)}/mo` : '—';
+}
+
+function statusBadge(s) {
+  const map = {
+    active:    'bg-emerald-100 text-emerald-700',
+    suspended: 'bg-amber-100 text-amber-700',
+    cancelled: 'bg-red-100 text-red-700',
+  };
+  return `<span class="badge ${map[s] || 'bg-slate-100 text-slate-500'}">${s || '—'}</span>`;
+}
+
+function payBadge(s) {
+  const map = {
+    trial:   'bg-blue-100 text-blue-700',
+    current: 'bg-emerald-100 text-emerald-700',
+    overdue: 'bg-orange-100 text-orange-700',
+    failed:  'bg-red-100 text-red-700',
+  };
+  const labels = { trial:'Trial', current:'Current', overdue:'Overdue', failed:'Failed' };
+  return `<span class="badge ${map[s] || 'bg-slate-100 text-slate-500'}">${labels[s] || s || '—'}</span>`;
+}
+
+function planBadge(p) {
+  const map = {
+    Starter:      'bg-slate-100 text-slate-600',
+    Professional: 'bg-blue-100 text-blue-700',
+    Enterprise:   'bg-purple-100 text-purple-700',
+    Custom:       'bg-teal-100 text-teal-700',
+  };
+  return `<span class="badge ${map[p] || 'bg-slate-100 text-slate-600'}">${p || '—'}</span>`;
+}
+
+function typeBadge(t) {
+  return t ? `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">${t}</span>` : '—';
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+
+function switchView(view) {
+  currentView = view;
+  const views = ['dashboard', 'clients'];
+  const titles = { dashboard: ['Dashboard', 'NetCare Phone platform overview'], clients: ['Clients', 'Manage all clinic accounts'] };
+  views.forEach(v => {
+    document.getElementById(`view-${v}`).classList.toggle('hidden', v !== view);
+    const btn = document.getElementById(`nav-${v}`);
+    btn.classList.toggle('bg-slate-800', v === view);
+    btn.classList.toggle('text-white',   v === view);
+  });
+  document.getElementById('view-title').textContent = titles[view][0];
+  document.getElementById('view-sub').textContent   = titles[view][1];
+}
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+
+async function loadStats() {
+  try {
+    const s = await (await fetch('/superadmin/api/stats')).json();
+    document.getElementById('global-stats').innerHTML = [
+      statCard('Total Clients',    s.totalClients,     'text-slate-800', 'bg-slate-100', iconBuilding()),
+      statCard('Active',           s.activeClients,    'text-emerald-700','bg-emerald-50', iconCheck()),
+      statCard('Suspended',        s.suspendedClients, 'text-amber-700', 'bg-amber-50',  iconPause()),
+      statCard('Monthly Revenue',  `$${Number(s.monthlyRevenue).toLocaleString()}`, 'text-blue-700', 'bg-blue-50', iconDollar()),
+      statCard('Total Calls',      s.totalCalls.toLocaleString(),   'text-indigo-700','bg-indigo-50', iconPhone()),
+      statCard('Total Appts',      s.totalAppointments.toLocaleString(), 'text-teal-700','bg-teal-50', iconCal()),
+    ].join('');
+  } catch(e) { console.error('Stats error:', e); }
+}
+
+function statCard(label, value, valClass, bgClass, icon) {
+  return `<div class="stat-card bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+    <div class="flex items-start justify-between mb-3">
+      <div class="w-9 h-9 ${bgClass} rounded-lg flex items-center justify-center">${icon}</div>
+    </div>
+    <div class="text-2xl font-bold ${valClass}">${value}</div>
+    <div class="text-xs text-slate-400 mt-1 font-medium uppercase tracking-wide">${label}</div>
+  </div>`;
+}
+
+async function loadClients() {
+  try {
+    const data = await (await fetch('/superadmin/api/clinics')).json();
+    allClients = data;
+    document.getElementById('nav-clients-count').textContent = data.length;
+    document.getElementById('nav-clients-count').classList.remove('hidden');
+    renderTable();
+    renderRecentClients();
+  } catch(e) {
+    document.getElementById('clients-tbody').innerHTML =
+      `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400 text-sm">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  await Promise.all([loadStats(), loadClients()]);
+  document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  btn.disabled = false;
+}
+
+// ── Render table ──────────────────────────────────────────────────────────────
+
+function renderTable() {
+  const q       = (document.getElementById('search-input').value || '').toLowerCase();
+  const fStatus  = document.getElementById('filter-status').value;
+  const fPlan    = document.getElementById('filter-plan').value;
+  const fPayment = document.getElementById('filter-payment').value;
+
+  let filtered = allClients.filter(c => {
+    if (fStatus  && c.status         !== fStatus)  return false;
+    if (fPlan    && c.monthly_plan    !== fPlan)    return false;
+    if (fPayment && c.payment_status  !== fPayment) return false;
+    if (q) {
+      const hay = `${c.name} ${c.account_number} ${c.contact_person} ${c.contact_email} ${c.slug}`.toLowerCase();
+      return hay.includes(q);
+    }
+    return true;
+  });
+
+  document.getElementById('filter-count').textContent =
+    filtered.length === allClients.length ? `${allClients.length} clients`
+      : `${filtered.length} of ${allClients.length}`;
+
+  const tbody = document.getElementById('clients-tbody');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-10 text-center text-slate-400 text-sm">No clients match your filters</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(c => `
+    <tr class="client-row border-t border-slate-100 cursor-pointer" onclick="openEditModal(${c.id})">
+      <td class="px-4 py-3">
+        <div class="font-mono text-xs font-semibold text-slate-600">${c.account_number || '—'}</div>
+        <div class="text-xs text-slate-400 mt-0.5">${fmt(c.created_at)}</div>
+      </td>
+      <td class="px-4 py-3 max-w-[200px]">
+        <div class="font-semibold text-slate-800 text-sm truncate">${c.name}</div>
+        <div class="text-xs text-slate-400 truncate">${c.contact_person || '—'}</div>
+        <div class="text-xs text-blue-500 truncate">${c.contact_email || ''}</div>
+      </td>
+      <td class="px-4 py-3">${typeBadge(c.business_type)}</td>
+      <td class="px-4 py-3">
+        <div>${planBadge(c.monthly_plan)}</div>
+        <div class="text-xs text-slate-500 mt-1 font-semibold">${money(c.monthly_price)}</div>
+      </td>
+      <td class="px-4 py-3">${payBadge(c.payment_status)}</td>
+      <td class="px-4 py-3">${statusBadge(c.status)}</td>
+      <td class="px-4 py-3 text-center text-sm font-medium text-slate-700">${(c.stats?.totalCalls ?? 0).toLocaleString()}</td>
+      <td class="px-4 py-3 text-center text-sm font-medium text-slate-700">${(c.stats?.appointmentsTotal ?? 0).toLocaleString()}</td>
+      <td class="px-4 py-3">
+        <div class="font-mono text-xs text-slate-600">${c.twilio_phone || '<span class="text-slate-300">Not set</span>'}</div>
+      </td>
+      <td class="px-4 py-3" onclick="event.stopPropagation()">
+        <div class="flex items-center gap-1 justify-end">
+          ${c.dashboardUrl ? `<a href="${c.dashboardUrl}" target="_blank" title="Open Dashboard"
+            class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">${iconExtLink()}</a>` : ''}
+          <button onclick="openEditModal(${c.id})" title="Edit"
+            class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">${iconEdit()}</button>
+          ${c.status === 'active'
+            ? `<button onclick="quickStatus(${c.id},'suspended',event)" title="Suspend"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors">${iconPause()}</button>`
+            : `<button onclick="quickStatus(${c.id},'active',event)" title="Activate"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors">${iconPlay()}</button>`}
+          <button onclick="openDelModal(${c.id},'${c.name.replace(/'/g,"\\'")}',event)" title="Delete"
+            class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">${iconTrash()}</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderRecentClients() {
+  const recent = [...allClients].sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+  const el = document.getElementById('recent-clients-table');
+  if (!recent.length) { el.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">No clients yet.</div>'; return; }
+  el.innerHTML = `<table class="w-full text-sm">
+    <thead><tr class="text-left text-xs text-slate-400 uppercase tracking-wide border-b border-slate-100">
+      <th class="px-5 py-2 font-semibold">Account</th>
+      <th class="px-5 py-2 font-semibold">Name</th>
+      <th class="px-5 py-2 font-semibold">Plan</th>
+      <th class="px-5 py-2 font-semibold">Status</th>
+      <th class="px-5 py-2 font-semibold">Added</th>
+    </tr></thead>
+    <tbody>${recent.map(c => `<tr class="border-t border-slate-50 hover:bg-slate-50 cursor-pointer" onclick="switchView('clients')">
+      <td class="px-5 py-2.5 font-mono text-xs font-semibold text-slate-600">${c.account_number || '—'}</td>
+      <td class="px-5 py-2.5 font-medium text-slate-800">${c.name}</td>
+      <td class="px-5 py-2.5">${planBadge(c.monthly_plan)}</td>
+      <td class="px-5 py-2.5">${statusBadge(c.status)}</td>
+      <td class="px-5 py-2.5 text-slate-400 text-xs">${fmt(c.created_at)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function clearFilters() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('filter-status').value = '';
+  document.getElementById('filter-plan').value = '';
+  document.getElementById('filter-payment').value = '';
+  renderTable();
+}
+
+// ── Quick status change ───────────────────────────────────────────────────────
+
+async function quickStatus(id, status, e) {
+  e.stopPropagation();
+  try {
+    const r = await fetch(`/superadmin/api/clinics/${id}/status`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ status })
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    await refreshAll();
+  } catch(err) { alert('Failed: ' + err.message); }
+}
+
+// ── Slide-over: open/close ────────────────────────────────────────────────────
+
+function openAddModal() {
+  document.getElementById('edit-id').value = '';
+  document.getElementById('slider-title').textContent = 'Add New Client';
+  document.getElementById('clinic-form').reset();
+  document.getElementById('f-admin-user').value = 'admin';
+  document.getElementById('f-status').value = 'active';
+  document.getElementById('f-business-type').value = 'Medical';
+  document.getElementById('f-monthly-plan').value = 'Starter';
+  document.getElementById('f-monthly-price').value = '99';
+  document.getElementById('f-payment-status').value = 'trial';
+  document.getElementById('f-account-number').value = 'Auto-generated';
+  document.getElementById('f-slug').disabled = false;
+  document.getElementById('form-error').classList.add('hidden');
+  switchTab('business', document.querySelector('.tab-btn'));
+  openSlider();
+}
+
+async function openEditModal(id) {
+  try {
+    const c = await (await fetch(`/superadmin/api/clinics/${id}`)).json();
+    document.getElementById('edit-id').value = id;
+    document.getElementById('slider-title').textContent = `Edit — ${c.name}`;
+
+    // Business
+    document.getElementById('f-name').value          = c.name || '';
+    document.getElementById('f-slug').value          = c.slug || '';
+    document.getElementById('f-slug').disabled       = true;
+    document.getElementById('f-business-type').value = c.business_type || 'Medical';
+    document.getElementById('f-phone-display').value = c.phone_display || '';
+    document.getElementById('f-status').value        = c.status || 'active';
+    document.getElementById('f-contact-person').value= c.contact_person || '';
+    document.getElementById('f-contact-phone').value = c.contact_phone || '';
+    document.getElementById('f-contact-email').value = c.contact_email || '';
+    // Technical
+    document.getElementById('f-admin-user').value    = c.admin_user || 'admin';
+    document.getElementById('f-admin-pass').value    = c.admin_pass || '';
+    document.getElementById('f-twilio-sid').value    = c.twilio_sid || '';
+    document.getElementById('f-twilio-token').value  = c.twilio_token || '';
+    document.getElementById('f-twilio-phone').value  = c.twilio_phone || '';
+    document.getElementById('f-twilio-validate').value = c.twilio_validate ? '1' : '0';
+    document.getElementById('f-clinic-email').value  = c.clinic_email || '';
+    document.getElementById('f-email-from').value    = c.email_from || '';
+    document.getElementById('f-gmail-user').value    = c.gmail_user || '';
+    document.getElementById('f-gmail-pass').value    = c.gmail_app_pass || '';
+    // Billing
+    document.getElementById('f-monthly-plan').value    = c.monthly_plan || 'Starter';
+    document.getElementById('f-monthly-price').value   = c.monthly_price ?? '';
+    document.getElementById('f-payment-status').value  = c.payment_status || 'trial';
+    document.getElementById('f-account-number').value  = c.account_number || 'Auto-generated';
+    // Notes
+    document.getElementById('f-support-notes').value   = c.support_notes || '';
+
+    document.getElementById('form-error').classList.add('hidden');
+    switchTab('business', document.querySelector('.tab-btn'));
+    openSlider();
+  } catch(e) { alert('Could not load clinic: ' + e.message); }
+}
+
+function openSlider() {
+  document.getElementById('overlay').classList.remove('hidden');
+  requestAnimationFrame(() => document.getElementById('slideover').classList.add('open'));
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSlider() {
+  document.getElementById('slideover').classList.remove('open');
+  document.getElementById('overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+  document.getElementById('f-slug').disabled = false;
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+
+function switchTab(tab, clickedBtn) {
+  ['business','technical','billing','notes'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (clickedBtn) clickedBtn.classList.add('active');
+  else document.querySelector(`.tab-btn:first-child`).classList.add('active');
+}
+
+// ── Plan price helper ─────────────────────────────────────────────────────────
+
+function updatePlanPrice() {
+  const plan  = document.getElementById('f-monthly-plan').value;
+  const price = PLAN_PRICES[plan];
+  if (price != null && price > 0) document.getElementById('f-monthly-price').value = price;
+}
+
+// ── Save ──────────────────────────────────────────────────────────────────────
+
+async function saveClinic(e) {
+  e.preventDefault();
+  const errBox = document.getElementById('form-error');
+  const btn    = document.getElementById('save-btn');
+  errBox.classList.add('hidden');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const id   = document.getElementById('edit-id').value;
+  const body = {
+    slug:           document.getElementById('f-slug').value.trim().toLowerCase(),
+    name:           document.getElementById('f-name').value.trim(),
+    businessType:   document.getElementById('f-business-type').value,
+    phoneDisplay:   document.getElementById('f-phone-display').value.trim(),
+    status:         document.getElementById('f-status').value,
+    contactPerson:  document.getElementById('f-contact-person').value.trim(),
+    contactPhone:   document.getElementById('f-contact-phone').value.trim(),
+    contactEmail:   document.getElementById('f-contact-email').value.trim(),
+    adminUser:      document.getElementById('f-admin-user').value.trim() || 'admin',
+    adminPass:      document.getElementById('f-admin-pass').value.trim(),
+    twilioSid:      document.getElementById('f-twilio-sid').value.trim(),
+    twilioToken:    document.getElementById('f-twilio-token').value.trim(),
+    twilioPhone:    document.getElementById('f-twilio-phone').value.trim(),
+    twilioValidate: document.getElementById('f-twilio-validate').value === '1',
+    clinicEmail:    document.getElementById('f-clinic-email').value.trim(),
+    emailFrom:      document.getElementById('f-email-from').value.trim(),
+    gmailUser:      document.getElementById('f-gmail-user').value.trim(),
+    gmailAppPass:   document.getElementById('f-gmail-pass').value.trim(),
+    monthlyPlan:    document.getElementById('f-monthly-plan').value,
+    monthlyPrice:   document.getElementById('f-monthly-price').value,
+    paymentStatus:  document.getElementById('f-payment-status').value,
+    supportNotes:   document.getElementById('f-support-notes').value.trim(),
+  };
+
+  try {
+    const url    = id ? `/superadmin/api/clinics/${id}` : '/superadmin/api/clinics';
+    const method = id ? 'PUT' : 'POST';
+    const r      = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const data   = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Unknown error');
+    closeSlider();
+    await refreshAll();
+  } catch(err) {
+    errBox.textContent = err.message;
+    errBox.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Client';
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+function openDelModal(id, name, e) {
+  if (e) e.stopPropagation();
+  deletingId = id;
+  document.getElementById('del-desc').textContent =
+    `Delete "${name}"? All associated calls, appointments, and messages will be permanently removed.`;
+  document.getElementById('del-modal').classList.remove('hidden');
+}
+
+function closeDelModal() {
+  deletingId = null;
+  document.getElementById('del-modal').classList.add('hidden');
+}
+
+async function confirmDelete() {
+  if (!deletingId) return;
+  try {
+    await fetch(`/superadmin/api/clinics/${deletingId}`, { method:'DELETE' });
+    closeDelModal();
+    await refreshAll();
+  } catch(e) { alert('Delete failed: ' + e.message); }
+}
+
+// ── SVG icons ─────────────────────────────────────────────────────────────────
+
+const svg = (d, cls='w-4 h-4') => `<svg class="${cls}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${d}"/></svg>`;
+const iconBuilding = () => svg('M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', 'w-4 h-4 text-slate-500');
+const iconCheck   = () => svg('M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', 'w-4 h-4 text-emerald-600');
+const iconPause   = () => svg('M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z', 'w-4 h-4');
+const iconPlay    = () => svg('M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z', 'w-4 h-4');
+const iconDollar  = () => svg('M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', 'w-4 h-4 text-blue-600');
+const iconPhone   = () => svg('M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z', 'w-4 h-4 text-indigo-600');
+const iconCal     = () => svg('M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', 'w-4 h-4 text-teal-600');
+const iconEdit    = () => svg('M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'w-3.5 h-3.5');
+const iconTrash   = () => svg('M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16', 'w-3.5 h-3.5');
+const iconExtLink = () => svg('M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14', 'w-3.5 h-3.5');
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSlider(); closeDelModal(); }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+switchView('dashboard');
+refreshAll();
+setInterval(refreshAll, 60_000);
+</script>
+</body>
+</html>
