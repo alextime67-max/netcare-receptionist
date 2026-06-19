@@ -473,6 +473,34 @@
     <!-- ── TAB: AI Assistant (outside form — saved separately) ── -->
     <div id="tab-ai" class="hidden p-6 space-y-6">
 
+      <!-- Industry Template -->
+      <div class="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-4">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1">
+            <label class="form-label text-indigo-700">Industry Template</label>
+            <select id="ai-industry-template" onchange="onTemplateChange()"
+              class="form-input bg-white mt-1">
+              <option value="">— No template (fully custom) —</option>
+              <option value="medical">Medical Clinic</option>
+              <option value="dental">Dental Office</option>
+              <option value="tax">Tax Office</option>
+              <option value="law">Law Firm</option>
+              <option value="insurance">Insurance Agency</option>
+              <option value="realestate">Real Estate Office</option>
+              <option value="itsupport">IT Support / MSP</option>
+              <option value="restaurant">Restaurant</option>
+              <option value="general">General Business</option>
+            </select>
+          </div>
+          <button type="button" onclick="previewPrompt()"
+            class="flex-shrink-0 mt-5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            Preview Prompt
+          </button>
+        </div>
+        <div id="template-info" class="hidden mt-3 text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg p-3 space-y-1.5"></div>
+      </div>
+
       <!-- Identity -->
       <div>
         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Assistant Identity</p>
@@ -555,6 +583,18 @@
         </div>
         <div id="faq-list" class="space-y-3"></div>
         <p class="text-xs text-slate-400 mt-2">The AI will use these answers when a patient asks matching questions.</p>
+      </div>
+
+      <!-- Master Prompt (Super Admin only) -->
+      <div class="border-t border-slate-100 pt-5">
+        <div class="flex items-center gap-2 mb-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Master Prompt</p>
+          <span class="text-xs bg-amber-100 text-amber-700 border border-amber-200 font-semibold px-2 py-0.5 rounded-full">Super Admin Only</span>
+        </div>
+        <textarea id="ai-master-prompt" rows="5"
+          placeholder="Optional: Add custom instructions that override everything else. For example:&#10;- Always end calls by saying 'Have a wonderful day!'&#10;- Never collect date of birth&#10;- If caller mentions Dr. Rodriguez, transfer them to ext. 201"
+          class="form-input resize-y font-mono text-xs"></textarea>
+        <p class="text-xs text-slate-400 mt-1.5">Injected at the end of the system prompt with highest priority. Overrides template and business config instructions.</p>
       </div>
 
       <!-- Save AI button -->
@@ -1051,6 +1091,132 @@ async function confirmDelete() {
   } catch(e) { alert('Delete failed: ' + e.message); }
 }
 
+// ── Industry template info card ───────────────────────────────────────────────
+
+let _templates = null; // cached from API
+
+async function fetchTemplates() {
+  if (_templates) return _templates;
+  try {
+    const r = await fetch('/superadmin/api/ai/templates');
+    _templates = await r.json();
+  } catch { _templates = []; }
+  return _templates;
+}
+
+async function onTemplateChange() {
+  const key  = document.getElementById('ai-industry-template').value;
+  const info = document.getElementById('template-info');
+  if (!key) { info.classList.add('hidden'); info.innerHTML = ''; return; }
+
+  const templates = await fetchTemplates();
+  const tmpl      = templates.find(t => t.key === key);
+  if (!tmpl) { info.classList.add('hidden'); return; }
+
+  const rulesHtml = tmpl.extraRules && tmpl.extraRules.length
+    ? `<div class="mt-2"><span class="font-semibold">Extra rules added:</span><ul class="mt-1 list-disc list-inside space-y-0.5">${tmpl.extraRules.map(r => `<li>${r}</li>`).join('')}</ul></div>`
+    : '';
+
+  info.innerHTML = `
+    <div><span class="font-semibold">Description:</span> ${tmpl.description}</div>
+    ${tmpl.tone ? `<div><span class="font-semibold">Tone:</span> ${tmpl.tone}</div>` : ''}
+    ${rulesHtml}
+  `;
+  info.classList.remove('hidden');
+}
+
+// ── Prompt Preview modal ──────────────────────────────────────────────────────
+
+async function previewPrompt() {
+  const modal     = document.getElementById('prompt-modal');
+  const preText   = document.getElementById('prompt-preview-text');
+  const loading   = document.getElementById('prompt-loading');
+  const statsEl   = document.getElementById('prompt-stats');
+  const copyBtn   = document.getElementById('prompt-copy-btn');
+  const sectionsEl= document.getElementById('prompt-sections');
+
+  modal.classList.remove('hidden');
+  preText.textContent = '';
+  loading.classList.remove('hidden');
+  statsEl.textContent = '';
+  sectionsEl.classList.add('hidden');
+  copyBtn.textContent = 'Copy';
+
+  // Gather current form values into ai_* keyed object (what buildSystemPrompt expects)
+  const faqs = [];
+  document.querySelectorAll('#faq-list .faq-row').forEach(row => {
+    const q = row.querySelector('.faq-q')?.value?.trim();
+    const a = row.querySelector('.faq-a')?.value?.trim();
+    if (q || a) faqs.push({ q: q || '', a: a || '' });
+  });
+
+  const clinicData = {
+    name:                        document.getElementById('f-name')?.value?.trim() || 'My Clinic',
+    ai_assistant_name:           document.getElementById('ai-name').value.trim(),
+    ai_industry_template:        document.getElementById('ai-industry-template').value,
+    ai_greeting_en:              document.getElementById('ai-greeting-en').value.trim(),
+    ai_greeting_es:              document.getElementById('ai-greeting-es').value.trim(),
+    ai_business_description:     document.getElementById('ai-biz-desc').value.trim(),
+    ai_services:                 document.getElementById('ai-services').value.trim(),
+    ai_office_hours:             document.getElementById('ai-office-hours').value.trim(),
+    ai_appointment_instructions: document.getElementById('ai-appt-instructions').value.trim(),
+    ai_after_hours_message:      document.getElementById('ai-after-hours').value.trim(),
+    ai_transfer_rules:           document.getElementById('ai-transfer-rules').value.trim(),
+    ai_emergency_instructions:   document.getElementById('ai-emergency').value.trim(),
+    ai_faq:                      JSON.stringify(faqs),
+    ai_master_prompt:            document.getElementById('ai-master-prompt').value.trim(),
+  };
+
+  try {
+    const r    = await fetch('/superadmin/api/ai/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clinicData),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to generate preview');
+
+    preText.textContent = data.prompt;
+    const chars  = data.length;
+    const approxTokens = Math.round(chars / 4);
+    statsEl.textContent = `${chars.toLocaleString()} chars · ~${approxTokens.toLocaleString()} tokens`;
+
+    // Show which sections are included
+    const present = [];
+    if (clinicData.ai_industry_template) present.push('Template: ' + clinicData.ai_industry_template);
+    if (clinicData.ai_business_description) present.push('Business Description');
+    if (clinicData.ai_services) present.push('Services');
+    if (clinicData.ai_office_hours) present.push('Office Hours');
+    if (clinicData.ai_appointment_instructions) present.push('Appt Instructions');
+    if (clinicData.ai_transfer_rules) present.push('Transfer Rules');
+    if (clinicData.ai_after_hours_message) present.push('After Hours');
+    if (clinicData.ai_emergency_instructions) present.push('Emergency');
+    if (faqs.length) present.push(`FAQ (${faqs.length})`);
+    if (clinicData.ai_master_prompt) present.push('Master Prompt ⭐');
+
+    if (present.length) {
+      document.getElementById('prompt-sections-list').textContent = present.join(' · ');
+      sectionsEl.classList.remove('hidden');
+    }
+  } catch (e) {
+    preText.textContent = 'Error: ' + e.message;
+  } finally {
+    loading.classList.add('hidden');
+  }
+}
+
+function closePreviewModal() {
+  document.getElementById('prompt-modal').classList.add('hidden');
+}
+
+function copyPromptText() {
+  const text = document.getElementById('prompt-preview-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('prompt-copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
 // ── AI Config ─────────────────────────────────────────────────────────────────
 
 async function loadAiConfig(clinicId) {
@@ -1068,6 +1234,9 @@ async function loadAiConfig(clinicId) {
     document.getElementById('ai-after-hours').value    = c.ai_after_hours_message      || '';
     document.getElementById('ai-transfer-rules').value = c.ai_transfer_rules           || '';
     document.getElementById('ai-emergency').value      = c.ai_emergency_instructions   || '';
+    document.getElementById('ai-industry-template').value = c.ai_industry_template     || '';
+    document.getElementById('ai-master-prompt').value  = c.ai_master_prompt            || '';
+    onTemplateChange();
     // Rebuild FAQ list
     const list = document.getElementById('faq-list');
     list.innerHTML = '';
@@ -1108,6 +1277,8 @@ async function saveAiConfig() {
     transferRules:           document.getElementById('ai-transfer-rules').value.trim(),
     emergencyInstructions:   document.getElementById('ai-emergency').value.trim(),
     faq:                     JSON.stringify(faqs),
+    industryTemplate:        document.getElementById('ai-industry-template').value,
+    masterPrompt:            document.getElementById('ai-master-prompt').value.trim(),
   };
 
   try {
@@ -1320,7 +1491,7 @@ const iconExtLink = () => svg('M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeSlider(); closeDelModal(); }
+  if (e.key === 'Escape') { closeSlider(); closeDelModal(); closePreviewModal(); }
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1329,5 +1500,43 @@ switchView('dashboard');
 refreshAll();
 setInterval(refreshAll, 60_000);
 </script>
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- PROMPT PREVIEW MODAL                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="prompt-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closePreviewModal()"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
+      <div>
+        <h2 class="font-bold text-slate-800">Generated System Prompt</h2>
+        <p class="text-xs text-slate-500 mt-0.5">This is exactly what gets sent to Claude — based on current form values.</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="prompt-stats" class="text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full font-medium"></span>
+        <button onclick="copyPromptText()" id="prompt-copy-btn"
+          class="text-xs bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition-colors font-medium">
+          Copy
+        </button>
+        <button onclick="closePreviewModal()"
+          class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 transition-colors text-xl leading-none">×</button>
+      </div>
+    </div>
+    <!-- Body -->
+    <div class="flex-1 overflow-y-auto p-6 min-h-0">
+      <div id="prompt-loading" class="hidden flex items-center justify-center py-16">
+        <div class="flex items-center gap-3 text-slate-500">
+          <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          Building prompt…
+        </div>
+      </div>
+      <pre id="prompt-preview-text" class="text-xs font-mono text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-5 whitespace-pre-wrap leading-relaxed"></pre>
+    </div>
+    <!-- Footer sections legend -->
+    <div id="prompt-sections" class="px-6 py-3 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex-shrink-0 text-xs text-slate-500 hidden">
+      Sections included: <span id="prompt-sections-list" class="font-medium text-slate-700"></span>
+    </div>
+  </div>
+</div>
 </body>
 </html>

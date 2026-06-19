@@ -11,7 +11,7 @@ const {
   getClinicAiConfig, updateClinicAiConfig,
 } = require('../database/db');
 
-const { runTestMessage, getInitialGreeting } = require('../services/ai');
+const { runTestMessage, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES } = require('../services/ai');
 
 const SA_USER = process.env.SUPERADMIN_USER || 'superadmin';
 const SA_PASS = process.env.SUPERADMIN_PASS || 'SuperAdmin2024!';
@@ -180,6 +180,30 @@ router.post('/api/clinics/:id/ai/test', async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error('[AI Test]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Industry templates list ───────────────────────────────────────────────────
+
+router.get('/api/ai/templates', (_req, res) => {
+  const list = Object.entries(INDUSTRY_TEMPLATES).map(([key, t]) => ({
+    key,
+    label:       t.label,
+    description: t.description,
+    tone:        t.tone,
+    extraRules:  t.extraRules,
+  }));
+  res.json(list);
+});
+
+// ── Prompt preview (stateless — accepts clinic-like object, returns built prompt) ──
+
+router.post('/api/ai/preview', (req, res) => {
+  try {
+    const prompt = buildSystemPrompt(req.body);
+    res.json({ prompt, length: prompt.length });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });

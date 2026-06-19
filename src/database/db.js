@@ -125,6 +125,8 @@ function initDb() {
   _addColumnIfMissing('clinics', 'ai_office_hours',            'TEXT');
   _addColumnIfMissing('clinics', 'ai_after_hours_message',     'TEXT');
   _addColumnIfMissing('clinics', 'ai_emergency_instructions',  'TEXT');
+  _addColumnIfMissing('clinics', 'ai_industry_template',       'TEXT');
+  _addColumnIfMissing('clinics', 'ai_master_prompt',           'TEXT');
 
   // ── Migrations: Phase 2 CRM fields on clinics ─────────────────────────────
 
@@ -481,7 +483,8 @@ function getClinicAiConfig(id) {
            ai_assistant_name, ai_greeting_en, ai_greeting_es,
            ai_business_description, ai_services, ai_faq,
            ai_appointment_instructions, ai_transfer_rules,
-           ai_office_hours, ai_after_hours_message, ai_emergency_instructions
+           ai_office_hours, ai_after_hours_message, ai_emergency_instructions,
+           ai_industry_template, ai_master_prompt
     FROM clinics WHERE id = ?
   `).get(id);
 }
@@ -492,6 +495,7 @@ function updateClinicAiConfig(id, data) {
     'ai_business_description', 'ai_services', 'ai_faq',
     'ai_appointment_instructions', 'ai_transfer_rules',
     'ai_office_hours', 'ai_after_hours_message', 'ai_emergency_instructions',
+    'ai_industry_template', 'ai_master_prompt',
   ];
   const map = {
     ai_assistant_name:           data.assistantName,
@@ -505,6 +509,8 @@ function updateClinicAiConfig(id, data) {
     ai_office_hours:             data.officeHours,
     ai_after_hours_message:      data.afterHoursMessage,
     ai_emergency_instructions:   data.emergencyInstructions,
+    ai_industry_template:        data.industryTemplate,
+    ai_master_prompt:            data.masterPrompt,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])
