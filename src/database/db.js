@@ -127,6 +127,7 @@ function initDb() {
   _addColumnIfMissing('clinics', 'ai_emergency_instructions',  'TEXT');
   _addColumnIfMissing('clinics', 'ai_industry_template',       'TEXT');
   _addColumnIfMissing('clinics', 'ai_master_prompt',           'TEXT');
+  _addColumnIfMissing('clinics', 'transfer_phone',             'TEXT');
 
   // ── Migrations: Phase 2 CRM fields on clinics ─────────────────────────────
 
@@ -343,6 +344,39 @@ function getCalls(limit = 100, offset = 0, filter = {}) {
 
   return db.prepare(`SELECT * FROM calls ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
     .all(...params);
+}
+
+function getAllCalls(limit = 100, offset = 0, filter = {}) {
+  const conditions = [];
+  const params = [];
+  if (filter.clinicId)  { conditions.push('calls.clinic_id = ?'); params.push(filter.clinicId); }
+  if (filter.status)    { conditions.push('calls.status = ?');    params.push(filter.status); }
+  if (filter.startDate) { conditions.push('calls.created_at >= ?'); params.push(filter.startDate); }
+  if (filter.endDate)   { conditions.push('calls.created_at <= ?'); params.push(filter.endDate + 'T23:59:59'); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  params.push(limit, offset);
+  return db.prepare(`
+    SELECT calls.*, clinics.name AS clinic_name, clinics.slug AS clinic_slug
+    FROM calls
+    INNER JOIN clinics ON calls.clinic_id = clinics.id
+    ${where}
+    ORDER BY calls.created_at DESC LIMIT ? OFFSET ?
+  `).all(...params);
+}
+
+function getCallCount(filter = {}) {
+  const conditions = [];
+  const params = [];
+  if (filter.clinicId)  { conditions.push('calls.clinic_id = ?'); params.push(filter.clinicId); }
+  if (filter.status)    { conditions.push('calls.status = ?');    params.push(filter.status); }
+  if (filter.startDate) { conditions.push('calls.created_at >= ?'); params.push(filter.startDate); }
+  if (filter.endDate)   { conditions.push('calls.created_at <= ?'); params.push(filter.endDate + 'T23:59:59'); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return db.prepare(`
+    SELECT COUNT(*) AS n FROM calls
+    INNER JOIN clinics ON calls.clinic_id = clinics.id
+    ${where}
+  `).get(...params).n;
 }
 
 function getCallWithTranscript(callId) {
@@ -567,6 +601,8 @@ module.exports = {
   updateCall,
   getCallByCallSid,
   getCalls,
+  getAllCalls,
+  getCallCount,
   getCallWithTranscript,
   getStats,
   // appointments

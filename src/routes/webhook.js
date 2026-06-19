@@ -51,6 +51,16 @@ function endTwiml(speakText, lang) {
 </Response>`;
 }
 
+function transferTwiml(speakText, lang, transferPhone, callerPhone) {
+  const voice    = lang === 'es' ? 'Polly.Lupe'  : 'Polly.Joanna';
+  const langCode = lang === 'es' ? 'es-US'       : 'en-US';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
+  <Dial timeout="30" callerId="${esc(callerPhone || '')}">${esc(transferPhone)}</Dial>
+</Response>`;
+}
+
 // ── Clinic middleware ─────────────────────────────────────────────────────────
 
 function clinicMiddleware(req, res, next) {
@@ -125,6 +135,25 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
         language:           ai.language,
         emergency_detected: ai.emergencyDetected ? 1 : 0,
       });
+    }
+
+    // Live call transfer — emit <Dial> TwiML when AI flags transfer
+    if (ai.transfer && clinic.transfer_phone) {
+      if (session.dbId) {
+        addTranscript(session.dbId, 'assistant', ai.speak);
+        updateCall(CallSid, {
+          patient_name:  ai.collected.name,
+          patient_phone: ai.collected.phone,
+          call_type:     'transfer',
+          language:      ai.language,
+          status:        'transferred',
+        });
+      }
+      endSession(CallSid);
+      console.log(`[Webhook/${clinic.slug}] Transferring call ${CallSid} → ${clinic.transfer_phone}`);
+      return res.type('text/xml').send(
+        transferTwiml(ai.speak, ai.language, clinic.transfer_phone, clinic.twilio_phone)
+      );
     }
 
     if (ai.complete) {

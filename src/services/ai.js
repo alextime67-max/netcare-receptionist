@@ -280,7 +280,8 @@ OUTPUT FORMAT — ALWAYS return raw JSON only (no markdown fences, no extra text
     "urgency": null
   },
   "complete": false,
-  "emergencyDetected": false
+  "emergencyDetected": false,
+  "transfer": false
 }
 
 ════════════════════════════════════════
@@ -308,6 +309,12 @@ RULES (follow exactly):
 
 9. COLLECTED FIELD: Always return the FULL collected object, carrying forward all previously
    gathered data. Only update fields collected in THIS turn.
+
+10. CALL TRANSFER: If the caller explicitly asks to speak with a human, live agent, receptionist,
+    nurse, doctor, or attorney — OR if the CALL TRANSFER / ROUTING RULES above specify a
+    transfer condition is met — set transfer:true, complete:true, intent:"transfer", and
+    speak:"Please hold while I transfer your call." (Spanish: "Por favor espere, le voy a transferir.")
+    ONLY set transfer:true when clearly warranted. Most calls complete without transfer.
 
 ════════════════════════════════════════
 EXAMPLE — English appointment flow:
@@ -479,9 +486,12 @@ function getTimeoutGoodbye(lang) {
     : "We didn't receive a response. Thank you for calling. Goodbye!";
 }
 
+function getActiveSessions() { return sessions.size; }
+
 module.exports = {
   INDUSTRY_TEMPLATES,
   buildSystemPrompt,
+  getActiveSessions,
   initSession,
   getSession,
   setSessionDbId,

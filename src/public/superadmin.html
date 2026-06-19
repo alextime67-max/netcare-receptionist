@@ -117,6 +117,13 @@
       Clients
       <span id="nav-clients-count" class="ml-auto bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full hidden"></span>
     </button>
+    <button onclick="switchView('calls')" id="nav-calls"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+      </svg>
+      Call Log
+    </button>
   </nav>
 
   <!-- Bottom info -->
@@ -250,6 +257,60 @@
       </div>
     </div>
 
+    <!-- ── CALL LOG VIEW ──────────────────────────────────────────────────── -->
+    <div id="view-calls" class="hidden p-6 space-y-4">
+
+      <!-- Filters -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap gap-3 items-center">
+        <select id="call-filter-clinic" onchange="loadCallLog()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+          <option value="">All Clinics</option>
+        </select>
+        <select id="call-filter-status" onchange="loadCallLog()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+          <option value="">All Statuses</option>
+          <option value="completed">Completed</option>
+          <option value="in_progress">In Progress</option>
+          <option value="abandoned">Abandoned</option>
+          <option value="transferred">Transferred</option>
+          <option value="emergency">Emergency</option>
+        </select>
+        <input type="date" id="call-filter-start" onchange="loadCallLog()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+        <input type="date" id="call-filter-end" onchange="loadCallLog()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+        <button onclick="clearCallFilters()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 px-3 py-1.5 rounded-lg">Clear filters</button>
+        <span id="call-log-count" class="ml-auto text-xs text-slate-400"></span>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wide">
+              <tr>
+                <th class="px-4 py-3 text-left">Date / Time</th>
+                <th class="px-4 py-3 text-left">Clinic</th>
+                <th class="px-4 py-3 text-left">Caller</th>
+                <th class="px-4 py-3 text-left">Patient</th>
+                <th class="px-4 py-3 text-left">Type</th>
+                <th class="px-4 py-3 text-left">Dur.</th>
+                <th class="px-4 py-3 text-left">Status</th>
+                <th class="px-4 py-3 text-left"></th>
+              </tr>
+            </thead>
+            <tbody id="call-log-tbody">
+              <tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">Loading call log…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Pagination -->
+        <div id="call-log-pagination" class="hidden px-4 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span id="call-log-page-info"></span>
+          <div class="flex gap-2">
+            <button id="call-log-prev" onclick="callLogPage(-1)" class="px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40">← Prev</button>
+            <button id="call-log-next" onclick="callLogPage(+1)" class="px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /main-body -->
 </div><!-- /main -->
 
@@ -375,7 +436,65 @@
                 <option value="1">Enabled (production)</option>
               </select>
             </div>
+            <div class="col-span-2">
+              <label class="form-label">Transfer Phone Number <span class="normal-case font-normal text-slate-400">— when AI signals a live transfer, Twilio dials this number</span></label>
+              <input type="text" id="f-transfer-phone" placeholder="+1XXXXXXXXXX" class="form-input font-mono">
+            </div>
           </div>
+
+          <!-- Twilio toolbox -->
+          <div class="mt-4 space-y-3">
+            <div class="flex flex-wrap gap-3">
+              <div class="flex-1 min-w-56">
+                <button type="button" onclick="testTwilioCredentials()" id="twilio-test-btn"
+                  class="w-full px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors">
+                  Validate Credentials
+                </button>
+                <div id="twilio-test-result" class="hidden mt-2 text-xs rounded-lg p-3 border"></div>
+              </div>
+              <div class="flex-1 min-w-56">
+                <div class="flex gap-2">
+                  <input type="tel" id="twilio-test-phone" placeholder="+1XXXXXXXXXX test number"
+                    class="form-input flex-1 font-mono text-sm">
+                  <button type="button" onclick="makeTestCall()" id="twilio-call-btn"
+                    class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg whitespace-nowrap">
+                    📞 Call Me
+                  </button>
+                </div>
+                <div id="twilio-call-result" class="hidden mt-2 text-xs rounded-lg p-3 border"></div>
+              </div>
+            </div>
+            <!-- Webhook Call Simulator -->
+            <div class="border border-slate-200 rounded-xl overflow-hidden">
+              <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <span class="text-sm font-semibold text-slate-700">Webhook Call Simulator</span>
+                  <span class="ml-2 text-xs text-slate-400">full stack: DB → AI → TwiML</span>
+                </div>
+                <button type="button" onclick="resetWebhookSim()"
+                  class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 px-3 py-1 rounded-lg">Reset</button>
+              </div>
+              <div class="p-4">
+                <div id="wsim-chat" class="bg-white border border-slate-200 rounded-lg p-3 h-48 overflow-y-auto flex flex-col gap-2">
+                  <div id="wsim-empty" class="flex-1 flex items-center justify-center text-xs text-slate-400 text-center">
+                    Click <strong>Start Call</strong> to simulate an inbound call through the real webhook
+                  </div>
+                </div>
+                <div class="flex gap-2 mt-3">
+                  <button type="button" id="wsim-start-btn" onclick="startWebhookSim()"
+                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg whitespace-nowrap">
+                    Start Call
+                  </button>
+                  <input type="text" id="wsim-input" placeholder="Type what the caller says…" disabled
+                    class="form-input flex-1" onkeydown="if(event.key==='Enter'){event.preventDefault();sendWebhookSim();}">
+                  <button type="button" id="wsim-send-btn" onclick="sendWebhookSim()" disabled
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg">Send</button>
+                </div>
+                <div id="wsim-error" class="hidden mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+              </div>
+            </div>
+          </div>
+
         </div>
         <div class="border-t border-slate-100 pt-4">
           <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Email Notifications</p>
@@ -743,16 +862,24 @@ function typeBadge(t) {
 
 function switchView(view) {
   currentView = view;
-  const views = ['dashboard', 'clients'];
-  const titles = { dashboard: ['Dashboard', 'NetCare Phone platform overview'], clients: ['Clients', 'Manage all clinic accounts'] };
+  const views  = ['dashboard', 'clients', 'calls'];
+  const titles = {
+    dashboard: ['Dashboard',  'NetCare Phone platform overview'],
+    clients:   ['Clients',    'Manage all clinic accounts'],
+    calls:     ['Call Log',   'All inbound calls across every clinic'],
+  };
   views.forEach(v => {
-    document.getElementById(`view-${v}`).classList.toggle('hidden', v !== view);
+    const el = document.getElementById(`view-${v}`);
+    if (el) el.classList.toggle('hidden', v !== view);
     const btn = document.getElementById(`nav-${v}`);
-    btn.classList.toggle('bg-slate-800', v === view);
-    btn.classList.toggle('text-white',   v === view);
+    if (btn) {
+      btn.classList.toggle('bg-slate-800', v === view);
+      btn.classList.toggle('text-white',   v === view);
+    }
   });
-  document.getElementById('view-title').textContent = titles[view][0];
-  document.getElementById('view-sub').textContent   = titles[view][1];
+  document.getElementById('view-title').textContent = (titles[view] || titles.dashboard)[0];
+  document.getElementById('view-sub').textContent   = (titles[view] || titles.dashboard)[1];
+  if (view === 'calls') loadCallLog();
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -767,6 +894,15 @@ async function loadStats() {
       statCard('Monthly Revenue',  `$${Number(s.monthlyRevenue).toLocaleString()}`, 'text-blue-700', 'bg-blue-50', iconDollar()),
       statCard('Total Calls',      s.totalCalls.toLocaleString(),   'text-indigo-700','bg-indigo-50', iconPhone()),
       statCard('Total Appts',      s.totalAppointments.toLocaleString(), 'text-teal-700','bg-teal-50', iconCal()),
+      `<div class="stat-card bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center">
+            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor" class="animate-pulse"/></svg>
+          </div>
+        </div>
+        <div class="text-2xl font-bold text-green-700"><span id="live-active-calls">0</span></div>
+        <div class="text-xs text-slate-400 mt-1 font-medium uppercase tracking-wide">Live Calls</div>
+      </div>`,
     ].join('');
   } catch(e) { console.error('Stats error:', e); }
 }
@@ -789,6 +925,7 @@ async function loadClients() {
     document.getElementById('nav-clients-count').classList.remove('hidden');
     renderTable();
     renderRecentClients();
+    populateCallClinicFilter();
   } catch(e) {
     document.getElementById('clients-tbody').innerHTML =
       `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400 text-sm">Error: ${e.message}</td></tr>`;
@@ -961,6 +1098,7 @@ async function openEditModal(id) {
     document.getElementById('f-twilio-token').value  = c.twilio_token || '';
     document.getElementById('f-twilio-phone').value  = c.twilio_phone || '';
     document.getElementById('f-twilio-validate').value = c.twilio_validate ? '1' : '0';
+    document.getElementById('f-transfer-phone').value  = c.transfer_phone || '';
     document.getElementById('f-clinic-email').value  = c.clinic_email || '';
     document.getElementById('f-email-from').value    = c.email_from || '';
     document.getElementById('f-gmail-user').value    = c.gmail_user || '';
@@ -1041,6 +1179,7 @@ async function saveClinic(e) {
     twilioToken:    document.getElementById('f-twilio-token').value.trim(),
     twilioPhone:    document.getElementById('f-twilio-phone').value.trim(),
     twilioValidate: document.getElementById('f-twilio-validate').value === '1',
+    transferPhone:  document.getElementById('f-transfer-phone').value.trim(),
     clinicEmail:    document.getElementById('f-clinic-email').value.trim(),
     emailFrom:      document.getElementById('f-email-from').value.trim(),
     gmailUser:      document.getElementById('f-gmail-user').value.trim(),
@@ -1474,6 +1613,364 @@ function showSimError(msg) {
   el.classList.remove('hidden');
 }
 
+// ── Call Log ─────────────────────────────────────────────────────────────────
+
+let callLogOffset = 0;
+const CALL_LOG_LIMIT = 50;
+let callLogTotal = 0;
+
+async function loadCallLog() {
+  callLogOffset = 0;
+  await fetchCallLog();
+}
+
+async function fetchCallLog() {
+  const tbody      = document.getElementById('call-log-tbody');
+  const countEl   = document.getElementById('call-log-count');
+  const pagination = document.getElementById('call-log-pagination');
+  tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">Loading…</td></tr>';
+
+  const params = new URLSearchParams({ limit: CALL_LOG_LIMIT, offset: callLogOffset });
+  const clinic = document.getElementById('call-filter-clinic').value;
+  const status = document.getElementById('call-filter-status').value;
+  const start  = document.getElementById('call-filter-start').value;
+  const end    = document.getElementById('call-filter-end').value;
+  if (clinic) params.set('clinicId', clinic);
+  if (status) params.set('status',   status);
+  if (start)  params.set('startDate', start);
+  if (end)    params.set('endDate',   end);
+
+  try {
+    const data = await (await fetch('/superadmin/api/calls?' + params)).json();
+    callLogTotal = data.total;
+    countEl.textContent = callLogTotal.toLocaleString() + ' calls total';
+
+    if (!data.calls.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">No calls found</td></tr>';
+      pagination.classList.add('hidden');
+      return;
+    }
+
+    const statusBadge = s => ({
+      completed:   '<span class="badge bg-emerald-50 text-emerald-700">Completed</span>',
+      in_progress: '<span class="badge bg-blue-50 text-blue-700">Active</span>',
+      abandoned:   '<span class="badge bg-slate-100 text-slate-500">Abandoned</span>',
+      transferred: '<span class="badge bg-indigo-50 text-indigo-700">Transferred</span>',
+      emergency:   '<span class="badge bg-red-50 text-red-700">Emergency</span>',
+    }[s] || '<span class="badge bg-slate-100 text-slate-600">' + (s||'—') + '</span>');
+
+    tbody.innerHTML = data.calls.map(call => {
+      const ts   = new Date(call.created_at).toLocaleString();
+      const dur  = call.duration ? (call.duration + 's') : '—';
+      const type = { appointment:'Appt', message:'Msg', unknown:'—', transfer:'Transfer' }[call.call_type] || call.call_type || '—';
+      return '<tr class="border-t border-slate-100 hover:bg-slate-50 text-sm">' +
+        '<td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">' + ts + '</td>' +
+        '<td class="px-4 py-3 font-medium">' + (call.clinic_name || '—') + '</td>' +
+        '<td class="px-4 py-3 font-mono text-xs">' + (call.caller_number || '—') + '</td>' +
+        '<td class="px-4 py-3">' + (call.patient_name || '—') + '</td>' +
+        '<td class="px-4 py-3 text-xs">' + type + '</td>' +
+        '<td class="px-4 py-3 text-xs">' + dur + '</td>' +
+        '<td class="px-4 py-3">' + statusBadge(call.status) + '</td>' +
+        '<td class="px-4 py-3"><button onclick="viewCallDetail(' + call.id + ')" class="text-xs text-blue-600 hover:underline">Transcript</button></td>' +
+        '</tr>';
+    }).join('');
+
+    const totalPages = Math.ceil(callLogTotal / CALL_LOG_LIMIT);
+    const page = Math.floor(callLogOffset / CALL_LOG_LIMIT) + 1;
+    document.getElementById('call-log-page-info').textContent = 'Page ' + page + ' of ' + totalPages;
+    document.getElementById('call-log-prev').disabled = callLogOffset === 0;
+    document.getElementById('call-log-next').disabled = callLogOffset + CALL_LOG_LIMIT >= callLogTotal;
+    pagination.classList.toggle('hidden', totalPages <= 1);
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-400 text-sm">' + e.message + '</td></tr>';
+  }
+}
+
+function callLogPage(dir) {
+  callLogOffset = Math.max(0, callLogOffset + dir * CALL_LOG_LIMIT);
+  fetchCallLog();
+}
+
+function clearCallFilters() {
+  ['call-filter-clinic','call-filter-status','call-filter-start','call-filter-end']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  loadCallLog();
+}
+
+async function viewCallDetail(callId) {
+  try {
+    const data  = await (await fetch('/superadmin/api/calls/' + callId)).json();
+    const modal = document.getElementById('call-detail-modal');
+    const body  = document.getElementById('call-detail-body');
+
+    const ts = new Date(data.created_at).toLocaleString();
+
+    let transcriptHtml = '';
+    if (data.transcript && data.transcript.length) {
+      const rows = data.transcript.map(t => {
+        const isAI = t.role === 'assistant';
+        return '<div class="flex gap-2 ' + (isAI ? '' : 'flex-row-reverse') + '">' +
+          '<div class="text-xs rounded-lg px-3 py-2 max-w-xs ' + (isAI ? 'bg-slate-100 text-slate-700' : 'bg-blue-600 text-white') + '">' +
+          escHtml(t.content) + '</div></div>';
+      }).join('');
+      transcriptHtml = '<div class="mt-4"><p class="text-xs font-semibold text-slate-500 uppercase mb-2">Transcript</p>' +
+        '<div class="space-y-2 max-h-72 overflow-y-auto">' + rows + '</div></div>';
+    }
+
+    body.innerHTML =
+      '<div class="grid grid-cols-2 gap-3 text-sm">' +
+        '<div><span class="text-xs text-slate-400">Clinic</span><div class="font-medium">' + (data.clinic_name || data.clinic_id) + '</div></div>' +
+        '<div><span class="text-xs text-slate-400">Date</span><div>' + ts + '</div></div>' +
+        '<div><span class="text-xs text-slate-400">Caller</span><div class="font-mono">' + (data.caller_number || '—') + '</div></div>' +
+        '<div><span class="text-xs text-slate-400">Patient</span><div>' + (data.patient_name || '—') + '</div></div>' +
+        '<div><span class="text-xs text-slate-400">Call Type</span><div>' + (data.call_type || '—') + '</div></div>' +
+        '<div><span class="text-xs text-slate-400">Duration</span><div>' + (data.duration ? data.duration + 's' : '—') + '</div></div>' +
+        '<div><span class="text-xs text-slate-400">Language</span><div>' + (data.language === 'es' ? 'Spanish' : 'English') + '</div></div>' +
+        '<div><span class="text-xs text-slate-400">Status</span><div>' + (data.status || '—') + '</div></div>' +
+      '</div>' + transcriptHtml;
+
+    modal.classList.remove('hidden');
+  } catch(e) { alert('Could not load call: ' + e.message); }
+}
+
+function closeCallDetail() {
+  document.getElementById('call-detail-modal').classList.add('hidden');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Populate clinic filter dropdown ──────────────────────────────────────────
+
+function populateCallClinicFilter() {
+  const sel = document.getElementById('call-filter-clinic');
+  if (!sel || !allClients) return;
+  sel.innerHTML = '<option value="">All Clinics</option>' +
+    allClients.map(c => '<option value="' + c.id + '">' + escHtml(c.name) + '</option>').join('');
+}
+
+// ── Twilio credential test ────────────────────────────────────────────────────
+
+async function testTwilioCredentials() {
+  const id = document.getElementById('edit-id').value;
+  if (!id) { alert('Save the clinic first before testing credentials.'); return; }
+  const btn = document.getElementById('twilio-test-btn');
+  const res = document.getElementById('twilio-test-result');
+  btn.disabled = true; btn.textContent = 'Validating…';
+  res.className = 'hidden mt-2 text-xs rounded-lg p-3 border';
+  try {
+    const r    = await fetch('/superadmin/api/clinics/' + id + '/twilio/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        twilioSid:   document.getElementById('f-twilio-sid').value.trim(),
+        twilioToken: document.getElementById('f-twilio-token').value.trim(),
+        twilioPhone: document.getElementById('f-twilio-phone').value.trim(),
+      }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      const pn = data.phoneNumber;
+      const phoneExtra = pn && !pn.error
+        ? '<br><strong>Phone:</strong> ' + pn.phoneNumber + ' (' + pn.friendlyName + ') — voice: ' + (pn.capabilities && pn.capabilities.voice ? '✓' : '✗')
+        : (pn && pn.error ? '<br>⚠ ' + pn.error : '');
+      res.innerHTML = '<strong>✓ Valid!</strong> Account: ' + data.account.friendlyName + ' (' + data.account.status + ')' + phoneExtra;
+      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-emerald-50 text-emerald-700 border-emerald-200';
+    } else {
+      res.textContent = '✗ ' + (data.error || 'Invalid credentials');
+      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
+    }
+  } catch(e) {
+    res.textContent = '✗ ' + e.message;
+    res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Validate Credentials';
+  }
+}
+
+async function makeTestCall() {
+  const id    = document.getElementById('edit-id').value;
+  const phone = document.getElementById('twilio-test-phone').value.trim();
+  if (!id)    { alert('Save the clinic first.'); return; }
+  if (!phone) { alert('Enter a phone number to call.'); return; }
+  const btn = document.getElementById('twilio-call-btn');
+  const res = document.getElementById('twilio-call-result');
+  btn.disabled = true; btn.textContent = 'Calling…';
+  res.className = 'hidden mt-2 text-xs rounded-lg p-3 border';
+  try {
+    const r    = await fetch('/superadmin/api/clinics/' + id + '/twilio/call', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ testPhone: phone }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      res.textContent = '📞 Call initiated! SID: ' + data.callSid;
+      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-emerald-50 text-emerald-700 border-emerald-200';
+    } else {
+      res.textContent = '✗ ' + (data.error || 'Failed');
+      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
+    }
+  } catch(e) {
+    res.textContent = '✗ ' + e.message;
+    res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
+  } finally {
+    btn.disabled = false; btn.textContent = '📞 Call Me';
+  }
+}
+
+// ── Webhook Call Simulator ────────────────────────────────────────────────────
+
+let wsimCallSid = null;
+let wsimActive  = false;
+let wsimSlug    = null;
+
+function resetWebhookSim() {
+  wsimCallSid = null; wsimActive = false;
+  const chat = document.getElementById('wsim-chat');
+  chat.innerHTML = '<div class="flex-1 flex items-center justify-center text-xs text-slate-400 text-center p-4">Click <strong class='mx-1'>Start Call</strong> to simulate an inbound call</div>';
+  document.getElementById('wsim-input').value = '';
+  document.getElementById('wsim-input').disabled = true;
+  document.getElementById('wsim-send-btn').disabled = true;
+  document.getElementById('wsim-start-btn').disabled = false;
+  document.getElementById('wsim-start-btn').textContent = 'Start Call';
+  document.getElementById('wsim-start-btn').onclick = startWebhookSim;
+  const err = document.getElementById('wsim-error');
+  if (err) err.classList.add('hidden');
+}
+
+async function startWebhookSim() {
+  const clinicId = document.getElementById('edit-id').value;
+  const clinicData = allClients && allClients.find(function(cl) { return cl.id === +clinicId; });
+  if (!clinicData) { alert('Save the clinic first.'); return; }
+  wsimSlug    = clinicData.slug;
+  wsimCallSid = 'SIM_' + Date.now();
+  wsimActive  = true;
+
+  document.getElementById('wsim-start-btn').disabled = true;
+  document.getElementById('wsim-start-btn').textContent = 'In Progress…';
+  const errEl = document.getElementById('wsim-error');
+  if (errEl) errEl.classList.add('hidden');
+  document.getElementById('wsim-chat').innerHTML = '';
+
+  try {
+    const r = await fetch('/webhook/' + wsimSlug + '/voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ CallSid: wsimCallSid, From: '+15550000000', To: '+15559999999' }),
+    });
+    const twiml = await r.text();
+    const text  = parseSayText(twiml);
+    wsimAppendBubble('ai', text || '[AI spoke]');
+
+    if (twiml.includes('<Hangup') || twiml.includes('<Dial')) {
+      wsimAppendBubble('system', twiml.includes('<Dial') ? '📞 Call transferred.' : '📴 Call ended.');
+      wsimActive = false;
+      document.getElementById('wsim-start-btn').textContent = 'New Call';
+      document.getElementById('wsim-start-btn').onclick = resetWebhookSim;
+      document.getElementById('wsim-start-btn').disabled = false;
+    } else {
+      document.getElementById('wsim-input').disabled = false;
+      document.getElementById('wsim-send-btn').disabled = false;
+      document.getElementById('wsim-input').focus();
+      document.getElementById('wsim-start-btn').textContent = 'Restart';
+      document.getElementById('wsim-start-btn').onclick = resetWebhookSim;
+      document.getElementById('wsim-start-btn').disabled = false;
+    }
+  } catch(e) {
+    if (errEl) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+    wsimActive = false;
+    document.getElementById('wsim-start-btn').disabled = false;
+    document.getElementById('wsim-start-btn').textContent = 'Start Call';
+    document.getElementById('wsim-start-btn').onclick = startWebhookSim;
+  }
+}
+
+async function sendWebhookSim() {
+  if (!wsimActive || !wsimSlug) return;
+  const input = document.getElementById('wsim-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.disabled = true;
+  document.getElementById('wsim-send-btn').disabled = true;
+  const errEl = document.getElementById('wsim-error');
+  if (errEl) errEl.classList.add('hidden');
+  wsimAppendBubble('user', text);
+
+  try {
+    const r = await fetch('/webhook/' + wsimSlug + '/gather', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ CallSid: wsimCallSid, SpeechResult: text, Confidence: '0.9' }),
+    });
+    const twiml  = await r.text();
+    const spoken = parseSayText(twiml);
+    wsimAppendBubble('ai', spoken || '[no speech]');
+
+    if (twiml.includes('<Hangup') || twiml.includes('<Dial')) {
+      const dialMatch = twiml.match(/<Dial[^>]*>([^<]+)/);
+      wsimAppendBubble('system', twiml.includes('<Dial')
+        ? '📞 Transferred to ' + (dialMatch ? dialMatch[1] : 'transfer number') + '.'
+        : '📴 Call ended.');
+      wsimActive = false;
+      input.disabled = true;
+      document.getElementById('wsim-send-btn').disabled = true;
+      document.getElementById('wsim-start-btn').textContent = 'New Call';
+      document.getElementById('wsim-start-btn').onclick = resetWebhookSim;
+      document.getElementById('wsim-start-btn').disabled = false;
+    } else {
+      input.disabled = false;
+      document.getElementById('wsim-send-btn').disabled = false;
+      input.focus();
+    }
+  } catch(e) {
+    if (errEl) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+    input.disabled = false;
+    document.getElementById('wsim-send-btn').disabled = false;
+  }
+}
+
+function parseSayText(twiml) {
+  const m = twiml.match(/<Say[^>]*>([sS]*?)</Say>/i);
+  if (!m) return '';
+  return m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'");
+}
+
+function wsimAppendBubble(role, text) {
+  const chat = document.getElementById('wsim-chat');
+  const el   = document.createElement('div');
+  if (role === 'system') {
+    el.className = 'text-center text-xs text-slate-400 italic py-1';
+    el.textContent = text;
+  } else {
+    const isAI = role === 'ai';
+    el.className = 'flex gap-2 ' + (isAI ? '' : 'flex-row-reverse');
+    const lbl    = document.createElement('div');
+    lbl.className = 'text-xs text-slate-400 self-end mb-0.5 flex-shrink-0';
+    lbl.textContent = isAI ? '🤖' : '👤';
+    const bubble = document.createElement('div');
+    bubble.className = 'text-xs rounded-lg px-3 py-2 max-w-xs break-words ' +
+      (isAI ? 'bg-slate-100 text-slate-700' : 'bg-blue-600 text-white');
+    bubble.textContent = text;
+    if (isAI) { el.appendChild(lbl); el.appendChild(bubble); }
+    else       { el.appendChild(bubble); el.appendChild(lbl); }
+  }
+  chat.appendChild(el);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ── Live stats (active call counter) ─────────────────────────────────────────
+
+async function refreshLiveStats() {
+  try {
+    const data = await (await fetch('/superadmin/api/stats/live')).json();
+    const el = document.getElementById('live-active-calls');
+    if (el) el.textContent = data.activeSessions;
+  } catch(_) {}
+}
+setInterval(refreshLiveStats, 10000);
+refreshLiveStats();
+
 // ── SVG icons ─────────────────────────────────────────────────────────────────
 
 const svg = (d, cls='w-4 h-4') => `<svg class="${cls}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${d}"/></svg>`;
@@ -1538,5 +2035,20 @@ setInterval(refreshAll, 60_000);
     </div>
   </div>
 </div>
+
+<!-- ── Call Detail Modal ──────────────────────────────────────────────────── -->
+<div id="call-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+      <h3 class="font-bold text-slate-800 text-lg">Call Detail</h3>
+      <button onclick="closeCallDetail()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+    </div>
+    <div id="call-detail-body" class="flex-1 overflow-y-auto px-6 py-4 text-sm text-slate-700">Loading…</div>
+    <div class="px-6 py-3 border-t border-slate-100 flex justify-end">
+      <button onclick="closeCallDetail()" class="px-4 py-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition">Close</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

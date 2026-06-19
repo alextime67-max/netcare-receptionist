@@ -4,14 +4,17 @@ const basicAuth = require('express-basic-auth');
 const path      = require('path');
 const fs        = require('fs');
 
+const twilio = require('twilio');
+
 const {
   getClinics, getClinicBySlug, getClinicById,
   createClinic, updateClinic, deleteClinic,
   getStats, getGlobalStats,
   getClinicAiConfig, updateClinicAiConfig,
+  getAllCalls, getCallCount, getCallWithTranscript,
 } = require('../database/db');
 
-const { runTestMessage, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES } = require('../services/ai');
+const { runTestMessage, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
 
 const SA_USER = process.env.SUPERADMIN_USER || 'superadmin';
 const SA_PASS = process.env.SUPERADMIN_PASS || 'SuperAdmin2024!';
@@ -181,6 +184,119 @@ router.post('/api/clinics/:id/ai/test', async (req, res) => {
   } catch (e) {
     console.error('[AI Test]', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Live stats (active call sessions) ────────────────────────────────────────
+
+router.get('/api/stats/live', (_req, res) => {
+  res.json({ activeSessions: getActiveSessions() });
+});
+
+// ── Global call log ───────────────────────────────────────────────────────────
+
+router.get('/api/calls', (req, res) => {
+  try {
+    const limit    = Math.min(parseInt(req.query.limit  || 100, 10), 500);
+    const offset   = parseInt(req.query.offset || 0, 10);
+    const filter   = {
+      clinicId:  req.query.clinicId  || undefined,
+      status:    req.query.status    || undefined,
+      startDate: req.query.startDate || undefined,
+      endDate:   req.query.endDate   || undefined,
+    };
+    const calls = getAllCalls(limit, offset, filter);
+    const total = getCallCount(filter);
+    res.json({ calls, total, limit, offset });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/calls/:id', (req, res) => {
+  try {
+    const detail = getCallWithTranscript(+req.params.id);
+    if (!detail) return res.status(404).json({ error: 'Not found' });
+    res.json(detail);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Twilio credential test ────────────────────────────────────────────────────
+
+router.post('/api/clinics/:id/twilio/test', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const sid   = req.body.twilioSid   || clinic.twilio_sid;
+    const token = req.body.twilioToken || clinic.twilio_token;
+    const phone = req.body.twilioPhone || clinic.twilio_phone;
+
+    if (!sid || !token)
+      return res.status(400).json({ ok: false, error: 'Twilio SID and Auth Token are required' });
+
+    const client = twilio(sid, token);
+
+    // Validate account
+    const account = await client.api.accounts(sid).fetch();
+
+    // Look up the phone number in the account
+    let phoneInfo = null;
+    if (phone) {
+      try {
+        const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: phone, limit: 1 });
+        phoneInfo = numbers[0] || null;
+      } catch { /* phone not found in account */ }
+    }
+
+    res.json({
+      ok: true,
+      account: {
+        status:       account.status,
+        friendlyName: account.friendlyName,
+        type:         account.type,
+      },
+      phoneNumber: phoneInfo ? {
+        friendlyName:  phoneInfo.friendlyName,
+        phoneNumber:   phoneInfo.phoneNumber,
+        capabilities:  phoneInfo.capabilities,
+        voiceUrl:      phoneInfo.voiceUrl,
+      } : (phone ? { error: 'Phone number not found in this Twilio account' } : null),
+    });
+  } catch (e) {
+    const msg = e.message.includes('authenticate') || e.status === 401
+      ? 'Invalid Twilio credentials — check your Account SID and Auth Token'
+      : e.message;
+    res.status(400).json({ ok: false, error: msg });
+  }
+});
+
+// ── Initiate a real test call via Twilio ──────────────────────────────────────
+
+router.post('/api/clinics/:id/twilio/call', async (req, res) => {
+  try {
+    const { testPhone } = req.body;
+    if (!testPhone) return res.status(400).json({ error: 'testPhone is required' });
+
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    if (!clinic.twilio_sid || !clinic.twilio_token || !clinic.twilio_phone)
+      return res.status(400).json({ error: 'Twilio credentials not fully configured for this clinic' });
+
+    const appUrl     = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+    const webhookUrl = `${appUrl}/webhook/${clinic.slug}/voice`;
+    const statusUrl  = `${appUrl}/webhook/${clinic.slug}/status`;
+
+    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
+    const call   = await client.calls.create({
+      to:                   testPhone,
+      from:                 clinic.twilio_phone,
+      url:                  webhookUrl,
+      statusCallback:       statusUrl,
+      statusCallbackMethod: 'POST',
+    });
+
+    res.json({ ok: true, callSid: call.sid, status: call.status });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
   }
 });
 
