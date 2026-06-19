@@ -2,3 +2,11 @@ node_modules/
 .env
 *.log
 .DS_Store
+
+# SQLite WAL/SHM journal files (runtime artifacts)
+*.db-shm
+*.db-wal
+
+# Server output temp files
+server_out.txt
+server_err.txt
