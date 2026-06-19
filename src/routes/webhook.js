@@ -85,11 +85,11 @@ router.post('/:slug/voice', clinicMiddleware, (req, res) => {
   const clinic = req.clinic;
   console.log(`[Webhook/${clinic.slug}] Inbound call  CallSid=${CallSid}  From=${From}`);
 
-  initSession(CallSid, From, clinic.name);
+  initSession(CallSid, From, clinic);
   const dbId = createCall(CallSid, From, clinic.id);
   setSessionDbId(CallSid, dbId);
 
-  const greeting = getInitialGreeting(clinic.name);
+  const greeting = getInitialGreeting(clinic);
   addTranscript(dbId, 'assistant', greeting);
 
   res.type('text/xml').send(gatherTwiml(greeting, 'en', clinic.slug));

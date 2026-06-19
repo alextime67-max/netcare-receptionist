@@ -112,6 +112,20 @@ function initDb() {
   _addColumnIfMissing('doctor_messages', 'call_id',   'INTEGER');
   _addColumnIfMissing('web_requests',    'clinic_id', 'INTEGER DEFAULT 1');
 
+  // ── Migrations: Phase 4 AI config fields on clinics ─────────────────────────
+
+  _addColumnIfMissing('clinics', 'ai_assistant_name',          'TEXT');
+  _addColumnIfMissing('clinics', 'ai_greeting_en',             'TEXT');
+  _addColumnIfMissing('clinics', 'ai_greeting_es',             'TEXT');
+  _addColumnIfMissing('clinics', 'ai_business_description',    'TEXT');
+  _addColumnIfMissing('clinics', 'ai_services',                'TEXT');
+  _addColumnIfMissing('clinics', 'ai_faq',                     'TEXT');
+  _addColumnIfMissing('clinics', 'ai_appointment_instructions','TEXT');
+  _addColumnIfMissing('clinics', 'ai_transfer_rules',          'TEXT');
+  _addColumnIfMissing('clinics', 'ai_office_hours',            'TEXT');
+  _addColumnIfMissing('clinics', 'ai_after_hours_message',     'TEXT');
+  _addColumnIfMissing('clinics', 'ai_emergency_instructions',  'TEXT');
+
   // ── Migrations: Phase 2 CRM fields on clinics ─────────────────────────────
 
   _addColumnIfMissing('clinics', 'account_number',  'TEXT');
@@ -459,6 +473,47 @@ function updateWebRequestStatus(id, status) {
   db.prepare('UPDATE web_requests SET status = ? WHERE id = ?').run(status, id);
 }
 
+// ── AI config helpers ─────────────────────────────────────────────────────────
+
+function getClinicAiConfig(id) {
+  return db.prepare(`
+    SELECT id, name,
+           ai_assistant_name, ai_greeting_en, ai_greeting_es,
+           ai_business_description, ai_services, ai_faq,
+           ai_appointment_instructions, ai_transfer_rules,
+           ai_office_hours, ai_after_hours_message, ai_emergency_instructions
+    FROM clinics WHERE id = ?
+  `).get(id);
+}
+
+function updateClinicAiConfig(id, data) {
+  const allowed = [
+    'ai_assistant_name', 'ai_greeting_en', 'ai_greeting_es',
+    'ai_business_description', 'ai_services', 'ai_faq',
+    'ai_appointment_instructions', 'ai_transfer_rules',
+    'ai_office_hours', 'ai_after_hours_message', 'ai_emergency_instructions',
+  ];
+  const map = {
+    ai_assistant_name:           data.assistantName,
+    ai_greeting_en:              data.greetingEn,
+    ai_greeting_es:              data.greetingEs,
+    ai_business_description:     data.businessDescription,
+    ai_services:                 data.services,
+    ai_faq:                      data.faq,
+    ai_appointment_instructions: data.appointmentInstructions,
+    ai_transfer_rules:           data.transferRules,
+    ai_office_hours:             data.officeHours,
+    ai_after_hours_message:      data.afterHoursMessage,
+    ai_emergency_instructions:   data.emergencyInstructions,
+  };
+  const filtered = Object.fromEntries(
+    allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])
+  );
+  if (!Object.keys(filtered).length) return;
+  const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
+}
+
 // ── Portal helpers ────────────────────────────────────────────────────────────
 
 function updateClinicTwilio(id, data) {
@@ -497,6 +552,8 @@ module.exports = {
   updateClinic,
   updateClinicTwilio,
   getClinicBilling,
+  getClinicAiConfig,
+  updateClinicAiConfig,
   deleteClinic,
   getGlobalStats,
   // calls

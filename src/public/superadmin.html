@@ -55,6 +55,26 @@
 
   /* Search highlight */
   mark { background: #fef08a; padding: 0 2px; border-radius: 2px; }
+
+  /* AI tab — chat simulator */
+  .chat-area { height: 320px; overflow-y: auto; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .bubble-wrap { display: flex; align-items: flex-end; gap: 8px; }
+  .bubble-wrap.user  { flex-direction: row-reverse; }
+  .bubble { max-width: 75%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.45; }
+  .bubble.ai   { background: #fff; border: 1px solid #e2e8f0; color: #1e293b; border-bottom-left-radius: 4px; }
+  .bubble.user { background: #3b82f6; color: #fff; border-bottom-right-radius: 4px; }
+  .bubble .speak  { font-weight: 500; }
+  .bubble .meta   { font-size: 11px; margin-top: 5px; opacity: .6; }
+  .bubble .toggle { font-size: 11px; color: #3b82f6; cursor: pointer; margin-top: 4px; display: block; }
+  .bubble.ai .toggle { color: #64748b; }
+  .bubble .raw    { display: none; font-size: 11px; font-family: monospace; white-space: pre-wrap; background: #f1f5f9; border-radius: 6px; padding: 6px; margin-top: 6px; color: #475569; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+  .avatar.ai   { background: #e0e7ff; color: #3730a3; }
+  .avatar.user { background: #bfdbfe; color: #1d4ed8; }
+  .chat-empty  { flex: 1; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 13px; text-align: center; }
+  .faq-row { display: flex; gap: 8px; align-items: flex-start; }
+  .faq-row .faq-inputs { flex: 1; display: grid; gap: 6px; }
+  #ai-tab-btn.hidden { display: none; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen overflow-hidden flex">
@@ -251,6 +271,7 @@
     <button class="tab-btn" onclick="switchTab('technical',this)">Technical Setup</button>
     <button class="tab-btn" onclick="switchTab('billing',this)">Billing & Plan</button>
     <button class="tab-btn" onclick="switchTab('notes',this)">Support Notes</button>
+    <button class="tab-btn hidden" id="ai-tab-btn" onclick="switchTab('ai',this)">🤖 AI Assistant</button>
   </div>
 
   <!-- Scrollable form body -->
@@ -448,6 +469,144 @@
       </div>
 
     </form>
+
+    <!-- ── TAB: AI Assistant (outside form — saved separately) ── -->
+    <div id="tab-ai" class="hidden p-6 space-y-6">
+
+      <!-- Identity -->
+      <div>
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Assistant Identity</p>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="form-label">Assistant Name</label>
+            <input type="text" id="ai-name" placeholder="AI Receptionist" class="form-input">
+          </div>
+          <div class="col-span-2">
+            <label class="form-label">English Greeting <span class="normal-case font-normal text-slate-400">— what the AI says when the call is answered</span></label>
+            <textarea id="ai-greeting-en" rows="2" placeholder="Thank you for calling [Clinic]! Para español, diga español. How can I help you today?" class="form-input resize-none"></textarea>
+          </div>
+          <div class="col-span-2">
+            <label class="form-label">Spanish Greeting <span class="normal-case font-normal text-slate-400">— override when caller switches to Spanish</span></label>
+            <textarea id="ai-greeting-es" rows="2" placeholder="¡Gracias por llamar a [Clínica]! ¿En qué le puedo ayudar hoy?" class="form-input resize-none"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Business Context -->
+      <div class="border-t border-slate-100 pt-5">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Business Context</p>
+        <div class="space-y-4">
+          <div>
+            <label class="form-label">Business Description</label>
+            <textarea id="ai-biz-desc" rows="3" placeholder="We are a family medicine clinic serving the South Austin community. We accept most major insurance plans and offer same-day appointments." class="form-input resize-y"></textarea>
+          </div>
+          <div>
+            <label class="form-label">Services Offered</label>
+            <textarea id="ai-services" rows="3" placeholder="Annual physicals, sick visits, chronic disease management (diabetes, hypertension), vaccinations, lab work, referrals." class="form-input resize-y"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scheduling & Hours -->
+      <div class="border-t border-slate-100 pt-5">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Scheduling &amp; Hours</p>
+        <div class="space-y-4">
+          <div>
+            <label class="form-label">Office Hours</label>
+            <textarea id="ai-office-hours" rows="2" placeholder="Monday–Friday 8 AM – 5 PM. Saturday 9 AM – 1 PM. Closed Sundays and major holidays." class="form-input resize-none"></textarea>
+          </div>
+          <div>
+            <label class="form-label">Appointment Instructions</label>
+            <textarea id="ai-appt-instructions" rows="3" placeholder="New patients need a 30-minute new patient appointment. Existing patients can do a 15-minute follow-up. Please have your insurance card ready." class="form-input resize-y"></textarea>
+          </div>
+          <div>
+            <label class="form-label">After Hours Message</label>
+            <textarea id="ai-after-hours" rows="2" placeholder="Our office is currently closed. If this is an emergency, please call 911. For urgent but non-emergency concerns, please leave a message and we will return your call the next business day." class="form-input resize-none"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transfer Rules -->
+      <div class="border-t border-slate-100 pt-5">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Call Transfer &amp; Routing</p>
+        <div>
+          <label class="form-label">Transfer Rules</label>
+          <textarea id="ai-transfer-rules" rows="3" placeholder="If caller asks for billing, transfer to extension 102. If caller asks to speak with a nurse, collect their name and callback number only — do not transfer. Insurance questions: advise them to call their insurance directly." class="form-input resize-y"></textarea>
+        </div>
+      </div>
+
+      <!-- Emergency -->
+      <div class="border-t border-slate-100 pt-5">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Emergency Instructions</p>
+        <div>
+          <label class="form-label">Emergency Protocol <span class="normal-case font-normal text-slate-400">— overrides the default 911 instruction</span></label>
+          <textarea id="ai-emergency" rows="2" placeholder="If the caller describes a life-threatening emergency, immediately say: This is a medical emergency. Please hang up and call 9-1-1 immediately." class="form-input resize-none"></textarea>
+        </div>
+      </div>
+
+      <!-- FAQ Builder -->
+      <div class="border-t border-slate-100 pt-5">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">FAQ — Frequently Asked Questions</p>
+          <button type="button" onclick="addFaqRow()"
+            class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors font-medium">
+            + Add Question
+          </button>
+        </div>
+        <div id="faq-list" class="space-y-3"></div>
+        <p class="text-xs text-slate-400 mt-2">The AI will use these answers when a patient asks matching questions.</p>
+      </div>
+
+      <!-- Save AI button -->
+      <div class="border-t border-slate-100 pt-4 flex items-center gap-3">
+        <button type="button" onclick="saveAiConfig()" id="save-ai-inline-btn"
+          class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+          Save AI Settings
+        </button>
+        <span id="ai-save-msg" class="text-sm hidden"></span>
+      </div>
+
+      <!-- ── AI Test Simulator ── -->
+      <div class="border-t-2 border-dashed border-slate-200 pt-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <p class="font-semibold text-slate-800 text-sm">AI Test Simulator</p>
+            <p class="text-xs text-slate-400 mt-0.5">Test the conversation before publishing. Saves to AI settings are reflected immediately.</p>
+          </div>
+          <button type="button" onclick="resetSimulator()"
+            class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-slate-400 px-3 py-1.5 rounded-lg transition-colors">
+            New Conversation
+          </button>
+        </div>
+
+        <!-- Chat area -->
+        <div class="chat-area" id="chat-area">
+          <div class="chat-empty" id="chat-empty">
+            <div>
+              <div class="text-2xl mb-2">📞</div>
+              <div>Click <strong>Start Call</strong> to begin a simulated conversation</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Input row -->
+        <div class="flex gap-2 mt-3">
+          <button type="button" id="sim-start-btn" onclick="startSimulator()"
+            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
+            Start Call
+          </button>
+          <input type="text" id="sim-input" placeholder="Type what the patient says…"
+            class="form-input flex-1" disabled onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSimMessage();}">
+          <button type="button" onclick="sendSimMessage()" id="sim-send-btn"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40" disabled>
+            Send
+          </button>
+        </div>
+        <div id="sim-error" class="hidden mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+      </div>
+
+    </div><!-- /tab-ai -->
+
   </div>
 
   <!-- Footer actions -->
@@ -734,6 +893,7 @@ function openAddModal() {
   document.getElementById('f-account-number').value = 'Auto-generated';
   document.getElementById('f-slug').disabled = false;
   document.getElementById('form-error').classList.add('hidden');
+  document.getElementById('ai-tab-btn').classList.add('hidden');
   switchTab('business', document.querySelector('.tab-btn'));
   openSlider();
 }
@@ -774,8 +934,10 @@ async function openEditModal(id) {
     document.getElementById('f-support-notes').value   = c.support_notes || '';
 
     document.getElementById('form-error').classList.add('hidden');
+    document.getElementById('ai-tab-btn').classList.remove('hidden');
     switchTab('business', document.querySelector('.tab-btn'));
     openSlider();
+    loadAiConfig(id);
   } catch(e) { alert('Could not load clinic: ' + e.message); }
 }
 
@@ -795,12 +957,15 @@ function closeSlider() {
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 function switchTab(tab, clickedBtn) {
-  ['business','technical','billing','notes'].forEach(t => {
+  ['business','technical','billing','notes','ai'].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
   });
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   if (clickedBtn) clickedBtn.classList.add('active');
   else document.querySelector(`.tab-btn:first-child`).classList.add('active');
+
+  // Toggle footer buttons: AI tab gets its own inline save; main form save hidden on AI tab
+  document.getElementById('save-btn').classList.toggle('hidden', tab === 'ai');
 }
 
 // ── Plan price helper ─────────────────────────────────────────────────────────
@@ -884,6 +1049,258 @@ async function confirmDelete() {
     closeDelModal();
     await refreshAll();
   } catch(e) { alert('Delete failed: ' + e.message); }
+}
+
+// ── AI Config ─────────────────────────────────────────────────────────────────
+
+async function loadAiConfig(clinicId) {
+  try {
+    const r = await fetch(`/superadmin/api/clinics/${clinicId}/ai`);
+    if (!r.ok) return;
+    const c = await r.json();
+    document.getElementById('ai-name').value           = c.ai_assistant_name           || '';
+    document.getElementById('ai-greeting-en').value    = c.ai_greeting_en              || '';
+    document.getElementById('ai-greeting-es').value    = c.ai_greeting_es              || '';
+    document.getElementById('ai-biz-desc').value       = c.ai_business_description     || '';
+    document.getElementById('ai-services').value       = c.ai_services                 || '';
+    document.getElementById('ai-office-hours').value   = c.ai_office_hours             || '';
+    document.getElementById('ai-appt-instructions').value = c.ai_appointment_instructions || '';
+    document.getElementById('ai-after-hours').value    = c.ai_after_hours_message      || '';
+    document.getElementById('ai-transfer-rules').value = c.ai_transfer_rules           || '';
+    document.getElementById('ai-emergency').value      = c.ai_emergency_instructions   || '';
+    // Rebuild FAQ list
+    const list = document.getElementById('faq-list');
+    list.innerHTML = '';
+    let faqs = [];
+    try { faqs = JSON.parse(c.ai_faq || '[]'); } catch {}
+    (Array.isArray(faqs) ? faqs : []).forEach(f => addFaqRow(f.q, f.a));
+    // Reset simulator when config loads
+    resetSimulator();
+  } catch {}
+}
+
+async function saveAiConfig() {
+  const id = document.getElementById('edit-id').value;
+  if (!id) return;
+  const btn = document.getElementById('save-ai-inline-btn');
+  const msg = document.getElementById('ai-save-msg');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  msg.className = 'text-sm hidden';
+
+  // Collect FAQ rows
+  const faqs = [];
+  document.querySelectorAll('#faq-list .faq-row').forEach(row => {
+    const q = row.querySelector('.faq-q')?.value?.trim();
+    const a = row.querySelector('.faq-a')?.value?.trim();
+    if (q || a) faqs.push({ q: q || '', a: a || '' });
+  });
+
+  const body = {
+    assistantName:           document.getElementById('ai-name').value.trim(),
+    greetingEn:              document.getElementById('ai-greeting-en').value.trim(),
+    greetingEs:              document.getElementById('ai-greeting-es').value.trim(),
+    businessDescription:     document.getElementById('ai-biz-desc').value.trim(),
+    services:                document.getElementById('ai-services').value.trim(),
+    officeHours:             document.getElementById('ai-office-hours').value.trim(),
+    appointmentInstructions: document.getElementById('ai-appt-instructions').value.trim(),
+    afterHoursMessage:       document.getElementById('ai-after-hours').value.trim(),
+    transferRules:           document.getElementById('ai-transfer-rules').value.trim(),
+    emergencyInstructions:   document.getElementById('ai-emergency').value.trim(),
+    faq:                     JSON.stringify(faqs),
+  };
+
+  try {
+    const r = await fetch(`/superadmin/api/clinics/${id}/ai`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Save failed');
+    msg.textContent = '✓ Saved successfully';
+    msg.className   = 'text-sm text-emerald-600';
+    setTimeout(() => { msg.className = 'text-sm hidden'; }, 3000);
+  } catch(e) {
+    msg.textContent = '✗ ' + e.message;
+    msg.className   = 'text-sm text-red-600';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save AI Settings';
+  }
+}
+
+// ── FAQ Builder ───────────────────────────────────────────────────────────────
+
+function addFaqRow(q = '', a = '') {
+  const list = document.getElementById('faq-list');
+  const idx  = list.children.length;
+  const row  = document.createElement('div');
+  row.className = 'faq-row';
+  row.innerHTML = `
+    <div class="faq-inputs">
+      <input type="text" class="form-input faq-q" placeholder="Question — e.g. Do you accept Medicare?" value="${q.replace(/"/g,'&quot;')}">
+      <textarea class="form-input faq-a resize-none" rows="2" placeholder="Answer — e.g. Yes, we accept Medicare and most major insurance plans.">${a}</textarea>
+    </div>
+    <button type="button" onclick="this.closest('.faq-row').remove()"
+      class="flex-shrink-0 mt-1 w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-lg leading-none">×</button>`;
+  list.appendChild(row);
+}
+
+// ── AI Test Simulator ─────────────────────────────────────────────────────────
+
+let simMessages  = [];
+let simRunning   = false;
+
+function resetSimulator() {
+  simMessages = [];
+  simRunning  = false;
+  const area  = document.getElementById('chat-area');
+  area.innerHTML = `<div class="chat-empty" id="chat-empty"><div><div class="text-2xl mb-2">📞</div><div>Click <strong>Start Call</strong> to begin a simulated conversation</div></div></div>`;
+  document.getElementById('sim-input').value = '';
+  document.getElementById('sim-input').disabled = true;
+  document.getElementById('sim-send-btn').disabled = true;
+  document.getElementById('sim-start-btn').disabled = false;
+  document.getElementById('sim-start-btn').textContent = 'Start Call';
+  document.getElementById('sim-error').classList.add('hidden');
+}
+
+async function startSimulator() {
+  const id = document.getElementById('edit-id').value;
+  if (!id) { alert('Save the clinic first before testing.'); return; }
+
+  document.getElementById('sim-start-btn').disabled = true;
+  document.getElementById('sim-start-btn').textContent = 'Starting…';
+  document.getElementById('sim-error').classList.add('hidden');
+
+  const area = document.getElementById('chat-area');
+  area.innerHTML = '';
+  simMessages = [];
+
+  try {
+    const r    = await fetch(`/superadmin/api/clinics/${id}/ai/test`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [], userMessage: '__start__' }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to start');
+
+    simMessages = data.updatedMessages || [{ role: 'assistant', content: data.speak }];
+    appendBubble('ai', data.speak, data);
+    simRunning = true;
+    document.getElementById('sim-input').disabled = false;
+    document.getElementById('sim-send-btn').disabled = false;
+    document.getElementById('sim-input').focus();
+    document.getElementById('sim-start-btn').textContent = 'Restart';
+    document.getElementById('sim-start-btn').disabled = false;
+    document.getElementById('sim-start-btn').onclick = () => resetSimulator();
+  } catch(e) {
+    showSimError(e.message);
+    document.getElementById('sim-start-btn').disabled = false;
+    document.getElementById('sim-start-btn').textContent = 'Start Call';
+  }
+}
+
+async function sendSimMessage() {
+  if (!simRunning) return;
+  const input = document.getElementById('sim-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  const id = document.getElementById('edit-id').value;
+
+  input.value   = '';
+  input.disabled = true;
+  document.getElementById('sim-send-btn').disabled = true;
+  document.getElementById('sim-error').classList.add('hidden');
+
+  appendBubble('user', text, null);
+
+  try {
+    const r    = await fetch(`/superadmin/api/clinics/${id}/ai/test`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: simMessages, userMessage: text }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'AI error');
+
+    simMessages = data.updatedMessages || simMessages;
+    appendBubble('ai', data.speak, data);
+
+    if (data.complete) {
+      simRunning = false;
+      input.disabled = true;
+      document.getElementById('sim-send-btn').disabled = true;
+      document.getElementById('sim-start-btn').textContent = 'New Call';
+      document.getElementById('sim-start-btn').disabled = false;
+      document.getElementById('sim-start-btn').onclick = () => resetSimulator();
+    } else {
+      input.disabled = false;
+      document.getElementById('sim-send-btn').disabled = false;
+      input.focus();
+    }
+  } catch(e) {
+    showSimError(e.message);
+    input.disabled = false;
+    document.getElementById('sim-send-btn').disabled = false;
+  }
+}
+
+function appendBubble(who, text, data) {
+  const area = document.getElementById('chat-area');
+  const emptyEl = document.getElementById('chat-empty');
+  if (emptyEl) emptyEl.remove();
+
+  const wrap = document.createElement('div');
+  wrap.className = `bubble-wrap ${who}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = `avatar ${who}`;
+  avatar.textContent = who === 'ai' ? '🤖' : '👤';
+
+  const bubble = document.createElement('div');
+  bubble.className = `bubble ${who}`;
+
+  const speakEl = document.createElement('div');
+  speakEl.className = 'speak';
+  speakEl.textContent = text;
+  bubble.appendChild(speakEl);
+
+  if (who === 'ai' && data) {
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const parts = [];
+    if (data.language)  parts.push(data.language === 'es' ? '🇲🇽 Spanish' : '🇺🇸 English');
+    if (data.intent)    parts.push(`intent: ${data.intent}`);
+    if (data.complete)  parts.push('✓ complete');
+    if (data.emergencyDetected) parts.push('🚨 EMERGENCY');
+    meta.textContent = parts.join(' · ');
+    bubble.appendChild(meta);
+
+    if (data.rawJson) {
+      const toggle = document.createElement('span');
+      toggle.className = 'toggle';
+      toggle.textContent = 'Show raw JSON ▾';
+      const raw = document.createElement('div');
+      raw.className = 'raw';
+      raw.textContent = JSON.stringify(data.rawJson, null, 2);
+      toggle.onclick = () => {
+        const shown = raw.style.display === 'block';
+        raw.style.display = shown ? 'none' : 'block';
+        toggle.textContent = shown ? 'Show raw JSON ▾' : 'Hide raw JSON ▴';
+      };
+      bubble.appendChild(toggle);
+      bubble.appendChild(raw);
+    }
+  }
+
+  wrap.appendChild(avatar);
+  wrap.appendChild(bubble);
+  area.appendChild(wrap);
+  area.scrollTop = area.scrollHeight;
+}
+
+function showSimError(msg) {
+  const el = document.getElementById('sim-error');
+  el.textContent = '⚠ ' + msg;
+  el.classList.remove('hidden');
 }
 
 // ── SVG icons ─────────────────────────────────────────────────────────────────

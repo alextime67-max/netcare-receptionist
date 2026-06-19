@@ -8,7 +8,10 @@ const {
   getClinics, getClinicBySlug, getClinicById,
   createClinic, updateClinic, deleteClinic,
   getStats, getGlobalStats,
+  getClinicAiConfig, updateClinicAiConfig,
 } = require('../database/db');
+
+const { runTestMessage, getInitialGreeting } = require('../services/ai');
 
 const SA_USER = process.env.SUPERADMIN_USER || 'superadmin';
 const SA_PASS = process.env.SUPERADMIN_PASS || 'SuperAdmin2024!';
@@ -125,6 +128,60 @@ router.patch('/api/clinics/:id/payment', (req, res) => {
     updateClinic(+req.params.id, { paymentStatus });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── AI config ─────────────────────────────────────────────────────────────────
+
+router.get('/api/clinics/:id/ai', (req, res) => {
+  try {
+    const cfg = getClinicAiConfig(+req.params.id);
+    if (!cfg) return res.status(404).json({ error: 'Not found' });
+    res.json(cfg);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/clinics/:id/ai', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.id)) return res.status(404).json({ error: 'Not found' });
+    updateClinicAiConfig(+req.params.id, req.body);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/clinics/:id/ai/test', async (req, res) => {
+  try {
+    const clinic = getClinicAiConfig(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const { messages = [], userMessage } = req.body;
+
+    // Special case: start conversation — return the initial greeting without calling Claude
+    if (userMessage === '__start__') {
+      const greeting = getInitialGreeting(clinic);
+      return res.json({
+        speak:           greeting,
+        language:        'en',
+        intent:          'greeting',
+        complete:        false,
+        emergencyDetected: false,
+        updatedMessages: [{ role: 'assistant', content: greeting }],
+      });
+    }
+
+    if (!userMessage || !userMessage.trim()) {
+      return res.status(400).json({ error: 'userMessage is required' });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not configured on this server.' });
+    }
+
+    const result = await runTestMessage(clinic, messages, userMessage);
+    res.json(result);
+  } catch (e) {
+    console.error('[AI Test]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Delete ────────────────────────────────────────────────────────────────────

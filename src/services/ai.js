@@ -5,9 +5,57 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // In-memory sessions keyed by Twilio CallSid
 const sessions = new Map();
 
-function buildSystemPrompt(clinicName) {
-  return `You are the AI receptionist for ${clinicName}. You handle inbound phone calls.
+// ── System prompt builder ─────────────────────────────────────────────────────
 
+function buildSystemPrompt(clinic) {
+  const clinicName    = typeof clinic === 'string' ? clinic : (clinic.name || 'NetCare Clinic');
+  const cfg           = typeof clinic === 'object' ? clinic : {};
+  const assistantName = cfg.ai_assistant_name || 'AI Receptionist';
+
+  // Build clinic-specific context block from saved config
+  const sections = [];
+
+  if (cfg.ai_business_description)
+    sections.push(`ABOUT THIS CLINIC:\n${cfg.ai_business_description}`);
+
+  if (cfg.ai_services)
+    sections.push(`SERVICES OFFERED:\n${cfg.ai_services}`);
+
+  if (cfg.ai_office_hours)
+    sections.push(`OFFICE HOURS:\n${cfg.ai_office_hours}`);
+
+  if (cfg.ai_appointment_instructions)
+    sections.push(`APPOINTMENT SCHEDULING INSTRUCTIONS:\n${cfg.ai_appointment_instructions}`);
+
+  if (cfg.ai_transfer_rules)
+    sections.push(`CALL TRANSFER / ROUTING RULES:\n${cfg.ai_transfer_rules}`);
+
+  if (cfg.ai_after_hours_message)
+    sections.push(`AFTER HOURS POLICY:\n${cfg.ai_after_hours_message}`);
+
+  if (cfg.ai_emergency_instructions)
+    sections.push(`EMERGENCY PROTOCOL (override defaults below if set):\n${cfg.ai_emergency_instructions}`);
+
+  if (cfg.ai_faq) {
+    try {
+      const faqs = JSON.parse(cfg.ai_faq);
+      if (Array.isArray(faqs) && faqs.length) {
+        const faqText = faqs
+          .filter(f => f.q && f.a)
+          .map(f => `Q: ${f.q}\nA: ${f.a}`)
+          .join('\n\n');
+        if (faqText)
+          sections.push(`FREQUENTLY ASKED QUESTIONS — answer these accurately when asked:\n${faqText}`);
+      }
+    } catch { /* ignore bad JSON */ }
+  }
+
+  const contextBlock = sections.length
+    ? `\n════════════════════════════════════════\nCLINIC-SPECIFIC INFORMATION:\n════════════════════════════════════════\n${sections.join('\n\n')}\n`
+    : '';
+
+  return `You are ${assistantName}, the AI receptionist for ${clinicName}. You handle inbound phone calls.
+${contextBlock}
 ════════════════════════════════════════
 MISSION: Collect patient information and route their request.
 ════════════════════════════════════════
@@ -70,7 +118,7 @@ RULES (follow exactly):
 ════════════════════════════════════════
 EXAMPLE — English appointment flow:
 ════════════════════════════════════════
-Turn 1 assistant: {"speak":"Thank you for calling NetCare! Para español, diga español. How can I help you today?","language":"en","intent":"greeting","collected":{...nulls},"complete":false}
+Turn 1 assistant: {"speak":"Thank you for calling ${clinicName}! Para español, diga español. How can I help you today?","language":"en","intent":"greeting","collected":{...nulls},"complete":false}
 Patient: "I need to make an appointment"
 Turn 2 assistant: {"speak":"I'd be happy to help schedule that. May I have your full name please?","language":"en","intent":"collecting","collected":{"callType":"appointment",...},"complete":false}
 ...continue collecting until all appointment fields are gathered, then complete:true...
@@ -82,37 +130,28 @@ assistant: {"speak":"Con gusto le ayudo. ¿Podría decirme su nombre completo?",
 
 // ── Session management ────────────────────────────────────────────────────────
 
-function initSession(callSid, callerPhone, clinicName) {
+function initSession(callSid, callerPhone, clinic) {
+  const clinicName = typeof clinic === 'string' ? clinic : (clinic.name || 'NetCare Clinic');
   sessions.set(callSid, {
-    messages:   [],
+    messages:  [],
     collected: {
       name: null, phone: callerPhone || null, callType: null,
       reason: null, appointmentDate: null, appointmentTime: null,
       messageContent: null, urgency: null,
     },
-    language:   'en',
-    clinicName: clinicName || 'NetCare Clinic',
-    dbId:       null,
-    turnCount:  0,
+    language:  'en',
+    clinic:    typeof clinic === 'object' ? clinic : { name: clinicName },
+    clinicName,
+    dbId:      null,
+    turnCount: 0,
   });
 }
 
-function getSession(callSid) {
-  return sessions.get(callSid);
-}
+function getSession(callSid)        { return sessions.get(callSid); }
+function setSessionDbId(callSid, id){ const s = sessions.get(callSid); if (s) s.dbId = id; }
+function endSession(callSid)        { const s = sessions.get(callSid); sessions.delete(callSid); return s; }
 
-function setSessionDbId(callSid, dbId) {
-  const s = sessions.get(callSid);
-  if (s) s.dbId = dbId;
-}
-
-function endSession(callSid) {
-  const s = sessions.get(callSid);
-  sessions.delete(callSid);
-  return s;
-}
-
-// ── AI processing ─────────────────────────────────────────────────────────────
+// ── AI processing (live calls) ────────────────────────────────────────────────
 
 async function processMessage(callSid, patientSpeech) {
   const session = sessions.get(callSid);
@@ -121,11 +160,10 @@ async function processMessage(callSid, patientSpeech) {
   session.messages.push({ role: 'user', content: patientSpeech });
   session.turnCount++;
 
-  // Safety ceiling — prevent runaway conversations
   if (session.turnCount > 25) {
     const fallback = session.language === 'es'
-      ? 'Gracias por llamar a NetCare. Un representante le contactará pronto. Que tenga buen día.'
-      : 'Thank you for calling NetCare. A staff member will follow up with you soon. Goodbye!';
+      ? `Gracias por llamar a ${session.clinicName}. Un representante le contactará pronto. Que tenga buen día.`
+      : `Thank you for calling ${session.clinicName}. A staff member will follow up with you soon. Goodbye!`;
     return { speak: fallback, language: session.language, complete: true, emergencyDetected: false, collected: session.collected };
   }
 
@@ -133,7 +171,7 @@ async function processMessage(callSid, patientSpeech) {
     const response = await client.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: 600,
-      system:     buildSystemPrompt(session.clinicName),
+      system:     buildSystemPrompt(session.clinic),
       messages:   session.messages,
     });
 
@@ -141,30 +179,20 @@ async function processMessage(callSid, patientSpeech) {
     let parsed;
 
     try {
-      // Strip any accidental markdown fences
       const jsonStr = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
       parsed = JSON.parse(jsonStr.match(/\{[\s\S]*\}/)?.[0] ?? jsonStr);
     } catch {
-      // Graceful degradation — treat raw text as spoken response
       parsed = {
-        speak:             rawText.substring(0, 200),
-        language:          session.language,
-        intent:            'collecting',
-        collected:         {},
-        complete:          false,
-        emergencyDetected: false,
+        speak: rawText.substring(0, 200), language: session.language,
+        intent: 'collecting', collected: {}, complete: false, emergencyDetected: false,
       };
     }
 
-    // Merge collected fields (only update non-null new values)
     if (parsed.collected) {
       for (const [k, v] of Object.entries(parsed.collected)) {
-        if (v !== null && v !== undefined && v !== '') {
-          session.collected[k] = v;
-        }
+        if (v !== null && v !== undefined && v !== '') session.collected[k] = v;
       }
     }
-
     if (parsed.language) session.language = parsed.language;
     session.messages.push({ role: 'assistant', content: rawText });
 
@@ -184,11 +212,59 @@ async function processMessage(callSid, patientSpeech) {
   }
 }
 
+// ── AI test simulator (stateless, no sessions) ────────────────────────────────
+
+async function runTestMessage(clinic, conversationMessages, userMessage) {
+  const messages = [
+    ...conversationMessages,
+    { role: 'user', content: userMessage },
+  ];
+
+  const response = await client.messages.create({
+    model:      'claude-sonnet-4-6',
+    max_tokens: 600,
+    system:     buildSystemPrompt(clinic),
+    messages,
+  });
+
+  const rawText = response.content[0].text.trim();
+  let parsed;
+
+  try {
+    const jsonStr = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    parsed = JSON.parse(jsonStr.match(/\{[\s\S]*\}/)?.[0] ?? jsonStr);
+  } catch {
+    parsed = {
+      speak: rawText.substring(0, 200), language: 'en',
+      intent: 'collecting', collected: {}, complete: false, emergencyDetected: false,
+    };
+  }
+
+  return {
+    speak:             parsed.speak || 'I had a technical issue.',
+    language:          parsed.language || 'en',
+    complete:          parsed.complete || false,
+    emergencyDetected: parsed.emergencyDetected || false,
+    intent:            parsed.intent || 'collecting',
+    collected:         parsed.collected || {},
+    rawJson:           parsed,
+    updatedMessages:   [...messages, { role: 'assistant', content: rawText }],
+  };
+}
+
 // ── Canned strings ────────────────────────────────────────────────────────────
 
-function getInitialGreeting(clinicName) {
-  const name = clinicName || 'NetCare';
+function getInitialGreeting(clinic) {
+  const name = typeof clinic === 'string' ? clinic : (clinic.name || 'NetCare');
+  const cfg  = typeof clinic === 'object' ? clinic : {};
+  if (cfg.ai_greeting_en) return cfg.ai_greeting_en;
   return `Thank you for calling ${name}! Para español, diga español. How can I help you today?`;
+}
+
+function getSpanishGreeting(clinic) {
+  const cfg = typeof clinic === 'object' ? clinic : {};
+  if (cfg.ai_greeting_es) return cfg.ai_greeting_es;
+  return null; // fall back to regular greeting detection
 }
 
 function getErrorMessage(lang) {
@@ -205,8 +281,8 @@ function getNoInputMessage(lang) {
 
 function getTimeoutGoodbye(lang) {
   return lang === 'es'
-    ? 'No recibimos respuesta. Gracias por llamar a NetCare. ¡Hasta luego!'
-    : "We didn't receive a response. Thank you for calling NetCare. Goodbye!";
+    ? 'No recibimos respuesta. Gracias por llamar. ¡Hasta luego!'
+    : "We didn't receive a response. Thank you for calling. Goodbye!";
 }
 
 module.exports = {
@@ -215,7 +291,9 @@ module.exports = {
   setSessionDbId,
   endSession,
   processMessage,
+  runTestMessage,
   getInitialGreeting,
+  getSpanishGreeting,
   getErrorMessage,
   getNoInputMessage,
   getTimeoutGoodbye,
