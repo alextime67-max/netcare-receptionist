@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/webhook',     require('./routes/webhook'));
 app.use('/admin',       require('./routes/admin'));
 app.use('/superadmin',  require('./routes/superadmin'));
+app.use('/portal',      require('./routes/portal'));
 app.use('/api',         require('./routes/api'));
 app.use('/public',      require('./routes/public'));
 
@@ -38,6 +39,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('╚═══════════════════════════════════════════════════╝');
   console.log(`  Super Admin     : ${base}/superadmin`);
   console.log(`  Clinic Admin    : ${base}/admin/:slug`);
+  console.log(`  Client Portal   : ${base}/portal/:slug`);
   console.log(`  Twilio webhook  : ${base}/webhook/:slug/voice`);
   console.log(`  Health check    : ${base}/`);
   console.log('');

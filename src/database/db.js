@@ -459,6 +459,33 @@ function updateWebRequestStatus(id, status) {
   db.prepare('UPDATE web_requests SET status = ? WHERE id = ?').run(status, id);
 }
 
+// ── Portal helpers ────────────────────────────────────────────────────────────
+
+function updateClinicTwilio(id, data) {
+  const allowed = ['twilio_sid', 'twilio_token', 'twilio_phone', 'twilio_validate'];
+  const map = {
+    twilio_sid:      data.twilioSid,
+    twilio_token:    data.twilioToken,
+    twilio_phone:    data.twilioPhone,
+    twilio_validate: data.twilioValidate !== undefined ? (data.twilioValidate ? 1 : 0) : undefined,
+  };
+  const filtered = Object.fromEntries(
+    allowed.filter(k => map[k] !== undefined).map(k => [k, map[k]])
+  );
+  if (!Object.keys(filtered).length) return;
+  const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
+}
+
+function getClinicBilling(id) {
+  return db.prepare(`
+    SELECT id, slug, name, account_number, contact_person, contact_email, contact_phone,
+           business_type, monthly_plan, monthly_price, payment_status, status,
+           onboarded_at, suspended_at, created_at
+    FROM clinics WHERE id = ?
+  `).get(id);
+}
+
 module.exports = {
   db,
   initDb,
@@ -468,6 +495,8 @@ module.exports = {
   getClinicBySlug,
   getClinicById,
   updateClinic,
+  updateClinicTwilio,
+  getClinicBilling,
   deleteClinic,
   getGlobalStats,
   // calls
