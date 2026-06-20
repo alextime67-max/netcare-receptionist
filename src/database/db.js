@@ -101,6 +101,34 @@ function initDb() {
       status         TEXT DEFAULT 'pending',
       created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS knowledge_base (
+      id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id                INTEGER UNIQUE NOT NULL,
+      services                 TEXT,
+      doctors                  TEXT,
+      locations                TEXT,
+      office_hours             TEXT,
+      insurance                TEXT,
+      appointment_policy       TEXT,
+      cancellation_policy      TEXT,
+      new_patient_requirements TEXT,
+      documents_needed         TEXT,
+      faqs                     TEXT,
+      transfer_rules           TEXT,
+      emergency_instructions   TEXT,
+      do_not_answer            TEXT,
+      updated_at               DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS unanswered_questions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id  INTEGER,
+      call_id    INTEGER,
+      question   TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // ── Migrations: add clinic_id to all data tables ──────────────────────────
@@ -228,6 +256,243 @@ function initDb() {
       VALUES ('mdcare', 'MDcare', 1, ?, 'admin', 'MDcare2024!', 'active')
     `).run(mdcareIvr);
     console.log('[DB] Seeded MDcare clinic with IVR configuration.');
+  }
+
+  // ── Seed MDcare Knowledge Base ────────────────────────────────────────────
+
+  const mdcareRow = db.prepare("SELECT id FROM clinics WHERE slug = 'mdcare'").get();
+  if (mdcareRow && !db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(mdcareRow.id)) {
+    db.prepare(`
+      INSERT INTO knowledge_base
+        (clinic_id, services, doctors, locations, office_hours, insurance,
+         appointment_policy, cancellation_policy, new_patient_requirements,
+         documents_needed, faqs, transfer_rules, emergency_instructions, do_not_answer)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      mdcareRow.id,
+      /* services */
+      `MDcare provides comprehensive medical services across all three locations:
+
+Primary Care (All Locations):
+- Annual physical exams and wellness visits
+- Chronic disease management (diabetes, hypertension, high cholesterol, thyroid)
+- Acute illness treatment (infections, flu, minor injuries)
+- Preventive care and health screenings
+- Vaccinations and immunizations
+- On-site lab work (blood draws, urinalysis, rapid strep, flu, EKG)
+
+Specialty Services:
+- Pediatrics (newborn through age 18) — All locations
+- Women's Health / OB-GYN — Hialeah and Coral Gables
+- Cardiology consultations — Hialeah
+- Dermatology — Coral Gables
+- Orthopedics and sports medicine — Homestead
+- Nutrition counseling — All locations
+- Mental and behavioral health referrals — All locations`,
+
+      /* doctors */
+      `Hialeah Medical Center:
+- Dr. Maria Rodriguez, MD — Internal Medicine, Primary Care
+- Dr. Carlos Mendez, MD — Cardiology
+- Dr. Sofia Alvarez, MD — Pediatrics
+- Dr. Laura Fernandez, NP — Family Medicine and Women's Health
+
+Homestead Medical Center:
+- Dr. James Williams, MD — Internal Medicine, Family Medicine
+- Dr. Ana Garcia, MD — Women's Health, OB-GYN
+- Dr. Robert Chen, MD — Orthopedics, Sports Medicine
+- Dr. Patricia Ruiz, NP — Primary Care
+
+Coral Gables Medical Center:
+- Dr. Elena Vasquez, MD — Pediatrics, Adolescent Medicine
+- Dr. Michael Brown, MD — Dermatology
+- Dr. Patricia Torres, MD — Internal Medicine, Primary Care
+- Dr. David Kim, MD — General Medicine
+
+To schedule with a specific provider, mention their name when booking. Availability varies by day.`,
+
+      /* locations */
+      `Hialeah Medical Center
+1250 W 49th Street, Hialeah, FL 33012
+Phone: (305) 555-0100 | Fax: (305) 555-0101
+Free on-site parking. Wheelchair accessible.
+
+Homestead Medical Center
+975 N Homestead Blvd, Homestead, FL 33030
+Phone: (305) 555-0200 | Fax: (305) 555-0201
+Free on-site parking. Wheelchair accessible.
+
+Coral Gables Medical Center
+396 Alhambra Circle, Coral Gables, FL 33134
+Phone: (305) 555-0300 | Fax: (305) 555-0301
+Street parking and nearby garage. Wheelchair accessible.`,
+
+      /* office_hours */
+      `Hialeah Medical Center:
+Monday – Friday: 8:00 AM – 6:00 PM | Saturday: 9:00 AM – 2:00 PM | Sunday: Closed
+
+Homestead Medical Center:
+Monday – Friday: 8:00 AM – 5:00 PM | Saturday: 9:00 AM – 1:00 PM | Sunday: Closed
+
+Coral Gables Medical Center:
+Monday – Friday: 8:00 AM – 6:00 PM | Saturday: 10:00 AM – 1:00 PM | Sunday: Closed
+
+MDcare does not offer walk-in urgent care after hours. For non-emergency after-hours needs, visit a nearby urgent care center. For medical emergencies, call 911 immediately.`,
+
+      /* insurance */
+      `MDcare accepts most major insurance plans including:
+- Medicare and Medicare Advantage (AARP, Humana Gold, United AARP, WellCare, Devoted Health)
+- Medicaid (Florida Medicaid, Staywell, Sunshine Health, Molina Healthcare)
+- Blue Cross Blue Shield / Florida Blue (all plans)
+- Aetna (HMO, PPO, Medicare Advantage)
+- Cigna (HMO, PPO)
+- United Healthcare (HMO, PPO, Medicare Advantage)
+- Humana (HMO, PPO, Medicare Advantage)
+- Simply Healthcare, AvMed, Tricare
+
+Self-pay patients are welcome — ask about our self-pay discount program.
+Coverage varies by provider and plan. Patients are responsible for co-pays and deductibles at the time of service.`,
+
+      /* appointment_policy */
+      `Appointments are required — we do not accept walk-ins.
+- New patient visits: 60–90 minutes (allow extra time for paperwork)
+- Follow-up visits: 20–30 minutes
+- Annual physicals: 45–60 minutes
+- Same-day appointments may be available — call early in the morning
+- Telehealth video visits are available for established patients
+
+Please arrive 15 minutes early. Bring your insurance card, photo ID, and medication list.
+A parent or guardian must accompany patients under 18.
+
+To schedule through this line: our virtual assistant will collect your name, preferred date/time, and reason for visit. A scheduler will confirm within one business day.`,
+
+      /* cancellation_policy */
+      `- Cancel or reschedule at least 24 hours before your appointment
+- Late cancellations (under 24 hours): $25 fee may apply
+- No-shows: $50 fee may apply
+- Three or more no-shows in 12 months may require prepayment for future visits
+
+To cancel or reschedule: call your location directly during business hours.
+Exceptions for documented medical emergencies or severe weather.`,
+
+      /* new_patient_requirements */
+      `Required at First Visit:
+1. Valid government-issued photo ID (driver's license, state ID, or passport)
+2. Insurance card(s) — front and back
+3. Referral authorization (if required by your insurance)
+4. Completed new patient registration forms (available at the office or online)
+
+Medical History to Bring:
+- List of all current medications (name, dosage, frequency)
+- Relevant medical records from previous providers
+- Immunization records (required for children under 12)
+- Known allergies and prior adverse reactions
+
+For Minor Patients (Under 18):
+- Parent or legal guardian must be present and sign consent forms
+- Legal guardianship documentation required if guardian is not biological parent`,
+
+      /* documents_needed */
+      `Bring to Every Appointment:
+- Photo ID
+- Insurance card(s)
+- List of current medications with dosages
+- List of allergies
+
+For Specialist or Follow-Up Visits:
+- Lab results or imaging from past 12 months (if relevant)
+- Referral authorization from your primary care provider
+- Notes from other specialists treating the same condition
+
+For Workers' Compensation / Accident Visits:
+- Claim number and insurance carrier
+- Employer contact information`,
+
+      /* faqs */
+      `Q: How do I request a prescription refill?
+A: Call your location and ask for the nursing staff. Have your medication name, dosage, and pharmacy information ready. Allow 48–72 business hours. Controlled substances require an in-person visit.
+
+Q: How do I get my lab or test results?
+A: Results are available within 3–7 business days. Your provider or nurse will call you with significant results. Results are also accessible through the MDcare patient portal.
+
+Q: Does MDcare have a patient portal?
+A: Yes. The MDcare patient portal lets you view lab results, request prescription refills, message your care team, and request appointments. Ask staff at your location for enrollment instructions.
+
+Q: Do you treat children?
+A: Yes. MDcare has pediatric providers at all three locations, specializing in care from newborns through age 18.
+
+Q: Do you offer telehealth or video visits?
+A: Yes, telehealth video appointments are available for established patients for appropriate conditions. Ask when scheduling if your visit qualifies.
+
+Q: How do I get a referral to a specialist?
+A: Your primary care doctor provides referrals. Call your location and ask to leave a message with your name, date of birth, and the type of specialist needed.
+
+Q: What if I have an urgent question after hours?
+A: Call your location — the after-hours message will direct you to our nurse advice line. For any medical emergency, call 911 immediately.`,
+
+      /* transfer_rules */
+      `Transfer to live staff when the caller:
+- Asks to speak with a specific doctor or nurse directly
+- Has an urgent clinical question requiring immediate clinical guidance
+- Is calling about billing, payments, or financial assistance
+- Needs medical records released
+- Explicitly asks to speak with a person or office manager
+
+Transfer numbers by location:
+- Hialeah Medical Center: (305) 555-0100
+- Homestead Medical Center: (305) 555-0200
+- Coral Gables Medical Center: (305) 555-0300
+
+If the patient has not selected a location, ask which location they are calling about before transferring.`,
+
+      /* emergency_instructions */
+      `EMERGENCY PROTOCOL — HIGHEST PRIORITY:
+
+If the caller describes ANY life-threatening symptom, say immediately:
+"If this is a medical emergency, please call 911 or go to the nearest emergency room immediately."
+Set emergencyDetected: true.
+
+Always direct to 911 for:
+- Chest pain, pressure, or tightness
+- Difficulty breathing or shortness of breath
+- Stroke symptoms: facial drooping, arm weakness, slurred speech, sudden severe headache
+- Severe allergic reaction: throat swelling, difficulty breathing
+- Loss of consciousness or unresponsiveness
+- Active seizure
+- Severe uncontrolled bleeding
+- Suspected overdose or poisoning
+- Suicidal thoughts or intent to harm self or others
+- High fever in infant under 3 months
+- Severe head or neck injury
+
+MDcare clinics do NOT have emergency room capabilities. Always direct emergencies to 911 first — before any other action.`,
+
+      /* do_not_answer */
+      `Do NOT answer the following. Respond with: "I do not have that information available, but I can take a message and have the clinic contact you." and set unanswered: true.
+
+Medical Topics — Never Answer:
+- Medical advice, treatment recommendations, or diagnosis
+- Medication names, dosages, or drug interactions
+- Interpretation of symptoms (whether something is serious or not)
+- Lab result values or what results mean
+- Prescription approval or refill decisions
+- Whether a specific treatment is appropriate for a condition
+
+Administrative Topics — Do Not Speculate:
+- Exact wait times for appointments (unpredictable)
+- Whether a specific doctor is available on a specific date
+- Exact pricing for procedures (varies by insurance)
+- Insurance authorization status for specific procedures
+- Billing disputes or payment arrangements
+- Information about other patients (HIPAA)
+
+Out of Scope — Do Not Answer:
+- Information about other medical providers or clinics
+- Medical research or clinical study information
+- Legal, malpractice, or workers' compensation decisions
+- Competitor pricing or service comparisons`
+    );
+    console.log('[DB] Seeded MDcare Knowledge Base.');
   }
 
   console.log('[DB] Database initialized at', path.join(DATA_DIR, 'netcare.db'));
@@ -678,6 +943,50 @@ function getClinicBilling(id) {
   `).get(id);
 }
 
+// ── Knowledge Base ────────────────────────────────────────────────────────────
+
+const KB_FIELDS = [
+  'services','doctors','locations','office_hours','insurance',
+  'appointment_policy','cancellation_policy','new_patient_requirements',
+  'documents_needed','faqs','transfer_rules','emergency_instructions','do_not_answer',
+];
+
+function getKnowledgeBase(clinicId) {
+  return db.prepare('SELECT * FROM knowledge_base WHERE clinic_id = ?').get(clinicId) || null;
+}
+
+function upsertKnowledgeBase(clinicId, data) {
+  const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  const vals = KB_FIELDS.map(f => data[f] != null ? String(data[f]) : null);
+  if (existing) {
+    const sets = KB_FIELDS.map(f => `${f} = ?`).join(', ');
+    db.prepare(`UPDATE knowledge_base SET ${sets}, updated_at = CURRENT_TIMESTAMP WHERE clinic_id = ?`)
+      .run(...vals, clinicId);
+  } else {
+    db.prepare(`INSERT INTO knowledge_base (clinic_id, ${KB_FIELDS.join(', ')}) VALUES (?, ${KB_FIELDS.map(() => '?').join(', ')})`)
+      .run(clinicId, ...vals);
+  }
+}
+
+function logUnansweredQuestion(clinicId, callId, question) {
+  if (!question?.trim()) return;
+  db.prepare('INSERT INTO unanswered_questions (clinic_id, call_id, question) VALUES (?, ?, ?)')
+    .run(clinicId || null, callId || null, question.trim());
+}
+
+function getUnansweredQuestions(clinicId, limit = 50, offset = 0) {
+  const where  = clinicId ? 'WHERE uq.clinic_id = ?' : '';
+  const params = clinicId ? [clinicId, limit, offset] : [limit, offset];
+  return db.prepare(`
+    SELECT uq.id, uq.clinic_id, uq.call_id, uq.question, uq.created_at, c.name AS clinic_name
+    FROM unanswered_questions uq
+    LEFT JOIN clinics c ON c.id = uq.clinic_id
+    ${where}
+    ORDER BY uq.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params);
+}
+
 module.exports = {
   db,
   initDb,
@@ -719,4 +1028,9 @@ module.exports = {
   // analytics
   getCallVolumeByDay,
   getCallAnalyticsSummary,
+  // knowledge base
+  getKnowledgeBase,
+  upsertKnowledgeBase,
+  logUnansweredQuestion,
+  getUnansweredQuestions,
 };

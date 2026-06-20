@@ -11,7 +11,7 @@ const {
 const {
   createCall, updateCall, addTranscript,
   createAppointment, createDoctorMessage, getCallByCallSid,
-  getClinicBySlug,
+  getClinicBySlug, getKnowledgeBase, logUnansweredQuestion,
 } = require('../database/db');
 
 const { sendAppointmentNotification, sendDoctorMessageNotification } = require('../services/email');
@@ -139,7 +139,8 @@ router.post('/:slug/voice', clinicMiddleware, (req, res) => {
   const clinic = req.clinic;
   console.log(`[Webhook/${clinic.slug}] Inbound call  CallSid=${CallSid}  From=${From}`);
 
-  initSession(CallSid, From, clinic);
+  const kb = getKnowledgeBase(clinic.id);
+  initSession(CallSid, From, clinic, kb);
   const dbId = createCall(CallSid, From, clinic.id);
   setSessionDbId(CallSid, dbId);
 
@@ -259,6 +260,10 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
         language:           ai.language,
         emergency_detected: ai.emergencyDetected ? 1 : 0,
       });
+      if (ai.unanswered && SpeechResult) {
+        try { logUnansweredQuestion(clinic.id, session.dbId, SpeechResult); }
+        catch (e) { console.error('[KB] logUnansweredQuestion error:', e.message); }
+      }
     }
 
     // Live call transfer — emit <Dial> TwiML when AI flags transfer

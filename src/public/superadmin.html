@@ -131,6 +131,13 @@
       </svg>
       Analytics
     </button>
+    <button onclick="switchView('kb')" id="nav-kb"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+      </svg>
+      Knowledge Base
+    </button>
   </nav>
 
   <!-- Bottom info -->
@@ -375,6 +382,116 @@
         </div>
       </div>
     </div>
+
+    <!-- ── KNOWLEDGE BASE VIEW ───────────────────────────────────────────── -->
+    <div id="view-kb" class="hidden p-6 space-y-6">
+
+      <!-- Header row: clinic selector + save -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap gap-3 items-center">
+        <label class="text-sm font-medium text-slate-600">Clinic:</label>
+        <select id="kb-clinic" onchange="loadKb()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+          <option value="">— select a clinic —</option>
+        </select>
+        <button onclick="saveKb()" class="ml-auto px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">Save Knowledge Base</button>
+        <span id="kb-save-status" class="text-xs text-slate-400"></span>
+      </div>
+
+      <!-- KB Fields Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Services Offered</label>
+          <textarea id="kb-services" rows="4" placeholder="List the services your clinic provides..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Doctors &amp; Staff</label>
+          <textarea id="kb-doctors" rows="4" placeholder="List doctors, their specialties, languages..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Locations &amp; Addresses</label>
+          <textarea id="kb-locations" rows="4" placeholder="Address, phone, parking info per location..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Office Hours</label>
+          <textarea id="kb-office-hours" rows="4" placeholder="Mon–Fri 8am–5pm, Sat 9am–1pm..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Insurance Accepted</label>
+          <textarea id="kb-insurance" rows="4" placeholder="List accepted insurance plans..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Appointment Policy</label>
+          <textarea id="kb-appointment-policy" rows="4" placeholder="How to book, wait times, same-day availability..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Cancellation Policy</label>
+          <textarea id="kb-cancellation-policy" rows="4" placeholder="24-hour notice required, no-show fee..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">New Patient Requirements</label>
+          <textarea id="kb-new-patient-requirements" rows="4" placeholder="What new patients need to bring or do..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Documents Needed</label>
+          <textarea id="kb-documents-needed" rows="4" placeholder="ID, insurance card, referral, medical records..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">FAQs</label>
+          <textarea id="kb-faqs" rows="4" placeholder="Common questions and approved answers..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Transfer Rules</label>
+          <textarea id="kb-transfer-rules" rows="4" placeholder="When to transfer: billing questions → ext 105..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
+          <label class="text-sm font-semibold text-slate-700">Emergency Instructions</label>
+          <textarea id="kb-emergency-instructions" rows="4" placeholder="If patient reports emergency → call 911..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2 lg:col-span-2">
+          <label class="text-sm font-semibold text-slate-700">Do NOT Answer <span class="text-xs font-normal text-slate-400">(topics the AI must deflect)</span></label>
+          <textarea id="kb-do-not-answer" rows="3" placeholder="Specific diagnoses, medication dosages, legal questions..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+      </div><!-- /grid -->
+
+      <!-- Test Simulator -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <h3 class="text-sm font-semibold text-slate-800">Test Assistant Simulator</h3>
+        <p class="text-xs text-slate-400">Type a patient question to verify how the AI will respond using the saved Knowledge Base.</p>
+        <div class="flex gap-2">
+          <input id="kb-test-input" type="text" placeholder="e.g. Do you accept Medicare?"
+            class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onkeydown="if(event.key==='Enter') testKbQuestion()">
+          <button onclick="testKbQuestion()" class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">Ask</button>
+        </div>
+        <div id="kb-test-chat" class="space-y-3 max-h-64 overflow-y-auto"></div>
+      </div>
+
+      <!-- Unanswered Questions Analytics -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-slate-800">Unanswered Questions <span class="text-xs text-slate-400 font-normal">(from real calls)</span></h3>
+          <button onclick="loadUnanswered()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+        </div>
+        <p class="text-xs text-slate-400">Questions patients asked that the AI could not answer — use these to improve the Knowledge Base.</p>
+        <div id="kb-unanswered-list">
+          <p class="text-xs text-slate-400 italic">Select a clinic above to load unanswered questions.</p>
+        </div>
+      </div>
+
+    </div><!-- /view-kb -->
 
   </div><!-- /main-body -->
 </div><!-- /main -->
@@ -966,12 +1083,13 @@ function typeBadge(t) {
 
 function switchView(view) {
   currentView = view;
-  const views  = ['dashboard', 'clients', 'calls', 'analytics'];
+  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb'];
   const titles = {
-    dashboard: ['Dashboard',  'NetCare Phone platform overview'],
-    clients:   ['Clients',    'Manage all clinic accounts'],
-    calls:     ['Call Log',   'All inbound calls across every clinic'],
-    analytics: ['Analytics',  'Call volume, intent breakdown, and language trends'],
+    dashboard: ['Dashboard',      'NetCare Phone platform overview'],
+    clients:   ['Clients',        'Manage all clinic accounts'],
+    calls:     ['Call Log',       'All inbound calls across every clinic'],
+    analytics: ['Analytics',      'Call volume, intent breakdown, and language trends'],
+    kb:        ['Knowledge Base', 'AI knowledge base and test simulator'],
   };
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -987,6 +1105,7 @@ function switchView(view) {
   if (view === 'calls')     loadCallLog();
   if (view === 'analytics') loadAnalytics();
   if (view === 'dashboard') loadHealth();
+  if (view === 'kb')        loadKb();
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -1034,6 +1153,7 @@ async function loadClients() {
     renderRecentClients();
     populateCallClinicFilter();
     populateAnalyticsClinicFilter();
+    populateKbClinicFilter();
   } catch(e) {
     document.getElementById('clients-tbody').innerHTML =
       `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400 text-sm">Error: ${e.message}</td></tr>`;
@@ -1048,6 +1168,7 @@ async function refreshAll() {
   btn.disabled = false;
   if (currentView === 'dashboard') loadHealth();
   if (currentView === 'analytics') loadAnalytics();
+  if (currentView === 'kb')        loadUnanswered();
 }
 
 // ── Render table ──────────────────────────────────────────────────────────────
@@ -2314,6 +2435,117 @@ const iconExtLink = () => svg('M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeSlider(); closeDelModal(); closePreviewModal(); }
 });
+
+// ── Knowledge Base ────────────────────────────────────────────────────────────
+
+const KB_FIELDS = ['services','doctors','locations','office_hours','insurance',
+  'appointment_policy','cancellation_policy','new_patient_requirements',
+  'documents_needed','faqs','transfer_rules','emergency_instructions','do_not_answer'];
+
+function populateKbClinicFilter() {
+  const sel = document.getElementById('kb-clinic');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— select a clinic —</option>' +
+    allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected' : ''}>${c.name}</option>`).join('');
+}
+
+async function loadKb() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) return;
+  try {
+    const kb = await (await fetch(`/superadmin/api/kb/${clinicId}`)).json();
+    KB_FIELDS.forEach(f => {
+      const el = document.getElementById(`kb-${f.replace(/_/g,'-')}`);
+      if (el) el.value = kb[f] || '';
+    });
+    document.getElementById('kb-save-status').textContent = '';
+    await loadUnanswered();
+  } catch (e) {
+    alert('Error loading knowledge base: ' + e.message);
+  }
+}
+
+async function saveKb() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) return alert('Please select a clinic first.');
+  const body = {};
+  KB_FIELDS.forEach(f => {
+    const el = document.getElementById(`kb-${f.replace(/_/g,'-')}`);
+    if (el) body[f] = el.value.trim();
+  });
+  try {
+    const r = await fetch(`/superadmin/api/kb/${clinicId}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    const status = document.getElementById('kb-save-status');
+    status.textContent = 'Saved ✓';
+    status.className = 'text-xs text-emerald-600 font-medium';
+    setTimeout(() => { status.textContent = ''; status.className = 'text-xs text-slate-400'; }, 3000);
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  }
+}
+
+async function testKbQuestion() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  const question = document.getElementById('kb-test-input')?.value?.trim();
+  if (!clinicId) return alert('Select a clinic first.');
+  if (!question) return;
+  const chat = document.getElementById('kb-test-chat');
+  chat.innerHTML += `<div class="flex justify-end"><div class="bg-blue-100 text-blue-900 text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-xs">${question}</div></div>`;
+  document.getElementById('kb-test-input').value = '';
+  const thinking = document.createElement('div');
+  thinking.className = 'flex justify-start';
+  thinking.innerHTML = '<div class="bg-slate-100 text-slate-500 text-xs rounded-2xl rounded-tl-sm px-3 py-2 italic">Thinking…</div>';
+  chat.appendChild(thinking);
+  chat.scrollTop = chat.scrollHeight;
+  try {
+    const r = await fetch('/superadmin/api/kb/test', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ clinicId: +clinicId, question }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    let badge = '';
+    if (data.unanswered)        badge = '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full ml-2">Unanswered</span>';
+    if (data.emergencyDetected) badge = '<span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full ml-2">Emergency</span>';
+    thinking.outerHTML = `<div class="flex justify-start items-end gap-2"><div class="bg-slate-100 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-3 py-2 max-w-sm">${data.response}${badge}</div></div>`;
+  } catch (e) {
+    thinking.outerHTML = `<div class="text-xs text-red-500 px-2">Error: ${e.message}</div>`;
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function loadUnanswered() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  const container = document.getElementById('kb-unanswered-list');
+  if (!container) return;
+  if (!clinicId) {
+    container.innerHTML = '<p class="text-xs text-slate-400 italic">Select a clinic above to load unanswered questions.</p>';
+    return;
+  }
+  try {
+    const rows = await (await fetch(`/superadmin/api/kb/${clinicId}/unanswered?limit=50`)).json();
+    if (!rows.length) {
+      container.innerHTML = '<p class="text-xs text-slate-400 italic">No unanswered questions recorded yet.</p>';
+      return;
+    }
+    container.innerHTML = `<table class="w-full text-xs">
+      <thead><tr class="border-b border-slate-100">
+        <th class="text-left py-2 pr-4 text-slate-500 font-medium w-36">Date</th>
+        <th class="text-left py-2 text-slate-500 font-medium">Question</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr class="border-t border-slate-50 hover:bg-slate-50">
+        <td class="py-2 pr-4 text-slate-400">${new Date(r.created_at).toLocaleDateString()}</td>
+        <td class="py-2 text-slate-700">${r.question}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch (e) {
+    container.innerHTML = `<p class="text-xs text-red-400">Error: ${e.message}</p>`;
+  }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

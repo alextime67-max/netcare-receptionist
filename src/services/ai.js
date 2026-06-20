@@ -331,7 +331,51 @@ assistant: {"speak":"Con gusto le ayudo. ¿Podría decirme su nombre completo?",
 
 // ── Session management ────────────────────────────────────────────────────────
 
-function initSession(callSid, callerPhone, clinic) {
+// ── Knowledge-base prompt builder ─────────────────────────────────────────────
+
+function buildKbPromptSection(kb, selectedCenter) {
+  if (!kb) return '';
+  const centerNote = selectedCenter
+    ? `\nThe patient selected the ${selectedCenter.label} location. Prioritize information for that location.`
+    : '';
+  const body = [
+    kb.services                 && `### Services Offered\n${kb.services}`,
+    kb.doctors                  && `### Doctors / Providers\n${kb.doctors}`,
+    kb.locations                && `### Locations\n${kb.locations}`,
+    kb.office_hours             && `### Office Hours\n${kb.office_hours}`,
+    kb.insurance                && `### Insurance Accepted\n${kb.insurance}`,
+    kb.appointment_policy       && `### Appointment Policy\n${kb.appointment_policy}`,
+    kb.cancellation_policy      && `### Cancellation Policy\n${kb.cancellation_policy}`,
+    kb.new_patient_requirements && `### New Patient Requirements\n${kb.new_patient_requirements}`,
+    kb.documents_needed         && `### Documents Needed\n${kb.documents_needed}`,
+    kb.faqs                     && `### Frequently Asked Questions\n${kb.faqs}`,
+    kb.transfer_rules           && `### Transfer Rules\n${kb.transfer_rules}`,
+    kb.emergency_instructions   && `### Emergency Instructions\n${kb.emergency_instructions}`,
+  ].filter(Boolean).join('\n\n');
+
+  const doNotAnswer = kb.do_not_answer
+    ? `\n\n### Topics You Must NOT Answer\n${kb.do_not_answer}`
+    : '';
+
+  return `
+
+════════════════════════════════════════
+KNOWLEDGE BASE — APPROVED INFORMATION ONLY${centerNote}
+════════════════════════════════════════
+Answer patient questions ONLY using content below. If a question is not covered here, respond:
+"I do not have that information available, but I can take a message and have the clinic contact you."
+and set "unanswered": true in your JSON.
+
+MEDICAL SAFETY — ABSOLUTE RULE: Never give medical advice, diagnosis, or treatment recommendations. For emergencies always say: "If this is a medical emergency, please call 911 or go to the nearest emergency room immediately." and set "emergencyDetected": true.
+
+${body}${doNotAnswer}
+
+JSON reminder: include "unanswered": false normally, or "unanswered": true when using the fallback answer.`;
+}
+
+// ── Session management ────────────────────────────────────────────────────────
+
+function initSession(callSid, callerPhone, clinic, kb = null) {
   const clinicName = typeof clinic === 'string' ? clinic : (clinic.name || 'NetCare Clinic');
   sessions.set(callSid, {
     messages:  [],
@@ -347,6 +391,7 @@ function initSession(callSid, callerPhone, clinic) {
     turnCount:      0,
     selectedCenter: null,
     ivrTimeouts:    0,
+    kb:             kb || null,
   });
 }
 
@@ -384,8 +429,11 @@ async function processMessage(callSid, patientSpeech) {
 
   try {
     let systemPrompt = buildSystemPrompt(session.clinic);
-    if (session.selectedCenter) {
-      systemPrompt += `\n\n## Selected Location\nThe patient selected the ${session.selectedCenter.label}. Direct all appointment scheduling, doctor messages, call transfers, voicemail routing, and patient communications to this specific location.`;
+    if (session.selectedCenter && !session.kb) {
+      systemPrompt += `\n\n## Selected Location\nThe patient selected the ${session.selectedCenter.label}. Direct all scheduling, messages, transfers, and voicemail to this location.`;
+    }
+    if (session.kb) {
+      systemPrompt += buildKbPromptSection(session.kb, session.selectedCenter);
     }
 
     const response = await client.messages.create({
@@ -422,6 +470,8 @@ async function processMessage(callSid, patientSpeech) {
       complete:          parsed.complete || false,
       emergencyDetected: parsed.emergencyDetected || false,
       intent:            parsed.intent || 'collecting',
+      unanswered:        parsed.unanswered || false,
+      transfer:          parsed.transfer   || false,
       collected:         { ...session.collected },
     };
   } catch (error) {
@@ -509,6 +559,37 @@ function getTimeoutGoodbye(lang, clinicName) {
 
 function getActiveSessions() { return sessions.size; }
 
+// ── KB test (stateless — for Super Admin simulator) ───────────────────────────
+
+async function runKbTest(clinic, kb, question) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
+  let systemPrompt = buildSystemPrompt(clinic);
+  if (kb) systemPrompt += buildKbPromptSection(kb, null);
+
+  const response = await client.messages.create({
+    model:      'claude-sonnet-4-6',
+    max_tokens: 400,
+    system:     systemPrompt,
+    messages:   [{ role: 'user', content: question }],
+  });
+
+  const rawText = response.content[0].text.trim();
+  let parsed;
+  try {
+    const jsonStr = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    parsed = JSON.parse(jsonStr.match(/\{[\s\S]*\}/)?.[0] ?? jsonStr);
+  } catch {
+    parsed = { speak: rawText.substring(0, 500), unanswered: false, emergencyDetected: false };
+  }
+
+  return {
+    response:          parsed.speak || rawText.substring(0, 500),
+    unanswered:        parsed.unanswered        || false,
+    emergencyDetected: parsed.emergencyDetected || false,
+    intent:            parsed.intent            || 'unknown',
+  };
+}
+
 module.exports = {
   INDUSTRY_TEMPLATES,
   buildSystemPrompt,
@@ -521,6 +602,8 @@ module.exports = {
   incrementIvrTimeouts,
   processMessage,
   runTestMessage,
+  runKbTest,
+  buildKbPromptSection,
   getInitialGreeting,
   getSpanishGreeting,
   getErrorMessage,

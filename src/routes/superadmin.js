@@ -13,10 +13,11 @@ const {
   getClinicAiConfig, updateClinicAiConfig,
   getAllCalls, getCallCount, getCallWithTranscript,
   getCallVolumeByDay, getCallAnalyticsSummary,
+  getKnowledgeBase, upsertKnowledgeBase, getUnansweredQuestions,
   db,
 } = require('../database/db');
 
-const { runTestMessage, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
+const { runTestMessage, runKbTest, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
 
 const SA_USER = process.env.SUPERADMIN_USER || 'superadmin';
 const SA_PASS = process.env.SUPERADMIN_PASS || 'SuperAdmin2024!';
@@ -489,6 +490,45 @@ router.delete('/api/clinics/:id', (req, res) => {
     if (!clinic) return res.status(404).json({ error: 'Not found' });
     deleteClinic(+req.params.id);
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Knowledge Base ────────────────────────────────────────────────────────────
+
+router.get('/api/kb/:clinicId', (req, res) => {
+  try {
+    const kb = getKnowledgeBase(+req.params.clinicId);
+    res.json(kb || {});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/kb/:clinicId', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    upsertKnowledgeBase(+req.params.clinicId, req.body);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/kb/:clinicId/unanswered', (req, res) => {
+  try {
+    const limit  = Math.min(+req.query.limit  || 50, 200);
+    const offset = +req.query.offset || 0;
+    const rows = getUnansweredQuestions(+req.params.clinicId, limit, offset);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/kb/test', async (req, res) => {
+  try {
+    const { clinicId, question } = req.body;
+    if (!question) return res.status(400).json({ error: 'question required' });
+    const clinic = getClinicById(+clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const kb = getKnowledgeBase(+clinicId);
+    const result = await runKbTest(clinic, kb, question);
+    res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
