@@ -1,8 +1,8 @@
 # NetCare AI Receptionist — Project Status
 
-**Last updated:** 2026-06-19
+**Last updated:** 2026-06-20
 **Branch:** `master`
-**Latest commit:** See `git log --oneline -1`
+**Latest commit:** `757500b`
 
 ---
 
@@ -51,7 +51,17 @@
 - `buildSystemPrompt()` assembles: template persona → tone → call types → business info → services → hours → appt instructions → transfer rules → after-hours → emergency → FAQ → industry rules → master prompt
 - Backward-compatible: accepts plain string (clinic name) or full clinic object
 
-### Phase 7 — SMS Follow-up, Voicemail, Analytics & Production Readiness ✅ LATEST
+### Phase 8 — IVR Menu, Spanish Voice Flow & Bug Fixes ✅ LATEST
+
+- **DTMF IVR menu** (`ivr_enabled` / `ivr_config` per clinic): Callers hear a spoken menu and press a digit to select a location before the AI starts. Config is stored as JSON on the clinic record; any clinic can enable IVR without code changes.
+- **MDcare multi-location clinic**: Seeded with 3-location IVR (Hialeah / Homestead / Coral Gables). New routes: `/:slug/ivr` (repeat + 2-timeout AI fallback) and `/:slug/ivr-select` (DTMF digit handler).
+- **Selected location injected into AI system prompt**: After digit selection, `session.selectedCenter` is appended to the Claude system prompt so all appointment scheduling, doctor messages, call transfers, voicemail routing, and analytics use the chosen location.
+- **Spanish-first voice flow**: Default session language changed from `en` to `es`. Initial greeting, no-input message, voicemail offer, and timeout farewell all use Spanish. Voice: `Polly.Lupe` (female, es-US). Clinics without IVR speak Spanish by default.
+- **Greetings updated**: `getInitialGreeting` checks `ai_greeting_es` before `ai_greeting_en`. `getTimeoutGoodbye` now accepts `clinicName` for a personalized farewell.
+- **JavaScript syntax bug fixes** (Super Admin navigation): Two syntax errors in `superadmin.html` were preventing all JavaScript from executing — an unescaped `/` inside a regex literal (`parseSayText`) and single quotes inside a single-quoted string (`resetWebhookSim`). Both fixed; navigation is fully functional.
+- **Tests**: 24 / 24 passing (unchanged — IVR logic is integration-tested directly against live routes).
+
+### Phase 7 — SMS Follow-up, Voicemail, Analytics & Production Readiness ✅
 
 - **SMS follow-up service** (`src/services/sms.js`): After a completed appointment call, sends patient a confirmation SMS; after a doctor message, sends receipt SMS; after a missed call / silence timeout, sends missed-call SMS; after a recorded voicemail, sends acknowledgement SMS. Per-clinic toggle (`sms_follow_up_enabled`). No SMS sent if Twilio not configured or toggle is off.
 - **Voicemail recording**: On 2nd silence timeout, AI offers voicemail with `<Record>` TwiML. Recording URL stored on `calls.recording_url`; `voicemail_left` flag set. New routes: `/:slug/voicemail`, `/:slug/recording-complete`.
@@ -145,25 +155,26 @@ Per-clinic (stored in DB, set via Super Admin UI):
 
 ---
 
-## Phase 7 — Suggested Next Steps
+## Phase 9 — Suggested Next Steps
 
 ### High Priority
-1. **SMS follow-up**: After a completed call, send patient a confirmation SMS via Twilio Messaging API (appointment details, doctor message receipt)
-2. **Voicemail fallback**: If caller doesn't speak after 3 silence timeouts, offer to leave a voicemail; record with `<Record>`, store URL, transcribe via Whisper or Twilio transcription
-3. **Real phone number provisioning**: Allow Super Admin to search and purchase Twilio phone numbers directly from the UI (`client.availablePhoneNumbers(...).list()`, `client.incomingPhoneNumbers.create()`)
-4. **Webhook auto-configuration**: After assigning a Twilio number, automatically set its `voiceUrl` and `statusCallback` via Twilio REST API
+1. **Appointment reminder SMS** — `node-cron` job fires 24h and 1h before each appointment's `preferred_date`/`preferred_time`. Requires: `node-cron` dependency, `reminders_sent` flag on appointments, scheduler started in `server.js`.
+2. **Voicemail playback in Super Admin** — Recording URL is stored but the call detail modal has no player. Add an `<audio>` element or a `/superadmin/api/calls/:id/recording` proxy endpoint (Twilio recording URLs require auth; the proxy handles that transparently).
+3. **Escalation email on emergency** — When `emergency_detected = 1`, immediately email the clinic's `contact_email`. Currently no email fires on emergency — only the AI voice response.
+4. **IVR Super Admin UI** — Add IVR enable/disable toggle and location editor to the clinic edit slide-over (Technical tab). Currently IVR config can only be set via DB or API.
 
 ### Medium Priority
-5. **Appointment reminders**: Scheduled job (node-cron) that sends SMS reminders 24h and 1h before appointments
-6. **Call recording**: Optional per-clinic recording with `<Record>` or `record="record-from-answer"` on `<Dial>`; store recording URL in calls table
-7. **Analytics dashboard**: Charts for call volume by day/week, intent breakdown, language split, average duration
-8. **Client portal enhancements**: Allow clients to update their own Twilio webhook URL, view AI config (read-only), download call transcripts as PDF
+5. **Per-location call tracking** — Add `selected_location` column to `calls` table so analytics can break down call volume by center (Hialeah vs Homestead vs Coral Gables).
+6. **Appointment reminders per location** — When a patient selects a center via IVR, store the location on the appointment so reminder SMS says the correct address.
+7. **Client portal enhancements** — View AI config (read-only tab), download call transcript as PDF (`pdfkit`), self-serve webhook URL update after provisioning a number.
+8. **Call recording for all calls** — Add `record="record-from-answer"` to `<Dial>` with per-clinic `call_recording_enabled` flag.
 
 ### Lower Priority
-9. **Multi-language expansion**: Portuguese, French support (additional Polly voices + prompt localization)
-10. **IVR menu**: Optional press-1/press-2 menu before AI takes over, for clinics that prefer structured routing
-11. **Escalation email**: When emergency is detected, immediately email the clinic's emergency contact in addition to the existing AI response
-12. **Production deployment guide**: Docker container, nginx reverse proxy, SSL, PM2 process management
+9. **Multi-language IVR** — Spanish IVR option: if caller presses a language key first, serve the rest of the IVR in Spanish.
+10. **Analytics export** — Download call analytics as CSV from the Analytics view.
+11. **Production deployment guide** — `Dockerfile`, `docker-compose.yml`, nginx reverse proxy config, PM2 `ecosystem.config.js`, SSL/Let's Encrypt.
+12. **Webhook signature validation enforcement** — Make Twilio signature validation the default for new clinics; current setting is opt-in per clinic.
+13. **Rate limiting** — Add `express-rate-limit` on webhook routes to prevent abuse and runaway Twilio billing.
 
 ---
 
