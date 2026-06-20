@@ -2043,7 +2043,7 @@ async function sendWebhookSim() {
 }
 
 function parseSayText(twiml) {
-  const m = twiml.match(/<Say[^>]*>([sS]*?)</Say>/i);
+  const m = twiml.match(/<Say[^>]*>([\s\S]*?)<\/Say>/i);
   if (!m) return '';
   return m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'");
 }
