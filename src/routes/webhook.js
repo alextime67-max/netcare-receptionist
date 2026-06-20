@@ -123,7 +123,7 @@ router.post('/:slug/voice', clinicMiddleware, (req, res) => {
   const greeting = getInitialGreeting(clinic);
   addTranscript(dbId, 'assistant', greeting);
 
-  res.type('text/xml').send(gatherTwiml(greeting, 'en', clinic.slug));
+  res.type('text/xml').send(gatherTwiml(greeting, 'es', clinic.slug));
 });
 
 // ── Route: speech gathered ────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
   const session = getSession(CallSid);
   if (!session) {
     return res.type('text/xml').send(
-      endTwiml(`We lost your session. Please call back. Thank you for calling ${clinic.name}.`, 'en')
+      endTwiml(`Perdimos su sesión. Por favor llame nuevamente. Gracias por llamar a ${clinic.name}.`, 'es')
     );
   }
 
@@ -185,7 +185,7 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
     res.type('text/xml').send(gatherTwiml(ai.speak, ai.language, clinic.slug));
   } catch (err) {
     console.error(`[Webhook/${clinic.slug}] gather error:`, err);
-    const lang = session.language || 'en';
+    const lang = session.language || 'es';
     res.type('text/xml').send(gatherTwiml(
       lang === 'es'
         ? 'Lo siento, tuve un problema técnico. ¿Podría repetir eso?'
@@ -201,7 +201,7 @@ router.post('/:slug/no-input', clinicMiddleware, (req, res) => {
   const { CallSid } = req.body;
   const clinic  = req.clinic;
   const session = getSession(CallSid);
-  const lang    = session?.language || 'en';
+  const lang    = session?.language || 'es';
 
   if (session) {
     session.silenceCount = (session.silenceCount || 0) + 1;
@@ -209,7 +209,7 @@ router.post('/:slug/no-input', clinicMiddleware, (req, res) => {
     if (session.silenceCount >= 3) {
       if (session.dbId) {
         updateCall(CallSid, { status: 'abandoned' });
-        addTranscript(session.dbId, 'assistant', getTimeoutGoodbye(lang));
+        addTranscript(session.dbId, 'assistant', getTimeoutGoodbye(lang, clinic.name));
         // Send missed-call SMS if caller is known
         if (session.callerNumber && session.callerNumber !== 'anonymous') {
           sendMissedCallSms(clinic, session.callerNumber)
@@ -217,14 +217,14 @@ router.post('/:slug/no-input', clinicMiddleware, (req, res) => {
         }
       }
       endSession(CallSid);
-      return res.type('text/xml').send(endTwiml(getTimeoutGoodbye(lang), lang));
+      return res.type('text/xml').send(endTwiml(getTimeoutGoodbye(lang, clinic.name), lang));
     }
 
     // On 2nd silence, offer voicemail
     if (session.silenceCount === 2) {
       const prompt = lang === 'es'
-        ? 'Parece que tiene dificultades para conectar. Después del tono, puede dejar un mensaje de voz. Presione # cuando termine. O cuelgue para terminar.'
-        : "It seems you're having trouble connecting. After the beep, you can leave a voicemail. Press # when done, or hang up to end the call.";
+        ? 'No hemos recibido respuesta. Después del tono puede dejar un mensaje detallando su problema. Presione # cuando termine.'
+        : "We didn't receive a response. After the beep, please leave a message describing your issue. Press # when done.";
       if (session.dbId) addTranscript(session.dbId, 'assistant', prompt);
       return res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug));
     }
@@ -265,7 +265,7 @@ router.post('/:slug/voicemail', clinicMiddleware, (req, res) => {
   const { CallSid } = req.body;
   const clinic  = req.clinic;
   const session = getSession(CallSid);
-  const lang    = session?.language || 'en';
+  const lang    = session?.language || 'es';
 
   const prompt = lang === 'es'
     ? 'Por favor deje su mensaje después del tono. Presione # cuando termine.'
@@ -283,7 +283,7 @@ router.post('/:slug/recording-complete', clinicMiddleware, async (req, res) => {
   const { CallSid, RecordingUrl, RecordingDuration } = req.body;
   const clinic  = req.clinic;
   const session = getSession(CallSid);
-  const lang    = session?.language || 'en';
+  const lang    = session?.language || 'es';
   const duration = parseInt(RecordingDuration || '0', 10);
 
   console.log(`[Webhook/${clinic.slug}] Recording complete  CallSid=${CallSid}  dur=${duration}s  url=${RecordingUrl}`);

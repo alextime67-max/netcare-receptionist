@@ -340,7 +340,7 @@ function initSession(callSid, callerPhone, clinic) {
       reason: null, appointmentDate: null, appointmentTime: null,
       messageContent: null, urgency: null,
     },
-    language:  'en',
+    language:  'es',
     clinic:    typeof clinic === 'object' ? clinic : { name: clinicName },
     clinicName,
     dbId:      null,
@@ -458,8 +458,9 @@ async function runTestMessage(clinic, conversationMessages, userMessage) {
 function getInitialGreeting(clinic) {
   const name = typeof clinic === 'string' ? clinic : (clinic.name || 'NetCare');
   const cfg  = typeof clinic === 'object' ? clinic : {};
+  if (cfg.ai_greeting_es) return cfg.ai_greeting_es;
   if (cfg.ai_greeting_en) return cfg.ai_greeting_en;
-  return `Thank you for calling ${name}! Para español, diga español. How can I help you today?`;
+  return `Gracias por llamar a ${name}. ¿Cómo puedo ayudarle hoy?`;
 }
 
 function getSpanishGreeting(clinic) {
@@ -476,14 +477,15 @@ function getErrorMessage(lang) {
 
 function getNoInputMessage(lang) {
   return lang === 'es'
-    ? 'No escuché nada. ¿Podría repetir por favor?'
+    ? 'No hemos recibido respuesta. ¿Podría repetir por favor?'
     : "I didn't catch that. Could you please say that again?";
 }
 
-function getTimeoutGoodbye(lang) {
+function getTimeoutGoodbye(lang, clinicName) {
+  const name = clinicName ? ` a ${clinicName}` : '';
   return lang === 'es'
-    ? 'No recibimos respuesta. Gracias por llamar. ¡Hasta luego!'
-    : "We didn't receive a response. Thank you for calling. Goodbye!";
+    ? `Gracias por llamar${name}. Que tenga un excelente día.`
+    : `Thank you for calling${name}. Have a great day. Goodbye!`;
 }
 
 function getActiveSessions() { return sessions.size; }
