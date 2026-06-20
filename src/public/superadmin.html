@@ -1939,7 +1939,7 @@ let wsimSlug    = null;
 function resetWebhookSim() {
   wsimCallSid = null; wsimActive = false;
   const chat = document.getElementById('wsim-chat');
-  chat.innerHTML = '<div class="flex-1 flex items-center justify-center text-xs text-slate-400 text-center p-4">Click <strong class='mx-1'>Start Call</strong> to simulate an inbound call</div>';
+  chat.innerHTML = `<div class="flex-1 flex items-center justify-center text-xs text-slate-400 text-center p-4">Click <strong class='mx-1'>Start Call</strong> to simulate an inbound call</div>`;
   document.getElementById('wsim-input').value = '';
   document.getElementById('wsim-input').disabled = true;
   document.getElementById('wsim-send-btn').disabled = true;
