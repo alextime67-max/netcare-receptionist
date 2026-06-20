@@ -4,6 +4,7 @@ const twilio  = require('twilio');
 
 const {
   initSession, getSession, setSessionDbId, endSession,
+  setSelectedCenter, incrementIvrTimeouts,
   processMessage, getInitialGreeting, getNoInputMessage, getTimeoutGoodbye,
 } = require('../services/ai');
 
@@ -82,6 +83,28 @@ function voicemailTwiml(speakText, lang, slug) {
 </Response>`;
 }
 
+function ivrMenuTwiml(clinic, slug) {
+  let cfg = null;
+  try { cfg = clinic.ivr_config ? JSON.parse(clinic.ivr_config) : null; } catch { cfg = null; }
+  if (!cfg) {
+    const greeting = getInitialGreeting(clinic);
+    return gatherTwiml(greeting, 'es', slug);
+  }
+  const voice    = cfg.voice    || 'Polly.Joanna';
+  const langCode = cfg.language || 'en-US';
+  const optText  = cfg.options.map(o => `For our ${o.label}, press ${o.digit}.`).join(' ');
+  const repText  = cfg.repeatDigit ? `To hear these options again, press ${cfg.repeatDigit}.` : '';
+  const fullText = [cfg.greeting, optText, repText].filter(Boolean).join(' ');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="dtmf" action="/webhook/${slug}/ivr-select" method="POST"
+          numDigits="1" timeout="10">
+    <Say voice="${voice}" language="${langCode}">${esc(fullText)}</Say>
+  </Gather>
+  <Redirect method="POST">/webhook/${slug}/ivr</Redirect>
+</Response>`;
+}
+
 // ── Clinic middleware ─────────────────────────────────────────────────────────
 
 function clinicMiddleware(req, res, next) {
@@ -120,10 +143,90 @@ router.post('/:slug/voice', clinicMiddleware, (req, res) => {
   const dbId = createCall(CallSid, From, clinic.id);
   setSessionDbId(CallSid, dbId);
 
+  if (clinic.ivr_enabled) {
+    console.log(`[Webhook/${clinic.slug}] IVR menu  CallSid=${CallSid}`);
+    return res.type('text/xml').send(ivrMenuTwiml(clinic, clinic.slug));
+  }
+
   const greeting = getInitialGreeting(clinic);
   addTranscript(dbId, 'assistant', greeting);
-
   res.type('text/xml').send(gatherTwiml(greeting, 'es', clinic.slug));
+});
+
+// ── Route: IVR repeat / timeout ───────────────────────────────────────────────
+
+router.post('/:slug/ivr', clinicMiddleware, (req, res) => {
+  const { CallSid } = req.body;
+  const clinic  = req.clinic;
+  const timeouts = incrementIvrTimeouts(CallSid);
+  const session  = getSession(CallSid);
+
+  let cfg = null;
+  try { cfg = clinic.ivr_config ? JSON.parse(clinic.ivr_config) : null; } catch { cfg = null; }
+
+  if (timeouts >= 2) {
+    const voice    = cfg?.voice    || 'Polly.Joanna';
+    const langCode = cfg?.language || 'en-US';
+    const dispName = cfg?.clinicDisplayName || clinic.name;
+    const greeting = `Thank you for calling ${dispName}. I am the virtual assistant. How may I assist you today?`;
+    if (session?.dbId) addTranscript(session.dbId, 'assistant', greeting);
+    console.log(`[Webhook/${clinic.slug}] IVR timeout×2 — falling back to AI  CallSid=${CallSid}`);
+    return res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="speech" action="/webhook/${clinic.slug}/gather" method="POST"
+          speechTimeout="4" speechModel="phone_call" language="${langCode}">
+    <Say voice="${voice}" language="${langCode}">${esc(greeting)}</Say>
+  </Gather>
+  <Redirect method="POST">/webhook/${clinic.slug}/no-input</Redirect>
+</Response>`);
+  }
+
+  console.log(`[Webhook/${clinic.slug}] IVR repeat (timeout ${timeouts})  CallSid=${CallSid}`);
+  res.type('text/xml').send(ivrMenuTwiml(clinic, clinic.slug));
+});
+
+// ── Route: IVR digit selection ────────────────────────────────────────────────
+
+router.post('/:slug/ivr-select', clinicMiddleware, (req, res) => {
+  const { CallSid, Digits } = req.body;
+  const clinic  = req.clinic;
+  const session = getSession(CallSid);
+
+  let cfg = null;
+  try { cfg = clinic.ivr_config ? JSON.parse(clinic.ivr_config) : null; } catch { cfg = null; }
+
+  if (!cfg || !Digits) {
+    return res.type('text/xml').send(ivrMenuTwiml(clinic, clinic.slug));
+  }
+
+  const voice    = cfg.voice    || 'Polly.Joanna';
+  const langCode = cfg.language || 'en-US';
+  const dispName = cfg.clinicDisplayName || clinic.name;
+
+  if (Digits === String(cfg.repeatDigit)) {
+    console.log(`[Webhook/${clinic.slug}] IVR repeat requested  CallSid=${CallSid}`);
+    return res.type('text/xml').send(ivrMenuTwiml(clinic, clinic.slug));
+  }
+
+  const option = cfg.options.find(o => String(o.digit) === String(Digits));
+  if (!option) {
+    console.log(`[Webhook/${clinic.slug}] IVR invalid digit=${Digits}  CallSid=${CallSid}`);
+    return res.type('text/xml').send(ivrMenuTwiml(clinic, clinic.slug));
+  }
+
+  setSelectedCenter(CallSid, option);
+  const greeting = `Thank you. You have selected our ${option.label} location. I am ${dispName}'s virtual assistant. How may I assist you today?`;
+  if (session?.dbId) addTranscript(session.dbId, 'assistant', greeting);
+  console.log(`[Webhook/${clinic.slug}] IVR selected: ${option.label}  CallSid=${CallSid}`);
+
+  res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="speech" action="/webhook/${clinic.slug}/gather" method="POST"
+          speechTimeout="4" speechModel="phone_call" language="${langCode}">
+    <Say voice="${voice}" language="${langCode}">${esc(greeting)}</Say>
+  </Gather>
+  <Redirect method="POST">/webhook/${clinic.slug}/no-input</Redirect>
+</Response>`);
 });
 
 // ── Route: speech gathered ────────────────────────────────────────────────────

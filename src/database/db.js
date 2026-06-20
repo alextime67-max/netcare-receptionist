@@ -150,6 +150,11 @@ function initDb() {
   _addColumnIfMissing('calls',   'recording_url',          'TEXT');
   _addColumnIfMissing('calls',   'voicemail_left',         'INTEGER DEFAULT 0');
 
+  // ── Migrations: IVR DTMF menu ─────────────────────────────────────────────
+
+  _addColumnIfMissing('clinics', 'ivr_enabled', 'INTEGER DEFAULT 0');
+  _addColumnIfMissing('clinics', 'ivr_config',  'TEXT');
+
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
   for (const row of noAcct) {
@@ -200,6 +205,29 @@ function initDb() {
       process.env.SMTP_PASS      || null,
     );
     console.log('[DB] Seeded default clinic "netcare" from environment variables.');
+  }
+
+  // ── Seed MDcare clinic with IVR config ───────────────────────────────────
+
+  const mdcareExists = db.prepare("SELECT id FROM clinics WHERE slug = 'mdcare'").get();
+  if (!mdcareExists) {
+    const mdcareIvr = JSON.stringify({
+      clinicDisplayName: 'MDcare',
+      greeting:          'Thank you for calling MDcare.',
+      options: [
+        { digit: '1', label: 'Hialeah Medical Center'    },
+        { digit: '2', label: 'Homestead Medical Center'   },
+        { digit: '3', label: 'Coral Gables Medical Center' },
+      ],
+      repeatDigit: '9',
+      voice:       'Polly.Joanna',
+      language:    'en-US',
+    });
+    db.prepare(`
+      INSERT INTO clinics (slug, name, ivr_enabled, ivr_config, admin_user, admin_pass, status)
+      VALUES ('mdcare', 'MDcare', 1, ?, 'admin', 'MDcare2024!', 'active')
+    `).run(mdcareIvr);
+    console.log('[DB] Seeded MDcare clinic with IVR configuration.');
   }
 
   console.log('[DB] Database initialized at', path.join(DATA_DIR, 'netcare.db'));
@@ -275,6 +303,7 @@ function updateClinic(id, data) {
     'admin_user', 'admin_pass', 'clinic_email', 'email_from',
     'gmail_user', 'gmail_app_pass', 'smtp_host', 'smtp_port', 'smtp_secure',
     'smtp_user', 'smtp_pass', 'active', 'sms_follow_up_enabled',
+    'ivr_enabled', 'ivr_config',
   ];
   const map = {
     name: data.name, phone_display: data.phoneDisplay,
@@ -296,6 +325,8 @@ function updateClinic(id, data) {
     smtp_user: data.smtpUser, smtp_pass: data.smtpPass,
     active: data.active !== undefined ? (data.active ? 1 : 0) : undefined,
     sms_follow_up_enabled: data.smsFollowUpEnabled !== undefined ? (data.smsFollowUpEnabled ? 1 : 0) : undefined,
+    ivr_enabled: data.ivrEnabled !== undefined ? (data.ivrEnabled ? 1 : 0) : undefined,
+    ivr_config:  data.ivrConfig  !== undefined ? data.ivrConfig  : undefined,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k]])

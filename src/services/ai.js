@@ -343,14 +343,28 @@ function initSession(callSid, callerPhone, clinic) {
     language:  'es',
     clinic:    typeof clinic === 'object' ? clinic : { name: clinicName },
     clinicName,
-    dbId:      null,
-    turnCount: 0,
+    dbId:           null,
+    turnCount:      0,
+    selectedCenter: null,
+    ivrTimeouts:    0,
   });
 }
 
 function getSession(callSid)        { return sessions.get(callSid); }
 function setSessionDbId(callSid, id){ const s = sessions.get(callSid); if (s) s.dbId = id; }
 function endSession(callSid)        { const s = sessions.get(callSid); sessions.delete(callSid); return s; }
+
+function setSelectedCenter(callSid, center) {
+  const s = sessions.get(callSid);
+  if (s) s.selectedCenter = center;
+}
+
+function incrementIvrTimeouts(callSid) {
+  const s = sessions.get(callSid);
+  if (!s) return 1;
+  s.ivrTimeouts = (s.ivrTimeouts || 0) + 1;
+  return s.ivrTimeouts;
+}
 
 // ── AI processing (live calls) ────────────────────────────────────────────────
 
@@ -369,10 +383,15 @@ async function processMessage(callSid, patientSpeech) {
   }
 
   try {
+    let systemPrompt = buildSystemPrompt(session.clinic);
+    if (session.selectedCenter) {
+      systemPrompt += `\n\n## Selected Location\nThe patient selected the ${session.selectedCenter.label}. Direct all appointment scheduling, doctor messages, call transfers, voicemail routing, and patient communications to this specific location.`;
+    }
+
     const response = await client.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: 600,
-      system:     buildSystemPrompt(session.clinic),
+      system:     systemPrompt,
       messages:   session.messages,
     });
 
@@ -498,6 +517,8 @@ module.exports = {
   getSession,
   setSessionDbId,
   endSession,
+  setSelectedCenter,
+  incrementIvrTimeouts,
   processMessage,
   runTestMessage,
   getInitialGreeting,
