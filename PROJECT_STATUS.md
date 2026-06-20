@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-06-20
 **Branch:** `master`
-**Latest commit:** `757500b`
+**Latest commit:** `35b6051`
 
 ---
 
@@ -51,7 +51,20 @@
 - `buildSystemPrompt()` assembles: template persona → tone → call types → business info → services → hours → appt instructions → transfer rules → after-hours → emergency → FAQ → industry rules → master prompt
 - Backward-compatible: accepts plain string (clinic name) or full clinic object
 
-### Phase 8 — IVR Menu, Spanish Voice Flow & Bug Fixes ✅ LATEST
+### Phase 9 — Knowledge Base System (AI Intelligence) ✅ LATEST
+
+- **Per-clinic Knowledge Base**: 13 content categories stored in `knowledge_base` table (`services`, `doctors`, `locations`, `office_hours`, `insurance`, `appointment_policy`, `cancellation_policy`, `new_patient_requirements`, `documents_needed`, `faqs`, `transfer_rules`, `emergency_instructions`, `do_not_answer`).
+- **AI Prompt Injection**: `buildKbPromptSection()` appends approved clinic content + medical safety rules to Claude system prompt on every call. When a caller selects an IVR location, that center's details are highlighted in the KB section.
+- **Fallback + Unanswered Tracking**: AI returns `"unanswered": true` in JSON when question is outside the KB. Webhook logs it to `unanswered_questions` table. Super Admin can review gaps to improve the KB.
+- **Medical Safety Rules**: Hardcoded safety guardrails in every KB prompt — no medical advice, no diagnoses, no medication guidance; emergency always redirected to 911.
+- **MDcare Sample Content**: All 3 locations (Hialeah / Homestead / Coral Gables) seeded with full services, doctors, locations, hours, insurance, policies, FAQs, and transfer rules.
+- **Super Admin Knowledge Base View**: Nav button + full-page view with 13 textarea cards, clinic dropdown, Save button, and status indicator. Super Admin only — not in client portal.
+- **Test Simulator**: Chat UI inside KB view — type a patient question, call real Claude with the saved KB prompt, see response + `Unanswered` or `Emergency` badges.
+- **Unanswered Questions Analytics**: Table of questions from real calls that the AI couldn't answer, per clinic, sortable by date.
+- **4 KB API Routes**: `GET /api/kb/:id`, `PUT /api/kb/:id`, `GET /api/kb/:id/unanswered`, `POST /api/kb/test`.
+- **Tests**: 35 / 35 passing (11 new KB tests: DB helpers + prompt builder).
+
+### Phase 8 — IVR Menu, Spanish Voice Flow & Bug Fixes ✅
 
 - **DTMF IVR menu** (`ivr_enabled` / `ivr_config` per clinic): Callers hear a spoken menu and press a digit to select a location before the AI starts. Config is stored as JSON on the clinic record; any clinic can enable IVR without code changes.
 - **MDcare multi-location clinic**: Seeded with 3-location IVR (Hialeah / Homestead / Coral Gables). New routes: `/:slug/ivr` (repeat + 2-timeout AI fallback) and `/:slug/ivr-select` (DTMF digit handler).
