@@ -14,6 +14,12 @@ const {
 } = require('../database/db');
 
 const { sendAppointmentNotification, sendDoctorMessageNotification } = require('../services/email');
+const {
+  sendAppointmentConfirmationSms,
+  sendMessageReceiptSms,
+  sendMissedCallSms,
+  sendVoicemailAckSms,
+} = require('../services/sms');
 
 // ── TwiML helpers ─────────────────────────────────────────────────────────────
 
@@ -58,6 +64,21 @@ function transferTwiml(speakText, lang, transferPhone, callerPhone) {
 <Response>
   <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
   <Dial timeout="30" callerId="${esc(callerPhone || '')}">${esc(transferPhone)}</Dial>
+</Response>`;
+}
+
+function voicemailTwiml(speakText, lang, slug) {
+  const voice    = lang === 'es' ? 'Polly.Lupe'  : 'Polly.Joanna';
+  const langCode = lang === 'es' ? 'es-US'       : 'en-US';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
+  <Record action="/webhook/${slug}/recording-complete" method="POST"
+          maxLength="120" finishOnKey="#" playBeep="true" timeout="5"/>
+  <Say voice="${voice}" language="${langCode}">${esc(
+    lang === 'es' ? 'No recibimos grabación. ¡Adiós!' : 'No recording received. Goodbye!'
+  )}</Say>
+  <Hangup/>
 </Response>`;
 }
 
@@ -184,13 +205,28 @@ router.post('/:slug/no-input', clinicMiddleware, (req, res) => {
 
   if (session) {
     session.silenceCount = (session.silenceCount || 0) + 1;
+
     if (session.silenceCount >= 3) {
-      endSession(CallSid);
       if (session.dbId) {
         updateCall(CallSid, { status: 'abandoned' });
         addTranscript(session.dbId, 'assistant', getTimeoutGoodbye(lang));
+        // Send missed-call SMS if caller is known
+        if (session.callerNumber && session.callerNumber !== 'anonymous') {
+          sendMissedCallSms(clinic, session.callerNumber)
+            .catch(e => console.error('[SMS] missed-call SMS failed:', e.message));
+        }
       }
+      endSession(CallSid);
       return res.type('text/xml').send(endTwiml(getTimeoutGoodbye(lang), lang));
+    }
+
+    // On 2nd silence, offer voicemail
+    if (session.silenceCount === 2) {
+      const prompt = lang === 'es'
+        ? 'Parece que tiene dificultades para conectar. Después del tono, puede dejar un mensaje de voz. Presione # cuando termine. O cuelgue para terminar.'
+        : "It seems you're having trouble connecting. After the beep, you can leave a voicemail. Press # when done, or hang up to end the call.";
+      if (session.dbId) addTranscript(session.dbId, 'assistant', prompt);
+      return res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug));
     }
   }
 
@@ -221,6 +257,56 @@ router.post('/:slug/status', clinicMiddleware, (req, res) => {
   }
 
   res.status(204).send();
+});
+
+// ── Route: voicemail entry point (explicit redirect) ──────────────────────────
+
+router.post('/:slug/voicemail', clinicMiddleware, (req, res) => {
+  const { CallSid } = req.body;
+  const clinic  = req.clinic;
+  const session = getSession(CallSid);
+  const lang    = session?.language || 'en';
+
+  const prompt = lang === 'es'
+    ? 'Por favor deje su mensaje después del tono. Presione # cuando termine.'
+    : 'Please leave your message after the beep. Press # when finished.';
+
+  if (session?.dbId) addTranscript(session.dbId, 'assistant', prompt);
+
+  console.log(`[Webhook/${clinic.slug}] Voicemail started  CallSid=${CallSid}`);
+  res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug));
+});
+
+// ── Route: recording complete callback ────────────────────────────────────────
+
+router.post('/:slug/recording-complete', clinicMiddleware, async (req, res) => {
+  const { CallSid, RecordingUrl, RecordingDuration } = req.body;
+  const clinic  = req.clinic;
+  const session = getSession(CallSid);
+  const lang    = session?.language || 'en';
+  const duration = parseInt(RecordingDuration || '0', 10);
+
+  console.log(`[Webhook/${clinic.slug}] Recording complete  CallSid=${CallSid}  dur=${duration}s  url=${RecordingUrl}`);
+
+  if (RecordingUrl && duration > 0) {
+    updateCall(CallSid, { recording_url: RecordingUrl, voicemail_left: 1, status: 'voicemail' });
+    if (session?.dbId) addTranscript(session.dbId, 'assistant', `[Voicemail recorded — ${duration}s]`);
+
+    // Acknowledge via SMS
+    const callerPhone = session?.callerNumber || req.body.From;
+    if (callerPhone && callerPhone !== 'anonymous') {
+      sendVoicemailAckSms(clinic, callerPhone)
+        .catch(e => console.error('[SMS] voicemail ack SMS failed:', e.message));
+    }
+  }
+
+  endSession(CallSid);
+
+  const goodbye = lang === 'es'
+    ? '¡Su mensaje ha sido grabado! Le llamaremos pronto. ¡Adiós!'
+    : 'Your message has been recorded. We will call you back soon. Goodbye!';
+
+  res.type('text/xml').send(endTwiml(goodbye, lang));
 });
 
 // ── Internal: finalize completed call ─────────────────────────────────────────
@@ -254,6 +340,8 @@ async function finalizeCall(callSid, ai, clinic) {
         }, clinicId);
         sendAppointmentNotification(callId, { ...collected, language: ai.language }, clinic)
           .catch(e => console.error('[Email] appointment notify failed:', e.message));
+        sendAppointmentConfirmationSms(clinic, collected.phone, collected.name, collected.appointmentDate, collected.appointmentTime)
+          .catch(e => console.error('[SMS] appointment SMS failed:', e.message));
 
       } else if (collected.callType === 'message') {
         createDoctorMessage(callId, {
@@ -264,6 +352,8 @@ async function finalizeCall(callSid, ai, clinic) {
         }, clinicId);
         sendDoctorMessageNotification(callId, { ...collected, language: ai.language }, clinic)
           .catch(e => console.error('[Email] doctor msg notify failed:', e.message));
+        sendMessageReceiptSms(clinic, collected.phone, collected.name)
+          .catch(e => console.error('[SMS] message receipt SMS failed:', e.message));
       }
     } catch (err) {
       console.error(`[Webhook/${clinic.slug}] finalizeCall DB error:`, err.message);

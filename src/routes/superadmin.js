@@ -12,6 +12,8 @@ const {
   getStats, getGlobalStats,
   getClinicAiConfig, updateClinicAiConfig,
   getAllCalls, getCallCount, getCallWithTranscript,
+  getCallVolumeByDay, getCallAnalyticsSummary,
+  db,
 } = require('../database/db');
 
 const { runTestMessage, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
@@ -321,6 +323,161 @@ router.post('/api/ai/preview', (req, res) => {
     res.json({ prompt, length: prompt.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+router.get('/api/analytics', (req, res) => {
+  try {
+    const clinicId = req.query.clinicId ? +req.query.clinicId : null;
+    const days     = Math.min(parseInt(req.query.days || '30', 10), 90);
+    res.json({
+      dailyVolume: getCallVolumeByDay(clinicId, days),
+      summary:     getCallAnalyticsSummary(clinicId),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Health check ──────────────────────────────────────────────────────────────
+
+router.get('/api/health', async (req, res) => {
+  const checks = {};
+
+  // Database
+  try {
+    db.prepare('SELECT 1').get();
+    checks.database = { status: 'ok' };
+  } catch (e) {
+    checks.database = { status: 'error', message: e.message };
+  }
+
+  // Anthropic API key
+  checks.anthropicKey = { status: process.env.ANTHROPIC_API_KEY ? 'ok' : 'missing' };
+
+  // App URL
+  checks.appUrl = {
+    status: process.env.APP_URL ? 'ok' : 'warning',
+    value:  process.env.APP_URL || '(not set — using localhost)',
+  };
+
+  // Twilio — count clinics fully configured
+  const clinics = getClinics();
+  const twilioReady = clinics.filter(c => c.twilio_sid && c.twilio_token && c.twilio_phone).length;
+  checks.twilio = {
+    status:            twilioReady > 0 ? 'ok' : 'warning',
+    clinicsConfigured: twilioReady,
+    totalClinics:      clinics.length,
+  };
+
+  // Portal secret
+  checks.portalSecret = { status: process.env.PORTAL_SECRET ? 'ok' : 'warning' };
+
+  const healthy = checks.database.status === 'ok' && checks.anthropicKey.status === 'ok';
+  res.status(healthy ? 200 : 503).json({
+    status:    healthy ? 'healthy' : 'degraded',
+    timestamp: new Date().toISOString(),
+    checks,
+  });
+});
+
+// ── Twilio phone number provisioning ─────────────────────────────────────────
+
+router.get('/api/clinics/:id/twilio/numbers', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    if (!clinic.twilio_sid || !clinic.twilio_token)
+      return res.status(400).json({ error: 'Twilio credentials not configured' });
+
+    const { areaCode, country = 'US', capabilities = 'voice' } = req.query;
+    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
+
+    const searchOpts = { limit: 20, voiceEnabled: true };
+    if (areaCode) searchOpts.areaCode = areaCode;
+    if (capabilities === 'sms') searchOpts.smsEnabled = true;
+
+    const numbers = await client.availablePhoneNumbers(country).local.list(searchOpts);
+
+    res.json({
+      numbers: numbers.map(n => ({
+        phoneNumber:  n.phoneNumber,
+        friendlyName: n.friendlyName,
+        locality:     n.locality,
+        region:       n.region,
+        postalCode:   n.postalCode,
+        capabilities: n.capabilities,
+      })),
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/api/clinics/:id/twilio/provision', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) return res.status(400).json({ error: 'phoneNumber is required' });
+
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    if (!clinic.twilio_sid || !clinic.twilio_token)
+      return res.status(400).json({ error: 'Twilio credentials not configured' });
+
+    const appUrl     = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+    const voiceUrl   = `${appUrl}/webhook/${clinic.slug}/voice`;
+    const statusUrl  = `${appUrl}/webhook/${clinic.slug}/status`;
+
+    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
+    const purchased = await client.incomingPhoneNumbers.create({
+      phoneNumber,
+      voiceUrl,
+      voiceMethod:          'POST',
+      statusCallback:       statusUrl,
+      statusCallbackMethod: 'POST',
+      friendlyName:         `NetCare — ${clinic.name}`,
+    });
+
+    // Persist the number on the clinic
+    updateClinic(+req.params.id, { twilioPhone: purchased.phoneNumber });
+
+    console.log(`[Provisioning] Purchased ${purchased.phoneNumber} for clinic ${clinic.slug}`);
+    res.json({
+      ok:          true,
+      phoneNumber: purchased.phoneNumber,
+      sid:         purchased.sid,
+      voiceUrl:    purchased.voiceUrl,
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/api/clinics/:id/twilio/configure-webhook', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    if (!clinic.twilio_sid || !clinic.twilio_token || !clinic.twilio_phone)
+      return res.status(400).json({ error: 'Twilio credentials and phone number required' });
+
+    const appUrl    = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+    const voiceUrl  = `${appUrl}/webhook/${clinic.slug}/voice`;
+    const statusUrl = `${appUrl}/webhook/${clinic.slug}/status`;
+
+    const client  = twilio(clinic.twilio_sid, clinic.twilio_token);
+    const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: clinic.twilio_phone, limit: 1 });
+    if (!numbers.length) return res.status(404).json({ error: 'Phone number not found in this Twilio account' });
+
+    await client.incomingPhoneNumbers(numbers[0].sid).update({
+      voiceUrl,
+      voiceMethod:          'POST',
+      statusCallback:       statusUrl,
+      statusCallbackMethod: 'POST',
+    });
+
+    res.json({ ok: true, voiceUrl, statusUrl });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
 });
 

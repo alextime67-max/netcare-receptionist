@@ -144,6 +144,12 @@ function initDb() {
   _addColumnIfMissing('clinics', 'onboarded_at',    'DATETIME');
   _addColumnIfMissing('clinics', 'suspended_at',    'DATETIME');
 
+  // ── Migrations: Phase 7 SMS + voicemail ──────────────────────────────────
+
+  _addColumnIfMissing('clinics', 'sms_follow_up_enabled', 'INTEGER DEFAULT 0');
+  _addColumnIfMissing('calls',   'recording_url',          'TEXT');
+  _addColumnIfMissing('calls',   'voicemail_left',         'INTEGER DEFAULT 0');
+
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
   for (const row of noAcct) {
@@ -268,7 +274,7 @@ function updateClinic(id, data) {
     'twilio_sid', 'twilio_token', 'twilio_phone', 'twilio_validate',
     'admin_user', 'admin_pass', 'clinic_email', 'email_from',
     'gmail_user', 'gmail_app_pass', 'smtp_host', 'smtp_port', 'smtp_secure',
-    'smtp_user', 'smtp_pass', 'active',
+    'smtp_user', 'smtp_pass', 'active', 'sms_follow_up_enabled',
   ];
   const map = {
     name: data.name, phone_display: data.phoneDisplay,
@@ -289,6 +295,7 @@ function updateClinic(id, data) {
     smtp_secure: data.smtpSecure !== undefined ? (data.smtpSecure ? 1 : 0) : undefined,
     smtp_user: data.smtpUser, smtp_pass: data.smtpPass,
     active: data.active !== undefined ? (data.active ? 1 : 0) : undefined,
+    sms_follow_up_enabled: data.smsFollowUpEnabled !== undefined ? (data.smsFollowUpEnabled ? 1 : 0) : undefined,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k]])
@@ -315,7 +322,7 @@ function createCall(callSid, callerNumber, clinicId) {
 function updateCall(callSid, data) {
   const allowed = [
     'patient_name', 'patient_phone', 'call_type', 'language',
-    'status', 'duration', 'emergency_detected',
+    'status', 'duration', 'emergency_detected', 'recording_url', 'voicemail_left',
   ];
   const filtered = Object.fromEntries(
     Object.entries(data).filter(([k]) => allowed.includes(k) && data[k] !== undefined)
@@ -554,6 +561,65 @@ function updateClinicAiConfig(id, data) {
   db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
 }
 
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+function getCallVolumeByDay(clinicId, days = 30) {
+  const params = [];
+  const where  = clinicId ? 'WHERE clinic_id = ? AND ' : 'WHERE ';
+  if (clinicId) params.push(clinicId);
+  return db.prepare(`
+    SELECT date(created_at) AS date,
+           COUNT(*) AS total,
+           SUM(CASE WHEN status='completed'  THEN 1 ELSE 0 END) AS completed,
+           SUM(CASE WHEN status='abandoned'  THEN 1 ELSE 0 END) AS abandoned,
+           SUM(CASE WHEN status='voicemail'  THEN 1 ELSE 0 END) AS voicemail,
+           SUM(CASE WHEN status='transferred'THEN 1 ELSE 0 END) AS transferred,
+           SUM(CASE WHEN status='emergency'  THEN 1 ELSE 0 END) AS emergency
+    FROM calls
+    ${where}created_at >= date('now', '-${Math.max(1, Math.min(90, days))} days')
+    GROUP BY date(created_at)
+    ORDER BY date ASC
+  `).all(...params);
+}
+
+function getCallAnalyticsSummary(clinicId) {
+  const where  = clinicId ? 'WHERE clinic_id = ?' : '';
+  const params = clinicId ? [clinicId] : [];
+
+  const intentRows = db.prepare(
+    `SELECT call_type, COUNT(*) AS count FROM calls ${where} GROUP BY call_type`
+  ).all(...params);
+
+  const langRows = db.prepare(
+    `SELECT language, COUNT(*) AS count FROM calls ${where} GROUP BY language`
+  ).all(...params);
+
+  const durRow = db.prepare(
+    `SELECT ROUND(AVG(duration)) AS avg FROM calls ${where ? where + ' AND' : 'WHERE'} duration IS NOT NULL AND duration > 0`
+  ).get(...params);
+
+  const totRow = db.prepare(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN status='completed'     THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN status='voicemail'     THEN 1 ELSE 0 END) AS voicemail,
+            SUM(CASE WHEN emergency_detected=1   THEN 1 ELSE 0 END) AS emergencies,
+            SUM(CASE WHEN voicemail_left=1       THEN 1 ELSE 0 END) AS voicemails_left
+     FROM calls ${where}`
+  ).get(...params);
+
+  return {
+    intentBreakdown: Object.fromEntries(intentRows.map(r => [r.call_type || 'unknown', r.count])),
+    languageSplit:   Object.fromEntries(langRows.map(r => [r.language || 'en', r.count])),
+    avgDurationSecs: durRow?.avg || 0,
+    totalCalls:      totRow?.total || 0,
+    completedCalls:  totRow?.completed || 0,
+    voicemailCalls:  totRow?.voicemail || 0,
+    emergencies:     totRow?.emergencies || 0,
+    voicemailsLeft:  totRow?.voicemails_left || 0,
+    completionRate:  totRow?.total > 0 ? Math.round((totRow.completed / totRow.total) * 100) : 0,
+  };
+}
+
 // ── Portal helpers ────────────────────────────────────────────────────────────
 
 function updateClinicTwilio(id, data) {
@@ -619,4 +685,7 @@ module.exports = {
   saveWebRequest,
   getWebRequests,
   updateWebRequestStatus,
+  // analytics
+  getCallVolumeByDay,
+  getCallAnalyticsSummary,
 };

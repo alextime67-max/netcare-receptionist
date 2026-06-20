@@ -124,6 +124,13 @@
       </svg>
       Call Log
     </button>
+    <button onclick="switchView('analytics')" id="nav-analytics"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+      </svg>
+      Analytics
+    </button>
   </nav>
 
   <!-- Bottom info -->
@@ -191,6 +198,17 @@
         </div>
         <div id="recent-clients-table" class="overflow-x-auto">
           <div class="p-6 text-center text-slate-400 text-sm">Loading…</div>
+        </div>
+      </div>
+
+      <!-- System Health -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="font-semibold text-slate-800 text-sm">System Health</h2>
+          <button onclick="loadHealth()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+        </div>
+        <div id="health-body" class="p-5">
+          <div class="text-sm text-slate-400">Loading…</div>
         </div>
       </div>
     </div>
@@ -272,6 +290,7 @@
           <option value="abandoned">Abandoned</option>
           <option value="transferred">Transferred</option>
           <option value="emergency">Emergency</option>
+          <option value="voicemail">Voicemail</option>
         </select>
         <input type="date" id="call-filter-start" onchange="loadCallLog()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
         <input type="date" id="call-filter-end" onchange="loadCallLog()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
@@ -307,6 +326,52 @@
             <button id="call-log-prev" onclick="callLogPage(-1)" class="px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40">← Prev</button>
             <button id="call-log-next" onclick="callLogPage(+1)" class="px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40">Next →</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ANALYTICS VIEW ──────────────────────────────────────────────────── -->
+    <div id="view-analytics" class="hidden p-6 space-y-6">
+
+      <!-- Filters -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap gap-3 items-center">
+        <select id="analytics-clinic" onchange="loadAnalytics()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+          <option value="">All Clinics</option>
+        </select>
+        <select id="analytics-days" onchange="loadAnalytics()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <span id="analytics-loading" class="text-xs text-slate-400 hidden">Loading…</span>
+      </div>
+
+      <!-- Summary cards -->
+      <div id="analytics-summary" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+      <!-- Daily volume chart -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100">
+          <h2 class="font-semibold text-slate-800 text-sm">Call Volume — Daily</h2>
+        </div>
+        <div id="analytics-chart" class="p-5">
+          <div class="text-sm text-slate-400 text-center py-8">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Intent + Language breakdown -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div class="px-5 py-4 border-b border-slate-100">
+            <h2 class="font-semibold text-slate-800 text-sm">Call Type Breakdown</h2>
+          </div>
+          <div id="analytics-intent" class="p-5 space-y-3"></div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div class="px-5 py-4 border-b border-slate-100">
+            <h2 class="font-semibold text-slate-800 text-sm">Language Split</h2>
+          </div>
+          <div id="analytics-lang" class="p-5 space-y-3"></div>
         </div>
       </div>
     </div>
@@ -442,6 +507,30 @@
             </div>
           </div>
 
+          <!-- Number provisioning -->
+          <div class="mt-4 border border-indigo-100 bg-indigo-50/40 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="text-sm font-semibold text-indigo-800">Provision a New Number</p>
+                <p class="text-xs text-indigo-500 mt-0.5">Search &amp; buy a Twilio number — auto-configures the webhook</p>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <input type="text" id="provision-area-code" placeholder="Area code (e.g. 512)" maxlength="3"
+                class="form-input w-32 font-mono text-sm">
+              <button type="button" onclick="searchNumbers()" id="provision-search-btn"
+                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg whitespace-nowrap transition-colors">
+                Search Numbers
+              </button>
+              <button type="button" onclick="configureWebhook()" id="provision-webhook-btn"
+                class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded-lg whitespace-nowrap transition-colors">
+                Set Webhook URLs
+              </button>
+            </div>
+            <div id="provision-results" class="hidden mt-3"></div>
+            <div id="provision-status" class="hidden mt-2 text-xs rounded-lg p-2 border"></div>
+          </div>
+
           <!-- Twilio toolbox -->
           <div class="mt-4 space-y-3">
             <div class="flex flex-wrap gap-3">
@@ -517,6 +606,21 @@
             </div>
           </div>
         </div>
+
+        <!-- SMS Follow-up -->
+        <div class="border-t border-slate-100 pt-4">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">SMS Follow-up</p>
+              <p class="text-xs text-slate-400 mt-1">Send confirmation SMS to patients after appointments, messages, voicemails, and missed calls. Requires a Twilio phone number with SMS capability.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+              <input type="checkbox" id="f-sms-follow-up" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            </label>
+          </div>
+        </div>
+
       </div>
 
       <!-- ── TAB: Billing & Plan ── -->
@@ -862,11 +966,12 @@ function typeBadge(t) {
 
 function switchView(view) {
   currentView = view;
-  const views  = ['dashboard', 'clients', 'calls'];
+  const views  = ['dashboard', 'clients', 'calls', 'analytics'];
   const titles = {
     dashboard: ['Dashboard',  'NetCare Phone platform overview'],
     clients:   ['Clients',    'Manage all clinic accounts'],
     calls:     ['Call Log',   'All inbound calls across every clinic'],
+    analytics: ['Analytics',  'Call volume, intent breakdown, and language trends'],
   };
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -879,7 +984,9 @@ function switchView(view) {
   });
   document.getElementById('view-title').textContent = (titles[view] || titles.dashboard)[0];
   document.getElementById('view-sub').textContent   = (titles[view] || titles.dashboard)[1];
-  if (view === 'calls') loadCallLog();
+  if (view === 'calls')     loadCallLog();
+  if (view === 'analytics') loadAnalytics();
+  if (view === 'dashboard') loadHealth();
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -926,6 +1033,7 @@ async function loadClients() {
     renderTable();
     renderRecentClients();
     populateCallClinicFilter();
+    populateAnalyticsClinicFilter();
   } catch(e) {
     document.getElementById('clients-tbody').innerHTML =
       `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400 text-sm">Error: ${e.message}</td></tr>`;
@@ -938,6 +1046,8 @@ async function refreshAll() {
   await Promise.all([loadStats(), loadClients()]);
   document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
   btn.disabled = false;
+  if (currentView === 'dashboard') loadHealth();
+  if (currentView === 'analytics') loadAnalytics();
 }
 
 // ── Render table ──────────────────────────────────────────────────────────────
@@ -1099,6 +1209,7 @@ async function openEditModal(id) {
     document.getElementById('f-twilio-phone').value  = c.twilio_phone || '';
     document.getElementById('f-twilio-validate').value = c.twilio_validate ? '1' : '0';
     document.getElementById('f-transfer-phone').value  = c.transfer_phone || '';
+    document.getElementById('f-sms-follow-up').checked = !!c.sms_follow_up_enabled;
     document.getElementById('f-clinic-email').value  = c.clinic_email || '';
     document.getElementById('f-email-from').value    = c.email_from || '';
     document.getElementById('f-gmail-user').value    = c.gmail_user || '';
@@ -1178,8 +1289,9 @@ async function saveClinic(e) {
     twilioSid:      document.getElementById('f-twilio-sid').value.trim(),
     twilioToken:    document.getElementById('f-twilio-token').value.trim(),
     twilioPhone:    document.getElementById('f-twilio-phone').value.trim(),
-    twilioValidate: document.getElementById('f-twilio-validate').value === '1',
-    transferPhone:  document.getElementById('f-transfer-phone').value.trim(),
+    twilioValidate:      document.getElementById('f-twilio-validate').value === '1',
+    transferPhone:       document.getElementById('f-transfer-phone').value.trim(),
+    smsFollowUpEnabled:  document.getElementById('f-sms-follow-up').checked,
     clinicEmail:    document.getElementById('f-clinic-email').value.trim(),
     emailFrom:      document.getElementById('f-email-from').value.trim(),
     gmailUser:      document.getElementById('f-gmail-user').value.trim(),
@@ -1959,6 +2071,218 @@ function wsimAppendBubble(role, text) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+// ── Health check ─────────────────────────────────────────────────────────────
+
+async function loadHealth() {
+  const body = document.getElementById('health-body');
+  if (!body) return;
+  try {
+    const data = await (await fetch('/superadmin/api/health')).json();
+    const checks = data.checks || {};
+    const statusColor = { ok: 'text-emerald-600 bg-emerald-50', warning: 'text-amber-600 bg-amber-50', error: 'text-red-600 bg-red-50', missing: 'text-red-600 bg-red-50' };
+    const statusIcon  = { ok: '✓', warning: '⚠', error: '✗', missing: '✗' };
+    const rows = Object.entries(checks).map(([key, v]) => {
+      const st  = v.status || 'ok';
+      const cls = statusColor[st] || statusColor.warning;
+      const ico = statusIcon[st]  || '?';
+      const label = { database:'Database', anthropicKey:'AI (Anthropic)', appUrl:'App URL', twilio:'Twilio', portalSecret:'Portal Secret' }[key] || key;
+      const detail = v.message || v.value || (v.clinicsConfigured != null ? `${v.clinicsConfigured}/${v.totalClinics} clinics` : '');
+      return `<div class="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
+        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${cls}">${ico}</span>
+        <div class="flex-1 min-w-0">
+          <span class="text-sm font-medium text-slate-700">${label}</span>
+          ${detail ? `<span class="ml-2 text-xs text-slate-400">${detail}</span>` : ''}
+        </div>
+        <span class="text-xs font-semibold ${cls} px-2 py-0.5 rounded-full">${st}</span>
+      </div>`;
+    }).join('');
+    const overall = data.status === 'healthy'
+      ? '<div class="flex items-center gap-2 mb-4 text-emerald-700 font-semibold text-sm"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>All systems operational</div>'
+      : '<div class="flex items-center gap-2 mb-4 text-amber-700 font-semibold text-sm"><span class="w-2 h-2 rounded-full bg-amber-500"></span>System degraded — check items below</div>';
+    body.innerHTML = overall + rows;
+  } catch (e) {
+    body.innerHTML = `<div class="text-sm text-red-500">Health check failed: ${e.message}</div>`;
+  }
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+function populateAnalyticsClinicFilter() {
+  const sel = document.getElementById('analytics-clinic');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All Clinics</option>' +
+    allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected' : ''}>${c.name}</option>`).join('');
+}
+
+async function loadAnalytics() {
+  const clinicId = document.getElementById('analytics-clinic')?.value || '';
+  const days     = document.getElementById('analytics-days')?.value   || '30';
+  const loading  = document.getElementById('analytics-loading');
+  if (loading) loading.classList.remove('hidden');
+
+  try {
+    const params = new URLSearchParams({ days });
+    if (clinicId) params.set('clinicId', clinicId);
+    const data = await (await fetch(`/superadmin/api/analytics?${params}`)).json();
+    renderAnalyticsSummary(data.summary);
+    renderDailyChart(data.dailyVolume);
+    renderBreakdown('analytics-intent', data.summary.intentBreakdown, { appointment:'Appointment', message:'Doctor Message', transfer:'Transfer', unknown:'Unknown/General', emergency:'Emergency', voicemail:'Voicemail' }, 'bg-blue-500');
+    renderBreakdown('analytics-lang',   data.summary.languageSplit,   { en:'English', es:'Spanish', pt:'Portuguese', fr:'French' }, 'bg-teal-500');
+  } catch (e) {
+    document.getElementById('analytics-chart').innerHTML = `<div class="text-sm text-red-500 text-center py-8">Error: ${e.message}</div>`;
+  } finally {
+    if (loading) loading.classList.add('hidden');
+  }
+}
+
+function renderAnalyticsSummary(s) {
+  const el = document.getElementById('analytics-summary');
+  if (!el || !s) return;
+  const dur = s.avgDurationSecs > 0 ? `${Math.round(s.avgDurationSecs)}s` : '—';
+  el.innerHTML = [
+    { label:'Total Calls',      value: (s.totalCalls||0).toLocaleString(),    color:'text-slate-800', bg:'bg-slate-50' },
+    { label:'Completion Rate',  value: `${s.completionRate||0}%`,              color:'text-emerald-700', bg:'bg-emerald-50' },
+    { label:'Avg Duration',     value: dur,                                    color:'text-blue-700',  bg:'bg-blue-50' },
+    { label:'Emergencies',      value: (s.emergencies||0).toLocaleString(),   color:'text-red-700',   bg:'bg-red-50' },
+  ].map(c => `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+    <div class="text-2xl font-bold ${c.color}">${c.value}</div>
+    <div class="text-xs text-slate-400 mt-1 font-medium uppercase tracking-wide">${c.label}</div>
+  </div>`).join('');
+}
+
+function renderDailyChart(rows) {
+  const el = document.getElementById('analytics-chart');
+  if (!el) return;
+  if (!rows || !rows.length) { el.innerHTML = '<div class="text-sm text-slate-400 text-center py-8">No data for this period.</div>'; return; }
+  const maxTotal = Math.max(...rows.map(r => r.total), 1);
+  const bars = rows.map(r => {
+    const pct  = Math.round((r.total / maxTotal) * 100);
+    const date = new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    return `<div class="flex-1 flex flex-col items-center gap-1 min-w-0">
+      <div class="w-full flex flex-col justify-end" style="height:80px">
+        <div class="w-full bg-blue-500 rounded-t-sm transition-all" style="height:${Math.max(pct,2)}%" title="${r.total} calls"></div>
+      </div>
+      <div class="text-[10px] text-slate-400 truncate w-full text-center">${date}</div>
+      <div class="text-[10px] font-semibold text-slate-600">${r.total}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="flex items-end gap-1 overflow-x-auto pb-2">${bars}</div>
+    <div class="flex gap-4 mt-3 text-xs text-slate-500">
+      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-blue-500 inline-block"></span>Total calls per day</span>
+    </div>`;
+}
+
+function renderBreakdown(elId, data, labels, barColor) {
+  const el = document.getElementById(elId);
+  if (!el || !data) return;
+  const entries = Object.entries(data).sort((a,b) => b[1]-a[1]);
+  const total   = entries.reduce((s,[,v]) => s+v, 0) || 1;
+  if (!entries.length) { el.innerHTML = '<div class="text-sm text-slate-400">No data.</div>'; return; }
+  el.innerHTML = entries.map(([key, count]) => {
+    const pct   = Math.round((count/total)*100);
+    const label = labels[key] || key;
+    return `<div>
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="text-slate-600 font-medium">${label}</span>
+        <span class="text-slate-400">${count.toLocaleString()} (${pct}%)</span>
+      </div>
+      <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div class="h-full ${barColor} rounded-full transition-all" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Number provisioning ───────────────────────────────────────────────────────
+
+async function searchNumbers() {
+  const id       = document.getElementById('edit-id').value;
+  const areaCode = document.getElementById('provision-area-code').value.trim();
+  const results  = document.getElementById('provision-results');
+  const status   = document.getElementById('provision-status');
+  if (!id) return;
+
+  status.className = 'mt-2 text-xs rounded-lg p-2 border border-slate-200 bg-slate-50 text-slate-600';
+  status.textContent = 'Searching…';
+  status.classList.remove('hidden');
+  results.classList.add('hidden');
+
+  try {
+    const params = areaCode ? `?areaCode=${encodeURIComponent(areaCode)}` : '';
+    const data   = await (await fetch(`/superadmin/api/clinics/${id}/twilio/numbers${params}`)).json();
+    if (!data.numbers?.length) {
+      status.textContent = 'No available numbers found. Try a different area code.';
+      return;
+    }
+    status.classList.add('hidden');
+    results.innerHTML = `<div class="space-y-1 max-h-48 overflow-y-auto">` +
+      data.numbers.map(n => `
+        <div class="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2">
+          <div>
+            <span class="font-mono text-sm font-semibold text-slate-700">${n.phoneNumber}</span>
+            <span class="ml-2 text-xs text-slate-400">${[n.locality, n.region].filter(Boolean).join(', ')}</span>
+          </div>
+          <button onclick="purchaseNumber('${n.phoneNumber}')"
+            class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg transition-colors font-medium">
+            Buy
+          </button>
+        </div>`).join('') + `</div>`;
+    results.classList.remove('hidden');
+  } catch (e) {
+    status.className = 'mt-2 text-xs rounded-lg p-2 border border-red-200 bg-red-50 text-red-700';
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function purchaseNumber(phoneNumber) {
+  const id = document.getElementById('edit-id').value;
+  if (!id) return;
+  if (!confirm(`Purchase ${phoneNumber}? This will charge your Twilio account.`)) return;
+
+  const status = document.getElementById('provision-status');
+  status.className = 'mt-2 text-xs rounded-lg p-2 border border-slate-200 bg-slate-50 text-slate-600';
+  status.textContent = `Purchasing ${phoneNumber}…`;
+  status.classList.remove('hidden');
+
+  try {
+    const r    = await fetch(`/superadmin/api/clinics/${id}/twilio/provision`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ phoneNumber }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    status.className = 'mt-2 text-xs rounded-lg p-2 border border-emerald-200 bg-emerald-50 text-emerald-700';
+    status.textContent = `Purchased ${data.phoneNumber}! Webhook auto-configured. Refresh the form to see the new number.`;
+    document.getElementById('f-twilio-phone').value = data.phoneNumber;
+    document.getElementById('provision-results').classList.add('hidden');
+  } catch (e) {
+    status.className = 'mt-2 text-xs rounded-lg p-2 border border-red-200 bg-red-50 text-red-700';
+    status.textContent = 'Purchase failed: ' + e.message;
+  }
+}
+
+async function configureWebhook() {
+  const id = document.getElementById('edit-id').value;
+  if (!id) { alert('Save the clinic first.'); return; }
+
+  const status = document.getElementById('provision-status');
+  status.className = 'mt-2 text-xs rounded-lg p-2 border border-slate-200 bg-slate-50 text-slate-600';
+  status.textContent = 'Configuring webhook URLs…';
+  status.classList.remove('hidden');
+
+  try {
+    const r    = await fetch(`/superadmin/api/clinics/${id}/twilio/configure-webhook`, { method:'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    status.className = 'mt-2 text-xs rounded-lg p-2 border border-emerald-200 bg-emerald-50 text-emerald-700';
+    status.textContent = `Webhook URLs set! Voice: ${data.voiceUrl}`;
+  } catch (e) {
+    status.className = 'mt-2 text-xs rounded-lg p-2 border border-red-200 bg-red-50 text-red-700';
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
 // ── Live stats (active call counter) ─────────────────────────────────────────
 
 async function refreshLiveStats() {
@@ -1996,6 +2320,7 @@ document.addEventListener('keydown', e => {
 switchView('dashboard');
 refreshAll();
 setInterval(refreshAll, 60_000);
+setTimeout(loadHealth, 500);
 </script>
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- PROMPT PREVIEW MODAL                                                        -->

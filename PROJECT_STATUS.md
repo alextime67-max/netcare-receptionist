@@ -51,7 +51,19 @@
 - `buildSystemPrompt()` assembles: template persona → tone → call types → business info → services → hours → appt instructions → transfer rules → after-hours → emergency → FAQ → industry rules → master prompt
 - Backward-compatible: accepts plain string (clinic name) or full clinic object
 
-### Phase 6 — Real Twilio Integration ✅ LATEST
+### Phase 7 — SMS Follow-up, Voicemail, Analytics & Production Readiness ✅ LATEST
+
+- **SMS follow-up service** (`src/services/sms.js`): After a completed appointment call, sends patient a confirmation SMS; after a doctor message, sends receipt SMS; after a missed call / silence timeout, sends missed-call SMS; after a recorded voicemail, sends acknowledgement SMS. Per-clinic toggle (`sms_follow_up_enabled`). No SMS sent if Twilio not configured or toggle is off.
+- **Voicemail recording**: On 2nd silence timeout, AI offers voicemail with `<Record>` TwiML. Recording URL stored on `calls.recording_url`; `voicemail_left` flag set. New routes: `/:slug/voicemail`, `/:slug/recording-complete`.
+- **Missed call handling**: After 3 silences (caller hangs up without speaking) → status set to `abandoned` → missed-call SMS sent to caller.
+- **Voicemail status** added to call log filter and analytics breakdown.
+- **Twilio number provisioning**: Super Admin can search available numbers by area code (`GET /superadmin/api/clinics/:id/twilio/numbers`), purchase and auto-configure webhook (`POST /superadmin/api/clinics/:id/twilio/provision`), or set webhook URLs on an existing number (`POST /superadmin/api/clinics/:id/twilio/configure-webhook`). Full UI in Technical Setup tab.
+- **Analytics dashboard** (`GET /superadmin/api/analytics`): Returns daily call volume (up to 90 days), intent breakdown, language split, avg duration, completion rate, emergency count. New "Analytics" view in Super Admin with CSS bar chart, breakdown bars, and summary KPI cards.
+- **System health check** (`GET /superadmin/api/health`): Validates DB connectivity, Anthropic API key, App URL, Twilio configuration, Portal Secret. Health widget on Dashboard auto-loads on page open.
+- **Phase 7 DB migrations**: `calls.recording_url`, `calls.voicemail_left`, `clinics.sms_follow_up_enabled`.
+- **Test suite** (24 tests, Node built-in `node:test`): Analytics logic, SMS guard conditions, health check logic, DB migration compatibility. Run with `npm test`.
+
+### Phase 6 — Real Twilio Integration
 - **Credential validation**: POSTs to `/superadmin/api/clinics/:id/twilio/test`, validates account SID + Auth Token via Twilio REST API, looks up phone number capabilities
 - **Live call transfer**: AI flags `transfer: true` → webhook emits `<Dial>` TwiML with 30s timeout, logs call as `status: transferred`
 - **Transfer phone field**: `transfer_phone` column per clinic (set in Technical tab)
@@ -94,9 +106,9 @@
 | Live call transfer (`<Dial>`) | ✅ Done |
 | Outbound test call | ✅ Done |
 | Webhook Call Simulator | ✅ Done |
-| Real phone number provisioning (API) | ⬜ Phase 7 |
-| SMS follow-up after call | ⬜ Phase 7 |
-| Voicemail recording + transcription | ⬜ Phase 7 |
+| Real phone number provisioning (API) | ✅ Done |
+| SMS follow-up after call | ✅ Done |
+| Voicemail recording + storage | ✅ Done |
 
 ---
 
