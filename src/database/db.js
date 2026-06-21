@@ -10,6 +10,15 @@ const db = new Database(path.join(DATA_DIR, 'netcare.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// ── In-memory caches ──────────────────────────────────────────────────────────
+const CLINIC_TTL = 5 * 60 * 1000;
+const KB_TTL     = 5 * 60 * 1000;
+const clinicCache = new Map(); // slug → { data, expiry }
+const kbCache     = new Map(); // clinicId → { data, expiry }
+
+function invalidateClinicCache(slug) { clinicCache.delete(slug); }
+function invalidateKbCache(clinicId) { kbCache.delete(clinicId); }
+
 function initDb() {
   // ── Core tables (no indexes yet — migrations run first) ───────────────────
 
@@ -183,6 +192,11 @@ function initDb() {
   _addColumnIfMissing('clinics', 'ivr_enabled', 'INTEGER DEFAULT 0');
   _addColumnIfMissing('clinics', 'ivr_config',  'TEXT');
 
+  // ── Migrations: appointment location + SMS tracking ──────────────────────
+
+  _addColumnIfMissing('appointments', 'location', 'TEXT');
+  _addColumnIfMissing('appointments', 'sms_sent', 'INTEGER DEFAULT 0');
+
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
   for (const row of noAcct) {
@@ -190,16 +204,46 @@ function initDb() {
       .run(_nextAccountNumber(), row.id);
   }
 
+  // ── Cost management tables ────────────────────────────────────────────────
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cost_config (
+      id                    INTEGER PRIMARY KEY CHECK(id = 1),
+      admin_phone           TEXT,
+      admin_email           TEXT,
+      twilio_rate_per_min   REAL    DEFAULT 0.0085,
+      ai_rate_per_call      REAL    DEFAULT 0.08,
+      ai_monthly_budget     REAL    DEFAULT 200.0,
+      threshold_ai_low      REAL    DEFAULT 5.0,
+      threshold_ai_critical REAL    DEFAULT 2.0,
+      threshold_twilio_low  REAL    DEFAULT 10.0,
+      alerts_enabled        INTEGER DEFAULT 1,
+      updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS cost_alerts (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      alert_type     TEXT    NOT NULL,
+      message        TEXT    NOT NULL,
+      value          REAL,
+      threshold      REAL,
+      notified_sms   INTEGER DEFAULT 0,
+      notified_email INTEGER DEFAULT 0,
+      created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Indexes (safe now that columns exist) ─────────────────────────────────
 
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_calls_clinic       ON calls(clinic_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_calls_created_at   ON calls(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_calls_call_type    ON calls(call_type);
-    CREATE INDEX IF NOT EXISTS idx_transcripts_call   ON transcripts(call_id);
-    CREATE INDEX IF NOT EXISTS idx_appts_clinic       ON appointments(clinic_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_msgs_clinic        ON doctor_messages(clinic_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_webreq_clinic      ON web_requests(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_clinics_slug        ON clinics(slug);
+    CREATE INDEX IF NOT EXISTS idx_calls_clinic        ON calls(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_calls_created_at    ON calls(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_calls_call_type     ON calls(call_type);
+    CREATE INDEX IF NOT EXISTS idx_transcripts_call    ON transcripts(call_id);
+    CREATE INDEX IF NOT EXISTS idx_appts_clinic        ON appointments(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_msgs_clinic         ON doctor_messages(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_webreq_clinic       ON web_requests(clinic_id, created_at DESC);
   `);
 
   // ── Seed default clinic from env vars if none exist ───────────────────────
@@ -256,6 +300,29 @@ function initDb() {
       VALUES ('mdcare', 'MDcare', 1, ?, 'admin', 'MDcare2024!', 'active')
     `).run(mdcareIvr);
     console.log('[DB] Seeded MDcare clinic with IVR configuration.');
+  }
+
+  // ── Upgrade MDcare IVR to bilingual two-step flow ────────────────────────
+
+  const mdcareForUpgrade = db.prepare("SELECT id, ivr_config FROM clinics WHERE slug = 'mdcare'").get();
+  if (mdcareForUpgrade?.ivr_config) {
+    let ivrCfg;
+    try { ivrCfg = JSON.parse(mdcareForUpgrade.ivr_config); } catch { ivrCfg = null; }
+    if (ivrCfg && !ivrCfg.languageMenu) {
+      ivrCfg.languageMenu = {
+        greeting:    'Gracias por comunicarse con MDcare Medical Centers.',
+        options: [
+          { digit: '1', lang: 'es', label: 'Spanish' },
+          { digit: '2', lang: 'en', label: 'English' },
+        ],
+        repeatDigit: '9',
+        voice:       'Polly.Lupe-Neural',
+        langCode:    'es-US',
+      };
+      db.prepare("UPDATE clinics SET ivr_config = ? WHERE slug = 'mdcare'")
+        .run(JSON.stringify(ivrCfg));
+      console.log('[DB] Upgraded MDcare IVR config to bilingual two-step flow.');
+    }
   }
 
   // ── Seed MDcare Knowledge Base ────────────────────────────────────────────
@@ -551,7 +618,11 @@ function getClinics() {
 }
 
 function getClinicBySlug(slug) {
-  return db.prepare('SELECT * FROM clinics WHERE slug = ?').get(slug);
+  const hit = clinicCache.get(slug);
+  if (hit && Date.now() < hit.expiry) return hit.data;
+  const row = db.prepare('SELECT * FROM clinics WHERE slug = ?').get(slug);
+  if (row) clinicCache.set(slug, { data: row, expiry: Date.now() + CLINIC_TTL });
+  return row;
 }
 
 function getClinicById(id) {
@@ -600,6 +671,8 @@ function updateClinic(id, data) {
   const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`)
     .run(...Object.values(filtered), id);
+  const row = db.prepare('SELECT slug FROM clinics WHERE id = ?').get(id);
+  if (row) invalidateClinicCache(row.slug);
 }
 
 function deleteClinic(id) {
@@ -659,9 +732,11 @@ function getAllCalls(limit = 100, offset = 0, filter = {}) {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   params.push(limit, offset);
   return db.prepare(`
-    SELECT calls.*, clinics.name AS clinic_name, clinics.slug AS clinic_slug
+    SELECT calls.*, clinics.name AS clinic_name, clinics.slug AS clinic_slug,
+           appt.sms_sent AS appt_sms_sent, appt.location AS appt_location
     FROM calls
     INNER JOIN clinics ON calls.clinic_id = clinics.id
+    LEFT JOIN appointments appt ON appt.call_id = calls.id
     ${where}
     ORDER BY calls.created_at DESC LIMIT ? OFFSET ?
   `).all(...params);
@@ -734,10 +809,15 @@ function getGlobalStats() {
 
 function createAppointment(callId, data, clinicId) {
   return db.prepare(`
-    INSERT INTO appointments (clinic_id, call_id, patient_name, patient_phone, preferred_date, preferred_time, reason)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(clinicId, callId, data.name, data.phone, data.appointmentDate, data.appointmentTime, data.reason)
+    INSERT INTO appointments (clinic_id, call_id, patient_name, patient_phone, preferred_date, preferred_time, reason, location)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(clinicId, callId, data.name, data.phone, data.appointmentDate, data.appointmentTime, data.reason, data.location || null)
     .lastInsertRowid;
+}
+
+// status: 1 = sent, 2 = failed
+function updateAppointmentSmsStatus(apptId, status) {
+  db.prepare('UPDATE appointments SET sms_sent = ? WHERE id = ?').run(status, apptId);
 }
 
 function getAppointments(limit = 50, clinicId) {
@@ -855,6 +935,8 @@ function updateClinicAiConfig(id, data) {
   if (!Object.keys(filtered).length) return;
   const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
+  const row = db.prepare('SELECT slug FROM clinics WHERE id = ?').get(id);
+  if (row) invalidateClinicCache(row.slug);
 }
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
@@ -932,6 +1014,8 @@ function updateClinicTwilio(id, data) {
   if (!Object.keys(filtered).length) return;
   const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
+  const row = db.prepare('SELECT slug FROM clinics WHERE id = ?').get(id);
+  if (row) invalidateClinicCache(row.slug);
 }
 
 function getClinicBilling(id) {
@@ -952,7 +1036,11 @@ const KB_FIELDS = [
 ];
 
 function getKnowledgeBase(clinicId) {
-  return db.prepare('SELECT * FROM knowledge_base WHERE clinic_id = ?').get(clinicId) || null;
+  const hit = kbCache.get(clinicId);
+  if (hit && Date.now() < hit.expiry) return hit.data;
+  const row = db.prepare('SELECT * FROM knowledge_base WHERE clinic_id = ?').get(clinicId) || null;
+  kbCache.set(clinicId, { data: row, expiry: Date.now() + KB_TTL });
+  return row;
 }
 
 function upsertKnowledgeBase(clinicId, data) {
@@ -966,6 +1054,7 @@ function upsertKnowledgeBase(clinicId, data) {
     db.prepare(`INSERT INTO knowledge_base (clinic_id, ${KB_FIELDS.join(', ')}) VALUES (?, ${KB_FIELDS.map(() => '?').join(', ')})`)
       .run(clinicId, ...vals);
   }
+  invalidateKbCache(clinicId);
 }
 
 function logUnansweredQuestion(clinicId, callId, question) {
@@ -987,9 +1076,72 @@ function getUnansweredQuestions(clinicId, limit = 50, offset = 0) {
   `).all(...params);
 }
 
+// ── Cost Management ───────────────────────────────────────────────────────────
+
+const COST_CONFIG_DEFAULTS = {
+  admin_phone: null, admin_email: null,
+  twilio_rate_per_min: 0.0085, ai_rate_per_call: 0.08,
+  ai_monthly_budget: 200.0,
+  threshold_ai_low: 5.0, threshold_ai_critical: 2.0, threshold_twilio_low: 10.0,
+  alerts_enabled: 1,
+};
+
+function getCostConfig() {
+  return db.prepare('SELECT * FROM cost_config WHERE id = 1').get() || { id: null, ...COST_CONFIG_DEFAULTS };
+}
+
+function saveCostConfig(data) {
+  const d = { ...COST_CONFIG_DEFAULTS, ...data };
+  db.prepare(`
+    INSERT INTO cost_config
+      (id, admin_phone, admin_email, twilio_rate_per_min, ai_rate_per_call,
+       ai_monthly_budget, threshold_ai_low, threshold_ai_critical,
+       threshold_twilio_low, alerts_enabled, updated_at)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET
+      admin_phone           = excluded.admin_phone,
+      admin_email           = excluded.admin_email,
+      twilio_rate_per_min   = excluded.twilio_rate_per_min,
+      ai_rate_per_call      = excluded.ai_rate_per_call,
+      ai_monthly_budget     = excluded.ai_monthly_budget,
+      threshold_ai_low      = excluded.threshold_ai_low,
+      threshold_ai_critical = excluded.threshold_ai_critical,
+      threshold_twilio_low  = excluded.threshold_twilio_low,
+      alerts_enabled        = excluded.alerts_enabled,
+      updated_at            = CURRENT_TIMESTAMP
+  `).run(
+    d.admin_phone || null, d.admin_email || null,
+    +d.twilio_rate_per_min, +d.ai_rate_per_call,
+    +d.ai_monthly_budget,
+    +d.threshold_ai_low, +d.threshold_ai_critical, +d.threshold_twilio_low,
+    d.alerts_enabled ? 1 : 0,
+  );
+}
+
+function logCostAlert(alertType, message, value, threshold) {
+  return db.prepare(
+    'INSERT INTO cost_alerts (alert_type, message, value, threshold) VALUES (?, ?, ?, ?)'
+  ).run(alertType, message, value ?? null, threshold ?? null).lastInsertRowid;
+}
+
+function getLastAlertByType(alertType) {
+  return db.prepare(
+    'SELECT * FROM cost_alerts WHERE alert_type = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(alertType) || null;
+}
+
+function getCostAlerts(limit = 50) {
+  return db.prepare(
+    'SELECT * FROM cost_alerts ORDER BY created_at DESC LIMIT ?'
+  ).all(limit);
+}
+
 module.exports = {
   db,
   initDb,
+  // cache invalidation
+  invalidateClinicCache,
+  invalidateKbCache,
   // clinics
   createClinic,
   getClinics,
@@ -1013,6 +1165,7 @@ module.exports = {
   getStats,
   // appointments
   createAppointment,
+  updateAppointmentSmsStatus,
   getAppointments,
   updateAppointmentStatus,
   // messages
@@ -1033,4 +1186,10 @@ module.exports = {
   upsertKnowledgeBase,
   logUnansweredQuestion,
   getUnansweredQuestions,
+  // cost management
+  getCostConfig,
+  saveCostConfig,
+  logCostAlert,
+  getLastAlertByType,
+  getCostAlerts,
 };

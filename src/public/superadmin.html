@@ -138,6 +138,25 @@
       </svg>
       Knowledge Base
     </button>
+
+    <div class="mt-2 pt-2 border-t border-slate-700/40">
+      <p class="px-3 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Cost Management</p>
+    </div>
+    <button onclick="switchView('costs')" id="nav-costs"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      Cost Dashboard
+      <span id="nav-costs-alerts" class="ml-auto hidden w-2 h-2 rounded-full bg-red-400"></span>
+    </button>
+    <button onclick="switchView('cost-config')" id="nav-cost-config"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      Alert Settings
+    </button>
   </nav>
 
   <!-- Bottom info -->
@@ -185,6 +204,9 @@
       </button>
     </div>
   </header>
+
+  <!-- Alert banner -->
+  <div id="alert-banner" class="hidden flex-shrink-0"></div>
 
   <!-- Scrollable body -->
   <div id="main-body" class="flex-1 overflow-y-auto">
@@ -318,11 +340,12 @@
                 <th class="px-4 py-3 text-left">Type</th>
                 <th class="px-4 py-3 text-left">Dur.</th>
                 <th class="px-4 py-3 text-left">Status</th>
+                <th class="px-4 py-3 text-left">SMS</th>
                 <th class="px-4 py-3 text-left"></th>
               </tr>
             </thead>
             <tbody id="call-log-tbody">
-              <tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">Loading call log…</td></tr>
+              <tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">Loading call log…</td></tr>
             </tbody>
           </table>
         </div>
@@ -492,6 +515,147 @@
       </div>
 
     </div><!-- /view-kb -->
+
+    <!-- ── COST DASHBOARD VIEW ──────────────────────────────────────────── -->
+    <div id="view-costs" class="hidden p-6 space-y-6">
+
+      <!-- KPI cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="cost-kpi-grid">
+        <div class="col-span-2 lg:col-span-4 text-sm text-slate-400 text-center py-4">Loading…</div>
+      </div>
+
+      <!-- Active alerts -->
+      <div id="cost-alerts-panel" class="hidden bg-white rounded-xl border border-red-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-red-100 flex items-center justify-between">
+          <h2 class="font-semibold text-red-700 text-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Active Alerts
+          </h2>
+          <button onclick="checkAlerts()" class="text-xs text-red-600 hover:underline">Check Now</button>
+        </div>
+        <div id="cost-alerts-list" class="p-4 space-y-2"></div>
+      </div>
+
+      <!-- Per-clinic table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="font-semibold text-slate-800 text-sm">Per-Client Cost Breakdown — This Month</h2>
+          <button onclick="loadCostDashboard()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm min-w-[900px]">
+            <thead class="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase tracking-wide">
+              <tr>
+                <th class="px-4 py-3 text-left">Client</th>
+                <th class="px-4 py-3 text-left">Status</th>
+                <th class="px-4 py-3 text-right">Calls</th>
+                <th class="px-4 py-3 text-right">Minutes</th>
+                <th class="px-4 py-3 text-right">Twilio Cost</th>
+                <th class="px-4 py-3 text-right">AI Cost</th>
+                <th class="px-4 py-3 text-right">Total Cost</th>
+                <th class="px-4 py-3 text-right">Plan Price</th>
+                <th class="px-4 py-3 text-right">Est. Profit</th>
+              </tr>
+            </thead>
+            <tbody id="cost-clinic-tbody">
+              <tr><td colspan="9" class="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Alert history -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100">
+          <h2 class="font-semibold text-slate-800 text-sm">Alert History</h2>
+        </div>
+        <div id="cost-alert-history" class="p-4">
+          <p class="text-xs text-slate-400">Loading…</p>
+        </div>
+      </div>
+
+    </div><!-- /view-costs -->
+
+    <!-- ── COST CONFIG VIEW ───────────────────────────────────────────────── -->
+    <div id="view-cost-config" class="hidden p-6 max-w-2xl">
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100">
+
+        <!-- Admin contact -->
+        <div class="px-6 py-5 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm">Administrator Contact</h3>
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label class="form-label">Admin Phone <span class="normal-case font-normal text-slate-400">(receives SMS alerts — E.164 format, e.g. +13055550000)</span></label>
+              <input type="text" id="cfg-admin-phone" placeholder="+13055550000" class="form-input font-mono">
+            </div>
+            <div>
+              <label class="form-label">Admin Email <span class="normal-case font-normal text-slate-400">(receives email alerts)</span></label>
+              <input type="email" id="cfg-admin-email" placeholder="admin@yourcompany.com" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- Cost rates -->
+        <div class="px-6 py-5 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm">Cost Rate Estimates</h3>
+          <p class="text-xs text-slate-400">Used to estimate your monthly costs from call data. Adjust to match your actual Twilio and AI rates.</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="form-label">Twilio Rate ($ / minute)</label>
+              <input type="number" id="cfg-twilio-rate" step="0.0001" min="0" placeholder="0.0085" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">AI Rate ($ / completed call)</label>
+              <input type="number" id="cfg-ai-rate" step="0.01" min="0" placeholder="0.08" class="form-input">
+            </div>
+            <div class="col-span-2">
+              <label class="form-label">Monthly AI Budget ($)</label>
+              <input type="number" id="cfg-ai-budget" step="1" min="0" placeholder="200" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- Alert thresholds -->
+        <div class="px-6 py-5 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm">Alert Thresholds</h3>
+          <p class="text-xs text-slate-400">Notifications fire when remaining AI budget or Twilio balance falls below these values.</p>
+          <div class="grid grid-cols-1 gap-4">
+            <div class="flex items-center gap-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <div class="flex-1">
+                <label class="form-label text-amber-700">AI Budget Warning — alert when remaining budget drops below ($)</label>
+                <input type="number" id="cfg-ai-low" step="0.5" min="0" placeholder="5" class="form-input">
+              </div>
+            </div>
+            <div class="flex items-center gap-4 p-3 bg-red-50 border border-red-100 rounded-lg">
+              <div class="flex-1">
+                <label class="form-label text-red-700">AI Budget Critical — alert when remaining budget drops below ($)</label>
+                <input type="number" id="cfg-ai-critical" step="0.5" min="0" placeholder="2" class="form-input">
+              </div>
+            </div>
+            <div class="flex items-center gap-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <div class="flex-1">
+                <label class="form-label text-amber-700">Twilio Balance Warning — alert when Twilio account balance drops below ($)</label>
+                <input type="number" id="cfg-twilio-low" step="1" min="0" placeholder="10" class="form-input">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerts toggle + save -->
+        <div class="px-6 py-5 flex items-center justify-between gap-4">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="cfg-alerts-enabled" class="w-4 h-4 rounded text-blue-600">
+            <span class="text-sm font-medium text-slate-700">Enable SMS &amp; email alerts</span>
+          </label>
+          <div class="flex items-center gap-3">
+            <span id="cfg-save-msg" class="text-sm hidden"></span>
+            <button onclick="saveCostConfig()" class="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">Save Settings</button>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /view-cost-config -->
 
   </div><!-- /main-body -->
 </div><!-- /main -->
@@ -1083,13 +1247,15 @@ function typeBadge(t) {
 
 function switchView(view) {
   currentView = view;
-  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb'];
+  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb', 'costs', 'cost-config'];
   const titles = {
-    dashboard: ['Dashboard',      'NetCare Phone platform overview'],
-    clients:   ['Clients',        'Manage all clinic accounts'],
-    calls:     ['Call Log',       'All inbound calls across every clinic'],
-    analytics: ['Analytics',      'Call volume, intent breakdown, and language trends'],
-    kb:        ['Knowledge Base', 'AI knowledge base and test simulator'],
+    dashboard:   ['Dashboard',      'NetCare Phone platform overview'],
+    clients:     ['Clients',        'Manage all clinic accounts'],
+    calls:       ['Call Log',       'All inbound calls across every clinic'],
+    analytics:   ['Analytics',      'Call volume, intent breakdown, and language trends'],
+    kb:          ['Knowledge Base', 'AI knowledge base and test simulator'],
+    costs:       ['Cost Dashboard', 'Monthly costs, revenue, and profit per client'],
+    'cost-config': ['Alert Settings', 'Admin contact, cost rates, and alert thresholds'],
   };
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -1102,10 +1268,12 @@ function switchView(view) {
   });
   document.getElementById('view-title').textContent = (titles[view] || titles.dashboard)[0];
   document.getElementById('view-sub').textContent   = (titles[view] || titles.dashboard)[1];
-  if (view === 'calls')     loadCallLog();
-  if (view === 'analytics') loadAnalytics();
-  if (view === 'dashboard') loadHealth();
-  if (view === 'kb')        loadKb();
+  if (view === 'calls')       loadCallLog();
+  if (view === 'analytics')   loadAnalytics();
+  if (view === 'dashboard')   loadHealth();
+  if (view === 'kb')          loadKb();
+  if (view === 'costs')       loadCostDashboard();
+  if (view === 'cost-config') loadCostConfig();
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -1861,7 +2029,7 @@ async function fetchCallLog() {
   const tbody      = document.getElementById('call-log-tbody');
   const countEl   = document.getElementById('call-log-count');
   const pagination = document.getElementById('call-log-pagination');
-  tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">Loading…</td></tr>';
 
   const params = new URLSearchParams({ limit: CALL_LOG_LIMIT, offset: callLogOffset });
   const clinic = document.getElementById('call-filter-clinic').value;
@@ -1879,7 +2047,7 @@ async function fetchCallLog() {
     countEl.textContent = callLogTotal.toLocaleString() + ' calls total';
 
     if (!data.calls.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">No calls found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">No calls found</td></tr>';
       pagination.classList.add('hidden');
       return;
     }
@@ -1896,6 +2064,11 @@ async function fetchCallLog() {
       const ts   = new Date(call.created_at).toLocaleString();
       const dur  = call.duration ? (call.duration + 's') : '—';
       const type = { appointment:'Appt', message:'Msg', unknown:'—', transfer:'Transfer' }[call.call_type] || call.call_type || '—';
+      const smsBadge = call.call_type !== 'appointment'
+        ? '<span class="text-slate-300 text-xs">—</span>'
+        : call.appt_sms_sent === 1 ? '<span class="badge bg-emerald-50 text-emerald-700">Sent</span>'
+        : call.appt_sms_sent === 2 ? '<span class="badge bg-red-50 text-red-700">Failed</span>'
+        : '<span class="text-slate-300 text-xs">—</span>';
       return '<tr class="border-t border-slate-100 hover:bg-slate-50 text-sm">' +
         '<td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">' + ts + '</td>' +
         '<td class="px-4 py-3 font-medium">' + (call.clinic_name || '—') + '</td>' +
@@ -1904,6 +2077,7 @@ async function fetchCallLog() {
         '<td class="px-4 py-3 text-xs">' + type + '</td>' +
         '<td class="px-4 py-3 text-xs">' + dur + '</td>' +
         '<td class="px-4 py-3">' + statusBadge(call.status) + '</td>' +
+        '<td class="px-4 py-3">' + smsBadge + '</td>' +
         '<td class="px-4 py-3"><button onclick="viewCallDetail(' + call.id + ')" class="text-xs text-blue-600 hover:underline">Transcript</button></td>' +
         '</tr>';
     }).join('');
@@ -1915,7 +2089,7 @@ async function fetchCallLog() {
     document.getElementById('call-log-next').disabled = callLogOffset + CALL_LOG_LIMIT >= callLogTotal;
     pagination.classList.toggle('hidden', totalPages <= 1);
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-400 text-sm">' + e.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-red-400 text-sm">' + e.message + '</td></tr>';
   }
 }
 
@@ -2547,12 +2721,222 @@ async function loadUnanswered() {
   }
 }
 
+// ── Cost Dashboard ────────────────────────────────────────────────────────────
+
+function fmt$(n) { return '$' + Number(n || 0).toFixed(2); }
+
+function costKpi(label, value, valClass, bgClass, icon) {
+  return `<div class="stat-card bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+    <div class="flex items-start justify-between mb-3">
+      <div class="w-9 h-9 ${bgClass} rounded-lg flex items-center justify-center">${icon}</div>
+    </div>
+    <div class="text-2xl font-bold ${valClass}">${value}</div>
+    <div class="text-xs text-slate-400 mt-1 font-medium uppercase tracking-wide">${label}</div>
+  </div>`;
+}
+
+async function loadCostDashboard() {
+  try {
+    const [dash, clinics] = await Promise.all([
+      fetch('/superadmin/api/costs/dashboard').then(r => r.json()),
+      fetch('/superadmin/api/costs/clinics').then(r => r.json()),
+    ]);
+
+    // KPI grid
+    document.getElementById('cost-kpi-grid').innerHTML = [
+      costKpi('Calls Today',       dash.callsToday,                   'text-slate-800',   'bg-slate-100',   iconPhone()),
+      costKpi('Calls This Month',  (dash.callsThisMonth||0).toLocaleString(), 'text-indigo-700','bg-indigo-50', iconPhone()),
+      costKpi('AI Cost (Month)',   fmt$(dash.aiCostMonth),            'text-violet-700',  'bg-violet-50',   iconDollar()),
+      costKpi('Twilio Cost (Month)',fmt$(dash.twilioCostMonth),       'text-blue-700',    'bg-blue-50',     iconPhone()),
+      costKpi('Total Cost (Month)',fmt$(dash.totalCost),              'text-red-700',     'bg-red-50',      iconDollar()),
+      costKpi('Monthly Revenue',  fmt$(dash.monthlyRevenue),          'text-emerald-700', 'bg-emerald-50',  iconDollar()),
+      costKpi('Est. Profit',      fmt$(dash.profit),
+        dash.profit >= 0 ? 'text-emerald-700' : 'text-red-700',
+        dash.profit >= 0 ? 'bg-emerald-50'    : 'bg-red-50',     iconDollar()),
+      costKpi('AI Budget Left',   fmt$(dash.aiRemaining),
+        dash.aiRemaining > 5  ? 'text-emerald-700' :
+        dash.aiRemaining > 2  ? 'text-amber-700'   : 'text-red-700',
+        dash.aiRemaining > 5  ? 'bg-emerald-50'    :
+        dash.aiRemaining > 2  ? 'bg-amber-50'      : 'bg-red-50',  iconDollar()),
+    ].join('');
+
+    // Per-clinic table
+    const tbody = document.getElementById('cost-clinic-tbody');
+    if (!clinics.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400">No clients.</td></tr>';
+    } else {
+      tbody.innerHTML = clinics.map(c => {
+        const profitClass = c.profit >= 0 ? 'text-emerald-700 font-semibold' : 'text-red-600 font-semibold';
+        const statusBadge = { active:'<span class="badge bg-emerald-50 text-emerald-700">Active</span>',
+          suspended:'<span class="badge bg-amber-50 text-amber-700">Suspended</span>',
+          cancelled:'<span class="badge bg-slate-100 text-slate-500">Cancelled</span>' }[c.status] || c.status;
+        return `<tr class="border-t border-slate-100 hover:bg-slate-50 text-sm">
+          <td class="px-4 py-3 font-medium">${c.name}</td>
+          <td class="px-4 py-3">${statusBadge}</td>
+          <td class="px-4 py-3 text-right">${c.totalCalls}</td>
+          <td class="px-4 py-3 text-right">${c.totalMinutes}</td>
+          <td class="px-4 py-3 text-right text-slate-600">${fmt$(c.twilioCost)}</td>
+          <td class="px-4 py-3 text-right text-slate-600">${fmt$(c.aiCost)}</td>
+          <td class="px-4 py-3 text-right font-medium">${fmt$(c.totalCost)}</td>
+          <td class="px-4 py-3 text-right">${fmt$(c.monthlyPrice)}</td>
+          <td class="px-4 py-3 text-right ${profitClass}">${fmt$(c.profit)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Active alerts
+    await renderActiveAlerts();
+
+    // Alert history
+    await loadAlertHistory();
+
+  } catch(e) {
+    document.getElementById('cost-kpi-grid').innerHTML =
+      `<div class="col-span-4 text-sm text-red-400 text-center py-4">Error: ${e.message}</div>`;
+  }
+}
+
+async function renderActiveAlerts() {
+  try {
+    const alerts = await fetch('/superadmin/api/costs/alerts/active').then(r => r.json());
+    const panel  = document.getElementById('cost-alerts-panel');
+    const list   = document.getElementById('cost-alerts-list');
+    const dot    = document.getElementById('nav-costs-alerts');
+
+    if (!alerts.length) {
+      panel.classList.add('hidden');
+      dot.classList.add('hidden');
+      // Clear global banner
+      const banner = document.getElementById('alert-banner');
+      banner.innerHTML = '';
+      banner.classList.add('hidden');
+      return;
+    }
+
+    // Sidebar dot
+    dot.classList.remove('hidden');
+
+    // Alert panel inside cost view
+    panel.classList.remove('hidden');
+    list.innerHTML = alerts.map(a => {
+      const isCrit = a.severity === 'critical';
+      return `<div class="flex items-start gap-3 p-3 rounded-lg ${isCrit ? 'bg-red-50 border border-red-100' : 'bg-amber-50 border border-amber-100'}">
+        <svg class="w-4 h-4 mt-0.5 flex-shrink-0 ${isCrit ? 'text-red-500' : 'text-amber-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <p class="text-sm ${isCrit ? 'text-red-700' : 'text-amber-700'}">${a.message}</p>
+      </div>`;
+    }).join('');
+
+    // Global banner at top of page
+    const banner = document.getElementById('alert-banner');
+    banner.classList.remove('hidden');
+    banner.innerHTML = alerts.map(a => {
+      const isCrit = a.severity === 'critical';
+      return `<div class="px-6 py-2 text-sm font-medium ${isCrit ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'} flex items-center gap-2">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        ${a.message}
+        <button onclick="switchView('costs')" class="ml-auto text-xs underline opacity-80 hover:opacity-100">View Details</button>
+      </div>`;
+    }).join('');
+  } catch {}
+}
+
+async function checkAlerts() {
+  try {
+    await fetch('/superadmin/api/costs/alerts/check', { method: 'POST' });
+    await renderActiveAlerts();
+    await loadAlertHistory();
+  } catch(e) { alert('Error checking alerts: ' + e.message); }
+}
+
+async function loadAlertHistory() {
+  const el = document.getElementById('cost-alert-history');
+  if (!el) return;
+  try {
+    const rows = await fetch('/superadmin/api/costs/alerts/history').then(r => r.json());
+    if (!rows.length) {
+      el.innerHTML = '<p class="text-xs text-slate-400 italic">No alerts logged yet.</p>';
+      return;
+    }
+    el.innerHTML = `<table class="w-full text-xs">
+      <thead><tr class="border-b border-slate-100 text-slate-500 uppercase tracking-wide">
+        <th class="text-left py-2 pr-4">Date</th>
+        <th class="text-left py-2 pr-4">Type</th>
+        <th class="text-left py-2">Message</th>
+        <th class="text-right py-2">Value</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr class="border-t border-slate-50 hover:bg-slate-50">
+        <td class="py-2 pr-4 text-slate-400 whitespace-nowrap">${new Date(r.created_at).toLocaleString()}</td>
+        <td class="py-2 pr-4"><span class="font-mono text-slate-600">${r.alert_type}</span></td>
+        <td class="py-2 text-slate-700">${r.message}</td>
+        <td class="py-2 text-right font-medium">${r.value != null ? fmt$(r.value) : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch(e) {
+    el.innerHTML = `<p class="text-xs text-red-400">Error: ${e.message}</p>`;
+  }
+}
+
+// ── Cost Config ───────────────────────────────────────────────────────────────
+
+async function loadCostConfig() {
+  try {
+    const c = await fetch('/superadmin/api/costs/config').then(r => r.json());
+    document.getElementById('cfg-admin-phone').value   = c.admin_phone    || '';
+    document.getElementById('cfg-admin-email').value   = c.admin_email    || '';
+    document.getElementById('cfg-twilio-rate').value   = c.twilio_rate_per_min  ?? 0.0085;
+    document.getElementById('cfg-ai-rate').value       = c.ai_rate_per_call     ?? 0.08;
+    document.getElementById('cfg-ai-budget').value     = c.ai_monthly_budget    ?? 200;
+    document.getElementById('cfg-ai-low').value        = c.threshold_ai_low     ?? 5;
+    document.getElementById('cfg-ai-critical').value   = c.threshold_ai_critical ?? 2;
+    document.getElementById('cfg-twilio-low').value    = c.threshold_twilio_low  ?? 10;
+    document.getElementById('cfg-alerts-enabled').checked = !!c.alerts_enabled;
+  } catch(e) { console.error('loadCostConfig:', e); }
+}
+
+async function saveCostConfig() {
+  const btn = document.querySelector('[onclick="saveCostConfig()"]');
+  const msg = document.getElementById('cfg-save-msg');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const body = {
+      admin_phone:           document.getElementById('cfg-admin-phone').value.trim() || null,
+      admin_email:           document.getElementById('cfg-admin-email').value.trim() || null,
+      twilio_rate_per_min:   parseFloat(document.getElementById('cfg-twilio-rate').value)   || 0.0085,
+      ai_rate_per_call:      parseFloat(document.getElementById('cfg-ai-rate').value)        || 0.08,
+      ai_monthly_budget:     parseFloat(document.getElementById('cfg-ai-budget').value)      || 200,
+      threshold_ai_low:      parseFloat(document.getElementById('cfg-ai-low').value)         || 5,
+      threshold_ai_critical: parseFloat(document.getElementById('cfg-ai-critical').value)    || 2,
+      threshold_twilio_low:  parseFloat(document.getElementById('cfg-twilio-low').value)     || 10,
+      alerts_enabled:        document.getElementById('cfg-alerts-enabled').checked ? 1 : 0,
+    };
+    const r = await fetch('/superadmin/api/costs/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
+    msg.textContent = '✓ Saved';
+    msg.className   = 'text-sm text-emerald-600';
+    setTimeout(() => { msg.className = 'text-sm hidden'; }, 3000);
+  } catch(e) {
+    msg.textContent = '✗ ' + e.message;
+    msg.className   = 'text-sm text-red-600';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Settings';
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 switchView('dashboard');
 refreshAll();
 setInterval(refreshAll, 60_000);
 setTimeout(loadHealth, 500);
+setTimeout(renderActiveAlerts, 1000);
 </script>
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- PROMPT PREVIEW MODAL                                                        -->

@@ -14,8 +14,12 @@ const {
   getAllCalls, getCallCount, getCallWithTranscript,
   getCallVolumeByDay, getCallAnalyticsSummary,
   getKnowledgeBase, upsertKnowledgeBase, getUnansweredQuestions,
+  getCostConfig, saveCostConfig, getCostAlerts,
   db,
 } = require('../database/db');
+
+const { getDashboardStats, getPerClinicCosts } = require('../services/costs');
+const { checkAndSendAlerts, getActiveAlerts }  = require('../services/alerts');
 
 const { runTestMessage, runKbTest, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
 
@@ -529,6 +533,47 @@ router.post('/api/kb/test', async (req, res) => {
     const kb = getKnowledgeBase(+clinicId);
     const result = await runKbTest(clinic, kb, question);
     res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Cost Management ───────────────────────────────────────────────────────────
+
+router.get('/api/costs/dashboard', (_req, res) => {
+  try { res.json(getDashboardStats()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/clinics', (_req, res) => {
+  try { res.json(getPerClinicCosts()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/alerts/active', async (_req, res) => {
+  try { res.json(await getActiveAlerts()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/alerts/history', (_req, res) => {
+  try { res.json(getCostAlerts(50)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/costs/alerts/check', async (_req, res) => {
+  try {
+    const results = await checkAndSendAlerts();
+    res.json({ ok: true, triggered: results.length, alerts: results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/config', (_req, res) => {
+  try { res.json(getCostConfig()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/costs/config', (req, res) => {
+  try {
+    saveCostConfig(req.body);
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

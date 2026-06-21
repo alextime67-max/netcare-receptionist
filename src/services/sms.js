@@ -27,13 +27,33 @@ async function sendSmsFollowUp(clinic, toPhone, message) {
   }
 }
 
-async function sendAppointmentConfirmationSms(clinic, toPhone, patientName, date, time) {
-  const details = [date, time].filter(Boolean).join(' at ');
-  const name    = patientName || 'there';
-  const message =
-    `Hi ${name}, your appointment request at ${clinic.name} has been received` +
-    `${details ? ` for ${details}` : ''}. We will confirm shortly. Reply STOP to opt out.`;
-  return sendSmsFollowUp(clinic, toPhone, message);
+async function sendAppointmentConfirmationSms(clinic, toPhone, patientName, location, date, time, language) {
+  // Appointment confirmations bypass the sms_follow_up_enabled toggle — they are
+  // always sent when Twilio is configured, because the patient expects this message.
+  if (!clinic?.twilio_phone || !clinic?.twilio_sid || !clinic?.twilio_token) return null;
+  if (!toPhone || !toPhone.trim() || toPhone === 'anonymous') return null;
+
+  const name = patientName || 'there';
+  const loc  = location || '';
+  let message;
+
+  if (language === 'es') {
+    const locPart  = loc  ? ` para ${loc}`              : '';
+    const datePart = date ? ` para el ${date}`           : '';
+    const timePart = time ? ` a las ${time}`             : '';
+    message = `MDcare Medical Centers: Hola ${name}, su solicitud de cita${locPart} fue recibida${datePart}${timePart}. Nuestro equipo le confirmará la cita. Gracias.`;
+  } else {
+    const locPart  = loc  ? ` for ${loc}`               : '';
+    const datePart = date ? ` for ${date}`               : '';
+    const timePart = time ? ` at ${time}`                : '';
+    message = `MDcare Medical Centers: Hi ${name}, your appointment request${locPart} was received${datePart}${timePart}. Our team will confirm your appointment. Thank you.`;
+  }
+
+  // Let Twilio errors propagate so the caller can record a failed status.
+  const client = getTwilioClient(clinic);
+  const msg = await client.messages.create({ body: message, from: clinic.twilio_phone, to: toPhone });
+  console.log(`[SMS] Appointment confirmation sent to ${toPhone} — SID=${msg.sid}`);
+  return msg.sid;
 }
 
 async function sendMessageReceiptSms(clinic, toPhone, patientName) {

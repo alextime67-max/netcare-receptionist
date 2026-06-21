@@ -387,11 +387,12 @@ function initSession(callSid, callerPhone, clinic, kb = null) {
     language:  'es',
     clinic:    typeof clinic === 'object' ? clinic : { name: clinicName },
     clinicName,
-    dbId:           null,
-    turnCount:      0,
-    selectedCenter: null,
-    ivrTimeouts:    0,
-    kb:             kb || null,
+    dbId:             null,
+    turnCount:        0,
+    selectedCenter:   null,
+    ivrTimeouts:      0,
+    kb:               kb || null,
+    cachedSystemPrompt: null, // built once on first AI turn
   });
 }
 
@@ -402,6 +403,11 @@ function endSession(callSid)        { const s = sessions.get(callSid); sessions.
 function setSelectedCenter(callSid, center) {
   const s = sessions.get(callSid);
   if (s) s.selectedCenter = center;
+}
+
+function setSessionLanguage(callSid, lang) {
+  const s = sessions.get(callSid);
+  if (s) s.language = lang;
 }
 
 function incrementIvrTimeouts(callSid) {
@@ -428,20 +434,26 @@ async function processMessage(callSid, patientSpeech) {
   }
 
   try {
-    let systemPrompt = buildSystemPrompt(session.clinic);
-    if (session.selectedCenter && !session.kb) {
-      systemPrompt += `\n\n## Selected Location\nThe patient selected the ${session.selectedCenter.label}. Direct all scheduling, messages, transfers, and voicemail to this location.`;
-    }
-    if (session.kb) {
-      systemPrompt += buildKbPromptSection(session.kb, session.selectedCenter);
+    // Build system prompt once per call; cache it in the session
+    if (!session.cachedSystemPrompt) {
+      let sp = buildSystemPrompt(session.clinic);
+      if (session.selectedCenter && !session.kb) {
+        sp += `\n\n## Selected Location\nThe patient selected the ${session.selectedCenter.label}. Direct all scheduling, messages, transfers, and voicemail to this location.`;
+      }
+      if (session.kb) {
+        sp += buildKbPromptSection(session.kb, session.selectedCenter);
+      }
+      session.cachedSystemPrompt = sp;
     }
 
+    const aiT0 = Date.now();
     const response = await client.messages.create({
       model:      'claude-sonnet-4-6',
-      max_tokens: 600,
-      system:     systemPrompt,
+      max_tokens: 300,
+      system:     session.cachedSystemPrompt,
       messages:   session.messages,
     });
+    console.log(`[AI] turn=${session.turnCount} latency=${Date.now() - aiT0}ms out_tokens=${response.usage?.output_tokens ?? '?'} CallSid=${callSid}`);
 
     const rawText = response.content[0].text.trim();
     let parsed;
@@ -559,6 +571,21 @@ function getTimeoutGoodbye(lang, clinicName) {
 
 function getActiveSessions() { return sessions.size; }
 
+// Builds and caches the system prompt during /ivr-select so turn-1 /gather has no prompt-build cost
+function prewarmSession(callSid) {
+  const session = sessions.get(callSid);
+  if (!session || session.cachedSystemPrompt) return;
+  let sp = buildSystemPrompt(session.clinic);
+  if (session.selectedCenter && !session.kb) {
+    sp += `\n\n## Selected Location\nThe patient selected the ${session.selectedCenter.label}. Direct all scheduling, messages, transfers, and voicemail to this location.`;
+  }
+  if (session.kb) {
+    sp += buildKbPromptSection(session.kb, session.selectedCenter);
+  }
+  session.cachedSystemPrompt = sp;
+  console.log(`[AI] Session prewarmed  CallSid=${callSid}`);
+}
+
 // ── KB test (stateless — for Super Admin simulator) ───────────────────────────
 
 async function runKbTest(clinic, kb, question) {
@@ -594,11 +621,13 @@ module.exports = {
   INDUSTRY_TEMPLATES,
   buildSystemPrompt,
   getActiveSessions,
+  prewarmSession,
   initSession,
   getSession,
   setSessionDbId,
   endSession,
   setSelectedCenter,
+  setSessionLanguage,
   incrementIvrTimeouts,
   processMessage,
   runTestMessage,
