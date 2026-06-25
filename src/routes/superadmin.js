@@ -34,7 +34,7 @@ const { getDashboardStats, getPerClinicCosts } = require('../services/costs');
 const { checkAndSendAlerts, getActiveAlerts }  = require('../services/alerts');
 
 const { runTestMessage, runKbTest, getInitialGreeting, buildSystemPrompt, buildKbPromptSection, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
-const { createEphemeralSession } = require('../services/realtime');
+const { generateVoiceToken } = require('../services/realtime');
 
 const SA_USER = process.env.SUPERADMIN_USER || 'superadmin';
 const SA_PASS = process.env.SUPERADMIN_PASS || 'SuperAdmin2024!';
@@ -209,21 +209,15 @@ router.post('/api/clinics/:id/ai/test', async (req, res) => {
 
 // ── OpenAI Realtime ephemeral session (browser WebRTC Test Voice) ────────────
 
-router.post('/api/clinics/:id/realtime/session', async (req, res) => {
-  try {
-    const clinic = getClinicAiConfig(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+router.post('/api/clinics/:id/realtime/session', (req, res) => {
+  const clinic = getClinicAiConfig(+req.params.id);
+  if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
 
-    const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-    if (!apiKey) return res.status(400).json({ error: 'OpenAI API key not configured for this clinic. Add it in AI Settings → OpenAI Realtime Voice.' });
+  const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
+  if (!apiKey) return res.status(400).json({ error: 'OpenAI API key not configured for this clinic. Add it in AI Settings → OpenAI Realtime Voice.' });
 
-    const kb      = getKnowledgeBase(+req.params.id);
-    const session = await createEphemeralSession(apiKey, clinic, kb);
-    res.json(session);
-  } catch (e) {
-    console.error('[Realtime session]', e.message);
-    res.status(500).json({ error: e.message });
-  }
+  const token = generateVoiceToken(+req.params.id);
+  res.json({ ws_token: token });
 });
 
 // ── Live stats (active call sessions) ────────────────────────────────────────

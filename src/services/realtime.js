@@ -1,8 +1,26 @@
-const https     = require('https');
+const crypto    = require('crypto');
 const WebSocket = require('ws');
 
 const REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
 const REALTIME_URL   = `wss://api.openai.com/v1/realtime?model=${REALTIME_MODEL}`;
+
+// ── One-time voice tokens for browser WebSocket auth ─────────────────────────
+
+const _voiceTokens = new Map();
+
+function generateVoiceToken(clinicId) {
+  const token = crypto.randomBytes(16).toString('hex');
+  _voiceTokens.set(token, { clinicId, expires: Date.now() + 60_000 });
+  setTimeout(() => _voiceTokens.delete(token), 60_000);
+  return token;
+}
+
+function consumeVoiceToken(token) {
+  const data = _voiceTokens.get(token);
+  if (!data) return null;
+  _voiceTokens.delete(token);
+  return data.expires > Date.now() ? data.clinicId : null;
+}
 
 // ── System prompt for Realtime API ───────────────────────────────────────────
 
@@ -98,47 +116,32 @@ async function createEphemeralSession(apiKey, clinic, kb) {
   const instructions = buildRealtimeInstructions(clinic, kb);
   const voice        = clinic.openai_voice || 'shimmer';
 
-  const body = JSON.stringify({
-    model: REALTIME_MODEL,
-    voice,
-    instructions,
-    input_audio_format:  'pcm16',
-    output_audio_format: 'pcm16',
-    input_audio_transcription: { model: 'whisper-1' },
-    turn_detection: {
-      type:                 'server_vad',
-      threshold:            0.5,
-      prefix_padding_ms:    300,
-      silence_duration_ms:  700,
+  const res = await fetch('https://api.openai.com/v1/realtime/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type':  'application/json',
+      'OpenAI-Beta':   'realtime=v1',
     },
-    temperature: 0.8,
-  });
-
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: 'api.openai.com',
-      path:     '/v1/realtime/sessions',
-      method:   'POST',
-      headers: {
-        Authorization:   `Bearer ${apiKey}`,
-        'Content-Type':  'application/json',
-        'Content-Length': Buffer.byteLength(body),
+    body: JSON.stringify({
+      model: REALTIME_MODEL,
+      voice,
+      instructions,
+      input_audio_format:  'pcm16',
+      output_audio_format: 'pcm16',
+      input_audio_transcription: { model: 'whisper-1' },
+      turn_detection: {
+        type:                 'server_vad',
+        threshold:            0.5,
+        prefix_padding_ms:    300,
+        silence_duration_ms:  700,
       },
-    }, res => {
-      let data = '';
-      res.on('data', c => { data += c; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          if (res.statusCode >= 400) reject(new Error(parsed.error?.message || `OpenAI ${res.statusCode}`));
-          else resolve(parsed);
-        } catch { reject(new Error('Invalid JSON from OpenAI')); }
-      });
-    });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
+      temperature: 0.8,
+    }),
   });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || `OpenAI ${res.status}`);
+  return data;
 }
 
 // ── Twilio Media Streams → OpenAI Realtime relay (server-side WebSocket) ─────
@@ -252,4 +255,89 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
   twilioWs.on('error', e => console.error(`[Realtime:${clinicName}] Twilio WS error:`, e.message));
 }
 
-module.exports = { buildRealtimeInstructions, createEphemeralSession, createTwilioRelay };
+// ── Browser relay — WebSocket proxy (browser → our server → OpenAI) ──────────
+// Browser connects to /realtime/browser/:token with a one-time voice token.
+// We proxy all Realtime API events bidirectionally so the browser handles
+// audio capture/playback via Web Audio API without ever seeing the API key.
+
+function createBrowserRelay(browserWs, apiKey, clinic, kb) {
+  const instructions = buildRealtimeInstructions(clinic, kb);
+  const voice        = clinic.openai_voice || 'shimmer';
+  const clinicName   = clinic.name || 'the clinic';
+
+  const openaiWs = new WebSocket(REALTIME_URL, {
+    headers: { Authorization: `Bearer ${apiKey}`, 'OpenAI-Beta': 'realtime=v1' },
+  });
+
+  let greetingTriggered = false;
+
+  function sendToOpenAI(obj) {
+    if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
+  }
+
+  openaiWs.on('open', () => {
+    console.log(`[Realtime:Browser] Connected to OpenAI for ${clinicName}`);
+    sendToOpenAI({
+      type: 'session.update',
+      session: {
+        voice,
+        instructions,
+        input_audio_format:  'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: { model: 'whisper-1' },
+        turn_detection: {
+          type:                'server_vad',
+          threshold:           0.5,
+          prefix_padding_ms:   300,
+          silence_duration_ms: 700,
+        },
+        temperature: 0.8,
+      },
+    });
+  });
+
+  openaiWs.on('message', raw => {
+    let evt;
+    try { evt = JSON.parse(raw); } catch { return; }
+
+    if (evt.type === 'session.updated' && !greetingTriggered) {
+      greetingTriggered = true;
+      sendToOpenAI({ type: 'response.create' });
+    }
+    if (evt.type === 'conversation.item.input_audio_transcription.completed') {
+      console.log(`[Realtime:Browser:${clinicName}] User: ${evt.transcript}`);
+    }
+    if (evt.type === 'response.audio_transcript.done') {
+      console.log(`[Realtime:Browser:${clinicName}] Ana: ${evt.transcript}`);
+    }
+    if (evt.type === 'error') {
+      console.error(`[Realtime:Browser:${clinicName}] Error:`, evt.error?.message);
+    }
+
+    try { if (browserWs.readyState === WebSocket.OPEN) browserWs.send(raw); } catch {}
+  });
+
+  openaiWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] WS error:`, e.message));
+  openaiWs.on('close', () => {
+    console.log(`[Realtime:Browser:${clinicName}] OpenAI closed`);
+    try { browserWs.close(); } catch {}
+  });
+
+  browserWs.on('message', raw => {
+    try { if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(raw); } catch {}
+  });
+  browserWs.on('close', () => {
+    console.log(`[Realtime:Browser:${clinicName}] Browser disconnected`);
+    try { openaiWs.close(); } catch {}
+  });
+  browserWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] Browser WS error:`, e.message));
+}
+
+module.exports = {
+  buildRealtimeInstructions,
+  createEphemeralSession,
+  createTwilioRelay,
+  createBrowserRelay,
+  generateVoiceToken,
+  consumeVoiceToken,
+};

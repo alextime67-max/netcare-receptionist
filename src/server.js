@@ -42,22 +42,45 @@ const server = http.createServer(app);
 const wss    = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
-  const match = req.url?.match(/^\/realtime\/twilio\/([a-z0-9-]+)$/);
-  if (!match) { socket.destroy(); return; }
+  const twilioMatch  = req.url?.match(/^\/realtime\/twilio\/([a-z0-9-]+)$/);
+  const browserMatch = req.url?.match(/^\/realtime\/browser\/([a-f0-9]{32})$/);
 
-  wss.handleUpgrade(req, socket, head, ws => {
-    const { getClinicBySlug, getKnowledgeBase } = require('./database/db');
-    const { createTwilioRelay }                 = require('./services/realtime');
+  if (twilioMatch) {
+    wss.handleUpgrade(req, socket, head, ws => {
+      const { getClinicBySlug, getKnowledgeBase } = require('./database/db');
+      const { createTwilioRelay }                 = require('./services/realtime');
 
-    const clinic = getClinicBySlug(match[1]);
-    if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
+      const clinic = getClinicBySlug(twilioMatch[1]);
+      if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
 
-    const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-    if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
+      const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
+      if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
 
-    const kb = getKnowledgeBase(clinic.id);
-    createTwilioRelay(ws, apiKey, clinic, kb);
-  });
+      const kb = getKnowledgeBase(clinic.id);
+      createTwilioRelay(ws, apiKey, clinic, kb);
+    });
+
+  } else if (browserMatch) {
+    wss.handleUpgrade(req, socket, head, ws => {
+      const { getClinicAiConfig, getKnowledgeBase } = require('./database/db');
+      const { consumeVoiceToken, createBrowserRelay } = require('./services/realtime');
+
+      const clinicId = consumeVoiceToken(browserMatch[1]);
+      if (!clinicId) { ws.close(1008, 'Invalid or expired token'); return; }
+
+      const clinic = getClinicAiConfig(clinicId);
+      if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
+
+      const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
+      if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
+
+      const kb = getKnowledgeBase(clinicId);
+      createBrowserRelay(ws, apiKey, clinic, kb);
+    });
+
+  } else {
+    socket.destroy();
+  }
 });
 
 server.listen(PORT, '0.0.0.0', () => {

@@ -4888,13 +4888,14 @@ async function saveCostConfig() {
   }
 }
 
-// ── Live Voice Test (OpenAI Realtime WebRTC) ──────────────────────────────────
+// ── Live Voice Test (WebSocket relay → OpenAI Realtime + Web Audio) ──────────
 
-let _voicePc        = null;  // RTCPeerConnection
-let _voiceAudio     = null;  // <audio> element for Ana's voice
-let _voiceDc        = null;  // data channel for events
-let _voiceStream    = null;  // microphone MediaStream
+let _voiceWs        = null;   // WebSocket to our server relay
+let _voiceAudioCtx  = null;   // AudioContext (24 kHz)
+let _voiceProcNode  = null;   // ScriptProcessorNode for mic capture
+let _voiceMicStream = null;   // MediaStream from getUserMedia
 let _voiceConnected = false;
+let _voiceNextTime  = 0;      // scheduled playback cursor (AudioContext seconds)
 
 function voiceSetStatus(text, color = 'slate') {
   const colors = {
@@ -4944,75 +4945,97 @@ async function voiceStart() {
   const stopBtn  = document.getElementById('voice-stop-btn');
   startBtn.disabled = true;
   startBtn.innerHTML = '<span class="animate-spin">⏳</span> Connecting…';
-  voiceSetStatus('Requesting session token…', 'blue');
+  voiceSetStatus('Requesting session…', 'blue');
 
   try {
-    // 1. Get ephemeral key from our server
+    // 1. Get one-time WS token from our server (protected by Basic Auth)
     const tokenRes = await fetch(`/superadmin/api/clinics/${_trainClinicId}/realtime/session`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
     });
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) throw new Error(tokenData.error || 'Session error');
-    const ephemeralKey = tokenData.client_secret?.value;
-    if (!ephemeralKey) throw new Error('No ephemeral key returned from OpenAI');
+    const wsToken = tokenData.ws_token;
+    if (!wsToken) throw new Error('No session token returned from server');
 
     voiceSetStatus('Requesting microphone access…', 'blue');
 
-    // 2. Capture microphone
-    _voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // 2. Capture microphone (24 kHz mono for OpenAI pcm16)
+    _voiceMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, sampleRate: 24000, echoCancellation: true, noiseSuppression: true },
+    });
 
-    voiceSetStatus('Connecting to OpenAI Realtime…', 'blue');
+    // 3. Create AudioContext at 24 kHz (matches OpenAI pcm16 sample rate)
+    _voiceAudioCtx = new AudioContext({ sampleRate: 24000 });
+    _voiceNextTime = 0;
 
-    // 3. Create WebRTC peer connection
-    _voicePc = new RTCPeerConnection();
+    voiceSetStatus('Connecting to Ana…', 'blue');
 
-    // 4. Attach audio element for Ana's voice output
-    _voiceAudio = document.createElement('audio');
-    _voiceAudio.autoplay = true;
-    _voicePc.ontrack = e => {
-      _voiceAudio.srcObject = e.streams[0];
+    // 4. Open WebSocket to our server relay
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    _voiceWs = new WebSocket(`${proto}//${location.host}/realtime/browser/${wsToken}`);
+
+    _voiceWs.onopen = () => {
+      try {
+        // 5. Mic → ScriptProcessorNode → base64 PCM16 → WebSocket
+        const source = _voiceAudioCtx.createMediaStreamSource(_voiceMicStream);
+        _voiceProcNode = _voiceAudioCtx.createScriptProcessor(4096, 1, 1);
+
+        _voiceProcNode.onaudioprocess = e => {
+          if (!_voiceWs || _voiceWs.readyState !== 1 /* OPEN */) return;
+          const f32 = e.inputBuffer.getChannelData(0);
+          const i16 = new Int16Array(f32.length);
+          for (let i = 0; i < f32.length; i++) {
+            i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32768)));
+          }
+          // Int16 → Uint8 → base64 in chunks to avoid call-stack limit
+          const bytes = new Uint8Array(i16.buffer);
+          let bin = '';
+          for (let i = 0; i < bytes.length; i += 32768) {
+            bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
+          }
+          _voiceWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: btoa(bin) }));
+          // Silence the output buffer to prevent mic echo through speakers
+          e.outputBuffer.getChannelData(0).fill(0);
+        };
+
+        // Must connect to destination to keep the audio graph alive
+        const silentGain = _voiceAudioCtx.createGain();
+        silentGain.gain.value = 0;
+        source.connect(_voiceProcNode);
+        _voiceProcNode.connect(silentGain);
+        silentGain.connect(_voiceAudioCtx.destination);
+
+        _voiceConnected = true;
+        voiceSetStatus('⏳ Ana is warming up — she will greet you in a moment…', 'blue');
+        startBtn.innerHTML = '🎙️ Start Voice Chat';
+        startBtn.disabled  = false;
+        stopBtn.disabled   = false;
+        stopBtn.classList.remove('opacity-40');
+      } catch (audioErr) {
+        voiceSetStatus(`Audio setup failed: ${audioErr.message}`, 'red');
+        voiceStop(false);
+      }
     };
 
-    // 5. Add microphone track
-    _voiceStream.getTracks().forEach(track => _voicePc.addTrack(track, _voiceStream));
-
-    // 6. Data channel for events (transcription, etc.)
-    _voiceDc = _voicePc.createDataChannel('oai-events');
-    _voiceDc.onmessage = e => {
+    _voiceWs.onmessage = e => {
       try { voiceHandleEvent(JSON.parse(e.data)); } catch {}
     };
 
-    // 7. Create SDP offer
-    const offer = await _voicePc.createOffer();
-    await _voicePc.setLocalDescription(offer);
+    _voiceWs.onerror = () => {
+      voiceSetStatus('WebSocket error — check that the server is running', 'red');
+      startBtn.innerHTML = '🎙️ Start Voice Chat';
+      startBtn.disabled  = false;
+      voiceStop(false);
+    };
 
-    // 8. Send offer to OpenAI WebRTC endpoint
-    const model  = 'gpt-4o-realtime-preview-2024-12-17';
-    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
-      method: 'POST',
-      body:   offer.sdp,
-      headers: {
-        Authorization:  `Bearer ${ephemeralKey}`,
-        'Content-Type': 'application/sdp',
-      },
-    });
-    if (!sdpRes.ok) {
-      const err = await sdpRes.text();
-      throw new Error(`OpenAI WebRTC: ${sdpRes.status} — ${err.slice(0, 200)}`);
-    }
-
-    // 9. Set remote description (OpenAI's answer)
-    const answer = { type: 'answer', sdp: await sdpRes.text() };
-    await _voicePc.setRemoteDescription(answer);
-
-    _voiceConnected = true;
-    voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
-    startBtn.innerHTML = '🎙️ Start Voice Chat';
-    startBtn.disabled  = false;
-    stopBtn.disabled   = false;
-    stopBtn.classList.remove('opacity-40');
-
-    voicePushBubble('assistant', '(Ana is ready — say hello or ask a question)');
+    _voiceWs.onclose = () => {
+      if (_voiceConnected) {
+        _voiceConnected = false;
+        voiceSetStatus('Disconnected.', 'slate');
+        const sb = document.getElementById('voice-stop-btn');
+        if (sb) { sb.disabled = true; sb.classList.add('opacity-40'); }
+      }
+    };
 
   } catch (e) {
     voiceSetStatus(`Error: ${e.message}`, 'red');
@@ -5023,11 +5046,12 @@ async function voiceStart() {
 }
 
 function voiceStop(clearStatus = true) {
-  if (_voicePc)     { try { _voicePc.close(); }     catch {} _voicePc  = null; }
-  if (_voiceStream) { _voiceStream.getTracks().forEach(t => t.stop()); _voiceStream = null; }
-  if (_voiceAudio)  { _voiceAudio.srcObject = null; _voiceAudio = null; }
-  _voiceDc        = null;
+  if (_voiceWs)       { try { _voiceWs.close(); }        catch {} _voiceWs       = null; }
+  if (_voiceProcNode) { try { _voiceProcNode.disconnect(); } catch {} _voiceProcNode = null; }
+  if (_voiceAudioCtx) { try { _voiceAudioCtx.close(); }  catch {} _voiceAudioCtx = null; }
+  if (_voiceMicStream){ _voiceMicStream.getTracks().forEach(t => t.stop()); _voiceMicStream = null; }
   _voiceConnected = false;
+  _voiceNextTime  = 0;
 
   const stopBtn = document.getElementById('voice-stop-btn');
   if (stopBtn) { stopBtn.disabled = true; stopBtn.classList.add('opacity-40'); }
@@ -5037,8 +5061,42 @@ function voiceStop(clearStatus = true) {
   if (partial) partial.classList.add('hidden');
 }
 
+// Play a base64 PCM16 audio chunk from OpenAI through the AudioContext
+function voicePlayAudio(b64) {
+  if (!_voiceAudioCtx || _voiceAudioCtx.state === 'closed') return;
+  try {
+    const binary = atob(b64);
+    const bytes  = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const i16   = new Int16Array(bytes.buffer);
+    const f32   = new Float32Array(i16.length);
+    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+
+    const buf = _voiceAudioCtx.createBuffer(1, f32.length, 24000);
+    buf.copyToChannel(f32, 0);
+    const src = _voiceAudioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(_voiceAudioCtx.destination);
+
+    const now     = _voiceAudioCtx.currentTime;
+    const startAt = Math.max(now + 0.01, _voiceNextTime);
+    src.start(startAt);
+    _voiceNextTime = startAt + buf.duration;
+  } catch(e) { /* chunk error — skip */ }
+}
+
 function voiceHandleEvent(evt) {
-  // Live transcription — what the caller (user) is saying
+  // Ana's audio — play it
+  if (evt.type === 'response.audio.delta' && evt.delta) {
+    voicePlayAudio(evt.delta);
+  }
+
+  // User was interrupted → reset playback cursor so Ana stops mid-sentence
+  if (evt.type === 'input_speech_started' || evt.type === 'output_audio_buffer.cleared') {
+    if (_voiceAudioCtx) _voiceNextTime = _voiceAudioCtx.currentTime;
+  }
+
+  // Partial transcription — what the user is saying live
   if (evt.type === 'conversation.item.input_audio_transcription.delta') {
     const partial = document.getElementById('voice-live-partial');
     const txt     = document.getElementById('voice-partial-text');
@@ -5058,22 +5116,22 @@ function voiceHandleEvent(evt) {
     if (evt.transcript?.trim()) voicePushBubble('assistant', evt.transcript.trim());
   }
 
-  // Session ready
-  if (evt.type === 'session.created' || evt.type === 'session.updated') {
+  // Session lifecycle
+  if (evt.type === 'session.updated') {
+    voiceSetStatus('🟢 Connected — Ana will greet you shortly…', 'green');
+  }
+
+  // Speaking indicators
+  if (evt.type === 'output_audio_buffer.started') {
+    voiceSetStatus('🗣️ Ana is speaking…', 'green');
+  }
+  if (evt.type === 'output_audio_buffer.stopped') {
     voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
   }
 
   // Errors
   if (evt.type === 'error') {
-    voiceSetStatus(`OpenAI error: ${evt.error?.message || JSON.stringify(evt.error)}`, 'red');
-  }
-
-  // Ana is speaking
-  if (evt.type === 'output_audio_buffer.started') {
-    voiceSetStatus('🟢 Ana is speaking…', 'green');
-  }
-  if (evt.type === 'output_audio_buffer.stopped') {
-    voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
+    voiceSetStatus(`Error: ${evt.error?.message || JSON.stringify(evt.error)}`, 'red');
   }
 }
 
