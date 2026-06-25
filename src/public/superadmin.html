@@ -1053,9 +1053,18 @@
             <div id="voice-status-dot" class="w-3 h-3 rounded-full bg-slate-300" title="Disconnected"></div>
           </div>
 
+          <!-- Clinic selector (self-contained — no dependency on Training Center dropdown) -->
+          <div class="flex items-center gap-3">
+            <label for="voice-clinic-select" class="text-xs font-medium text-slate-600 whitespace-nowrap">Clinic:</label>
+            <select id="voice-clinic-select"
+              class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 text-slate-700">
+              <option value="">— select a clinic —</option>
+            </select>
+          </div>
+
           <!-- Connection status -->
           <div id="voice-status-bar" class="flex items-center gap-2 text-xs text-slate-500 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
-            <span id="voice-status-text">Ready — press Start to connect</span>
+            <span id="voice-status-text">Select a clinic above, then press Start</span>
           </div>
 
           <!-- Controls -->
@@ -1068,7 +1077,7 @@
               class="px-5 py-2.5 bg-red-500 text-white text-sm font-semibold rounded-xl hover:bg-red-600 transition-colors shadow-sm opacity-40 flex items-center gap-2">
               <span>⏹</span> Stop
             </button>
-            <span class="text-xs text-slate-400">Requires: clinic selected above · OpenAI API key saved in AI Settings</span>
+            <span class="text-xs text-slate-400">Requires: OpenAI API key saved in AI Settings for the selected clinic</span>
           </div>
         </div>
 
@@ -3807,10 +3816,20 @@ let _trainSources  = [];
 
 function populateTrainClinicFilter() {
   const sel = document.getElementById('train-clinic');
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— select a clinic —</option>' +
-    allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected':''}>${escHtml(c.name)}</option>`).join('');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— select a clinic —</option>' +
+      allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected':''}>${escHtml(c.name)}</option>`).join('');
+  }
+  // Mirror into the voice panel selector
+  const vsel = document.getElementById('voice-clinic-select');
+  if (vsel) {
+    const vcur = vsel.value;
+    vsel.innerHTML = '<option value="">— select a clinic —</option>' +
+      allClients.map(c => `<option value="${c.id}" ${c.id == vcur ? 'selected':''}>${escHtml(c.name)}</option>`).join('');
+    // Auto-select from training center dropdown if a clinic is already chosen there
+    if (!vcur && _trainClinicId) vsel.value = _trainClinicId;
+  }
 }
 
 async function loadTrainingData() {
@@ -3851,10 +3870,6 @@ function renderTrainStatusBadge(d) {
 }
 
 function switchTrainSection(sec) {
-  if (sec === 'voice' && !_trainClinicId) {
-    alert('Select a clinic first from the dropdown at the top of AI Training Center.');
-    return;
-  }
   ['sources','faqs','rules','notes','viewer','test','practice','voice'].forEach(s => {
     document.getElementById(`tsec-${s}`)?.classList.toggle('hidden', s !== sec);
     const tab = document.getElementById(`ttab-${s}`);
@@ -3865,6 +3880,10 @@ function switchTrainSection(sec) {
     }
   });
   if (sec === 'viewer') trainLoadViewer();
+  if (sec === 'voice') {
+    // Populate voice clinic selector (also syncs from training center dropdown if set)
+    populateTrainClinicFilter();
+  }
 }
 
 // ── Sources ───────────────────────────────────────────────────────────────────
@@ -4939,17 +4958,22 @@ function voiceClearTranscript() {
 }
 
 async function voiceStart() {
-  if (!_trainClinicId) return alert('Select a clinic first from the dropdown at the top of AI Training Center.');
+  // Read clinic from the voice panel's own selector (or fall back to training center)
+  const clinicId = document.getElementById('voice-clinic-select')?.value || _trainClinicId;
+  if (!clinicId) {
+    voiceSetStatus('Select a clinic from the dropdown above first', 'amber');
+    return;
+  }
 
   const startBtn = document.getElementById('voice-start-btn');
   const stopBtn  = document.getElementById('voice-stop-btn');
   startBtn.disabled = true;
   startBtn.innerHTML = '<span class="animate-spin">⏳</span> Connecting…';
-  voiceSetStatus('Requesting session…', 'blue');
+  voiceSetStatus(`Requesting session for clinic ${clinicId}…`, 'blue');
 
   try {
     // 1. Get one-time WS token from our server (protected by Basic Auth)
-    const tokenRes = await fetch(`/superadmin/api/clinics/${_trainClinicId}/realtime/session`, {
+    const tokenRes = await fetch(`/superadmin/api/clinics/${clinicId}/realtime/session`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
     });
     const tokenData = await tokenRes.json();

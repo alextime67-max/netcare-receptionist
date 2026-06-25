@@ -1,7 +1,7 @@
 const crypto    = require('crypto');
 const WebSocket = require('ws');
 
-const REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
+const REALTIME_MODEL = 'gpt-realtime-2025-08-28';
 const REALTIME_URL   = `wss://api.openai.com/v1/realtime?model=${REALTIME_MODEL}`;
 
 // ── One-time voice tokens for browser WebSocket auth ─────────────────────────
@@ -152,10 +152,7 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
   const clinicName   = clinic.name || 'the clinic';
 
   const openaiWs = new WebSocket(REALTIME_URL, {
-    headers: {
-      Authorization:  `Bearer ${apiKey}`,
-      'OpenAI-Beta':  'realtime=v1',
-    },
+    headers: { Authorization: `Bearer ${apiKey}` },
   });
 
   let streamSid    = null;
@@ -266,7 +263,7 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
   const clinicName   = clinic.name || 'the clinic';
 
   const openaiWs = new WebSocket(REALTIME_URL, {
-    headers: { Authorization: `Bearer ${apiKey}`, 'OpenAI-Beta': 'realtime=v1' },
+    headers: { Authorization: `Bearer ${apiKey}` },
   });
 
   let greetingTriggered = false;
