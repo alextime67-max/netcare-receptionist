@@ -251,6 +251,11 @@ function initDb() {
   _addColumnIfMissing('training_faqs',   'sort_order',    'INTEGER DEFAULT 0');
   _addColumnIfMissing('training_sources','sort_order',    'INTEGER DEFAULT 0');
 
+  // ── Migrations: OpenAI Realtime Voice ────────────────────────────────────
+  _addColumnIfMissing('clinics', 'openai_api_key',  'TEXT');
+  _addColumnIfMissing('clinics', 'openai_voice',    "TEXT DEFAULT 'shimmer'");
+  _addColumnIfMissing('clinics', 'openai_language', "TEXT DEFAULT 'es'");
+
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
   for (const row of noAcct) {
@@ -980,7 +985,8 @@ function getClinicAiConfig(id) {
            ai_appointment_instructions, ai_transfer_rules,
            ai_office_hours, ai_after_hours_message, ai_emergency_instructions,
            ai_industry_template, ai_master_prompt,
-           ai_voice_es, ai_voice_en
+           ai_voice_es, ai_voice_en,
+           openai_api_key, openai_voice, openai_language
     FROM clinics WHERE id = ?
   `).get(id);
 }
@@ -993,6 +999,7 @@ function updateClinicAiConfig(id, data) {
     'ai_office_hours', 'ai_after_hours_message', 'ai_emergency_instructions',
     'ai_industry_template', 'ai_master_prompt',
     'ai_voice_es', 'ai_voice_en',
+    'openai_api_key', 'openai_voice', 'openai_language',
   ];
   const map = {
     ai_assistant_name:           data.assistantName,
@@ -1010,6 +1017,9 @@ function updateClinicAiConfig(id, data) {
     ai_master_prompt:            data.masterPrompt,
     ai_voice_es:                 data.voiceEs,
     ai_voice_en:                 data.voiceEn,
+    openai_api_key:              data.openaiApiKey,
+    openai_voice:                data.openaiVoice,
+    openai_language:             data.openaiLanguage,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])

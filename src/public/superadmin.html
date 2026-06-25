@@ -683,6 +683,7 @@
         <button id="ttab-viewer"  onclick="switchTrainSection('viewer')"  class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📚 Knowledge</button>
         <button id="ttab-test"    onclick="switchTrainSection('test')"    class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🧪 Test Ana</button>
         <button id="ttab-practice" onclick="switchTrainSection('practice')" class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🎤 Practice</button>
+        <button id="ttab-voice"    onclick="switchTrainSection('voice')"    class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🟢 Live Voice</button>
       </div>
 
       <!-- ── SECTION: Sources ─────────────────────────────────── -->
@@ -1038,6 +1039,68 @@
         </div>
 
       </div><!-- /tsec-practice -->
+
+      <!-- ── SECTION: Live Voice Test (OpenAI Realtime) ─────────────────── -->
+      <div id="tsec-voice" class="hidden space-y-4">
+
+        <!-- Status bar -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Live Voice Test — OpenAI Realtime</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Talk directly with Ana using your microphone. Uses GPT-4o Realtime with the clinic knowledge base.</p>
+            </div>
+            <div id="voice-status-dot" class="w-3 h-3 rounded-full bg-slate-300" title="Disconnected"></div>
+          </div>
+
+          <!-- Connection status -->
+          <div id="voice-status-bar" class="flex items-center gap-2 text-xs text-slate-500 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+            <span id="voice-status-text">Ready — press Start to connect</span>
+          </div>
+
+          <!-- Controls -->
+          <div class="flex gap-3 items-center flex-wrap">
+            <button id="voice-start-btn" onclick="voiceStart()"
+              class="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm flex items-center gap-2">
+              <span>🎙️</span> Start Voice Chat
+            </button>
+            <button id="voice-stop-btn" onclick="voiceStop()" disabled
+              class="px-5 py-2.5 bg-red-500 text-white text-sm font-semibold rounded-xl hover:bg-red-600 transition-colors shadow-sm opacity-40 flex items-center gap-2">
+              <span>⏹</span> Stop
+            </button>
+            <span class="text-xs text-slate-400">Requires: clinic selected above · OpenAI API key saved in AI Settings</span>
+          </div>
+        </div>
+
+        <!-- Live transcription -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-slate-800">Live Conversation</h3>
+            <button onclick="voiceClearTranscript()" class="text-xs text-slate-400 hover:text-slate-600">Clear</button>
+          </div>
+
+          <!-- Conversation bubbles -->
+          <div id="voice-transcript" class="space-y-3 max-h-96 overflow-y-auto rounded-xl bg-slate-50 p-4 min-h-40">
+            <p class="text-xs text-slate-400 italic text-center">Conversation will appear here when connected.</p>
+          </div>
+
+          <!-- Live transcription in progress -->
+          <div id="voice-live-partial" class="hidden px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <p class="text-xs text-blue-500 font-medium uppercase tracking-wide mb-1">Hearing you…</p>
+            <p id="voice-partial-text" class="text-sm text-blue-700 italic"></p>
+          </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 space-y-1">
+          <p class="font-semibold">Before using Live Voice:</p>
+          <p>1. Select a clinic from the dropdown at the top of AI Training Center.</p>
+          <p>2. Go to AI Settings → OpenAI Realtime Voice → enter your OpenAI API key and save.</p>
+          <p>3. Allow microphone access when prompted by your browser.</p>
+          <p>4. Speak naturally — Ana will respond in the configured language.</p>
+        </div>
+
+      </div><!-- /tsec-voice -->
 
     </div><!-- /view-train -->
 
@@ -1645,6 +1708,47 @@
             <p class="text-xs text-slate-400 mt-1.5">All voices use Amazon Polly via Twilio. Neural voices sound more natural. Browser preview uses system TTS (approximate match).</p>
           </div>
         </div>
+      </div>
+
+      <!-- OpenAI Realtime Voice -->
+      <div class="border-t border-slate-100 pt-5">
+        <div class="flex items-center gap-2 mb-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">OpenAI Realtime Voice</p>
+          <span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">NEW</span>
+        </div>
+        <p class="text-xs text-slate-400 mb-4">Powers the Live Voice Test and Twilio phone calls with speech-to-speech AI. Uses OpenAI GPT-4o Realtime with natural voices.</p>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="form-label">OpenAI API Key <span class="normal-case font-normal text-slate-400">— stored per clinic, overrides server environment key</span></label>
+            <input id="f-openai-api-key" type="password" placeholder="sk-..." autocomplete="off" class="form-input font-mono text-sm">
+          </div>
+          <div>
+            <label class="form-label">Voice</label>
+            <select id="f-openai-voice" class="form-input bg-white">
+              <optgroup label="Female voices">
+                <option value="shimmer">Shimmer — warm, natural (Recommended for Spanish)</option>
+                <option value="nova">Nova — bright, friendly</option>
+                <option value="coral">Coral — clear, professional</option>
+              </optgroup>
+              <optgroup label="Male voices">
+                <option value="alloy">Alloy — balanced, neutral</option>
+                <option value="echo">Echo — smooth, calm</option>
+                <option value="fable">Fable — expressive</option>
+                <option value="onyx">Onyx — deep, authoritative</option>
+                <option value="sage">Sage — measured, precise</option>
+                <option value="ash">Ash — conversational</option>
+              </optgroup>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Default Language</label>
+            <select id="f-openai-language" class="form-input bg-white">
+              <option value="es">Español — Latin American Spanish</option>
+              <option value="en">English — US English</option>
+            </select>
+          </div>
+        </div>
+        <p class="text-xs text-slate-400 mt-3">Twilio Realtime webhook: <code class="bg-slate-100 px-1 rounded">/webhook/{slug}/realtime-voice</code> — point your Twilio number here to use OpenAI voice for live calls.</p>
       </div>
 
       <!-- Business Context -->
@@ -2416,6 +2520,9 @@ async function loadAiConfig(clinicId) {
     document.getElementById('ai-master-prompt').value  = c.ai_master_prompt            || '';
     document.getElementById('f-ai-voice-es').value     = c.ai_voice_es                 || '';
     document.getElementById('f-ai-voice-en').value     = c.ai_voice_en                 || '';
+    document.getElementById('f-openai-api-key').value  = c.openai_api_key              || '';
+    document.getElementById('f-openai-voice').value    = c.openai_voice                || 'shimmer';
+    document.getElementById('f-openai-language').value = c.openai_language             || 'es';
     onTemplateChange();
     // Rebuild FAQ list
     const list = document.getElementById('faq-list');
@@ -2461,6 +2568,9 @@ async function saveAiConfig() {
     masterPrompt:            document.getElementById('ai-master-prompt').value.trim(),
     voiceEs:                 document.getElementById('f-ai-voice-es').value || null,
     voiceEn:                 document.getElementById('f-ai-voice-en').value || null,
+    openaiApiKey:            document.getElementById('f-openai-api-key').value.trim() || null,
+    openaiVoice:             document.getElementById('f-openai-voice').value || 'shimmer',
+    openaiLanguage:          document.getElementById('f-openai-language').value || 'es',
   };
 
   try {
@@ -3741,7 +3851,11 @@ function renderTrainStatusBadge(d) {
 }
 
 function switchTrainSection(sec) {
-  ['sources','faqs','rules','notes','viewer','test','practice'].forEach(s => {
+  if (sec === 'voice' && !_trainClinicId) {
+    alert('Select a clinic first from the dropdown at the top of AI Training Center.');
+    return;
+  }
+  ['sources','faqs','rules','notes','viewer','test','practice','voice'].forEach(s => {
     document.getElementById(`tsec-${s}`)?.classList.toggle('hidden', s !== sec);
     const tab = document.getElementById(`ttab-${s}`);
     if (tab) {
@@ -4771,6 +4885,195 @@ async function saveCostConfig() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save Settings';
+  }
+}
+
+// ── Live Voice Test (OpenAI Realtime WebRTC) ──────────────────────────────────
+
+let _voicePc        = null;  // RTCPeerConnection
+let _voiceAudio     = null;  // <audio> element for Ana's voice
+let _voiceDc        = null;  // data channel for events
+let _voiceStream    = null;  // microphone MediaStream
+let _voiceConnected = false;
+
+function voiceSetStatus(text, color = 'slate') {
+  const colors = {
+    slate:  { dot: 'bg-slate-300',  bar: 'bg-slate-50 border-slate-200 text-slate-500' },
+    blue:   { dot: 'bg-blue-400',   bar: 'bg-blue-50 border-blue-200 text-blue-700' },
+    green:  { dot: 'bg-emerald-400 animate-pulse', bar: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+    red:    { dot: 'bg-red-400',    bar: 'bg-red-50 border-red-200 text-red-600' },
+    amber:  { dot: 'bg-amber-400',  bar: 'bg-amber-50 border-amber-200 text-amber-700' },
+  };
+  const c = colors[color] || colors.slate;
+  const dot  = document.getElementById('voice-status-dot');
+  const bar  = document.getElementById('voice-status-bar');
+  const txt  = document.getElementById('voice-status-text');
+  if (dot) dot.className = `w-3 h-3 rounded-full ${c.dot}`;
+  if (bar) bar.className = `flex items-center gap-2 text-xs px-3 py-2 rounded-lg border ${c.bar}`;
+  if (txt) txt.textContent = text;
+}
+
+function voicePushBubble(role, text) {
+  const chat = document.getElementById('voice-transcript');
+  if (!chat) return;
+  const isEmpty = chat.querySelector('.text-slate-400.italic');
+  if (isEmpty) chat.innerHTML = '';
+
+  const isAna    = role === 'assistant';
+  const bubble   = document.createElement('div');
+  bubble.className = isAna
+    ? 'flex justify-start items-start gap-2 mb-2'
+    : 'flex justify-end items-start gap-2 mb-2';
+  bubble.innerHTML = isAna
+    ? `<div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm flex-shrink-0">🤖</div>
+       <div class="bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-3 py-2 max-w-sm shadow-sm">${escHtml(text)}</div>`
+    : `<div class="bg-violet-600 text-white text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-sm">${escHtml(text)}</div>`;
+  chat.appendChild(bubble);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function voiceClearTranscript() {
+  const chat = document.getElementById('voice-transcript');
+  if (chat) chat.innerHTML = '<p class="text-xs text-slate-400 italic text-center">Conversation will appear here when connected.</p>';
+}
+
+async function voiceStart() {
+  if (!_trainClinicId) return alert('Select a clinic first from the dropdown at the top of AI Training Center.');
+
+  const startBtn = document.getElementById('voice-start-btn');
+  const stopBtn  = document.getElementById('voice-stop-btn');
+  startBtn.disabled = true;
+  startBtn.innerHTML = '<span class="animate-spin">⏳</span> Connecting…';
+  voiceSetStatus('Requesting session token…', 'blue');
+
+  try {
+    // 1. Get ephemeral key from our server
+    const tokenRes = await fetch(`/superadmin/api/clinics/${_trainClinicId}/realtime/session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) throw new Error(tokenData.error || 'Session error');
+    const ephemeralKey = tokenData.client_secret?.value;
+    if (!ephemeralKey) throw new Error('No ephemeral key returned from OpenAI');
+
+    voiceSetStatus('Requesting microphone access…', 'blue');
+
+    // 2. Capture microphone
+    _voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    voiceSetStatus('Connecting to OpenAI Realtime…', 'blue');
+
+    // 3. Create WebRTC peer connection
+    _voicePc = new RTCPeerConnection();
+
+    // 4. Attach audio element for Ana's voice output
+    _voiceAudio = document.createElement('audio');
+    _voiceAudio.autoplay = true;
+    _voicePc.ontrack = e => {
+      _voiceAudio.srcObject = e.streams[0];
+    };
+
+    // 5. Add microphone track
+    _voiceStream.getTracks().forEach(track => _voicePc.addTrack(track, _voiceStream));
+
+    // 6. Data channel for events (transcription, etc.)
+    _voiceDc = _voicePc.createDataChannel('oai-events');
+    _voiceDc.onmessage = e => {
+      try { voiceHandleEvent(JSON.parse(e.data)); } catch {}
+    };
+
+    // 7. Create SDP offer
+    const offer = await _voicePc.createOffer();
+    await _voicePc.setLocalDescription(offer);
+
+    // 8. Send offer to OpenAI WebRTC endpoint
+    const model  = 'gpt-4o-realtime-preview-2024-12-17';
+    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
+      method: 'POST',
+      body:   offer.sdp,
+      headers: {
+        Authorization:  `Bearer ${ephemeralKey}`,
+        'Content-Type': 'application/sdp',
+      },
+    });
+    if (!sdpRes.ok) {
+      const err = await sdpRes.text();
+      throw new Error(`OpenAI WebRTC: ${sdpRes.status} — ${err.slice(0, 200)}`);
+    }
+
+    // 9. Set remote description (OpenAI's answer)
+    const answer = { type: 'answer', sdp: await sdpRes.text() };
+    await _voicePc.setRemoteDescription(answer);
+
+    _voiceConnected = true;
+    voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
+    startBtn.innerHTML = '🎙️ Start Voice Chat';
+    startBtn.disabled  = false;
+    stopBtn.disabled   = false;
+    stopBtn.classList.remove('opacity-40');
+
+    voicePushBubble('assistant', '(Ana is ready — say hello or ask a question)');
+
+  } catch (e) {
+    voiceSetStatus(`Error: ${e.message}`, 'red');
+    startBtn.innerHTML = '🎙️ Start Voice Chat';
+    startBtn.disabled  = false;
+    voiceStop(false);
+  }
+}
+
+function voiceStop(clearStatus = true) {
+  if (_voicePc)     { try { _voicePc.close(); }     catch {} _voicePc  = null; }
+  if (_voiceStream) { _voiceStream.getTracks().forEach(t => t.stop()); _voiceStream = null; }
+  if (_voiceAudio)  { _voiceAudio.srcObject = null; _voiceAudio = null; }
+  _voiceDc        = null;
+  _voiceConnected = false;
+
+  const stopBtn = document.getElementById('voice-stop-btn');
+  if (stopBtn) { stopBtn.disabled = true; stopBtn.classList.add('opacity-40'); }
+  if (clearStatus) voiceSetStatus('Disconnected.', 'slate');
+
+  const partial = document.getElementById('voice-live-partial');
+  if (partial) partial.classList.add('hidden');
+}
+
+function voiceHandleEvent(evt) {
+  // Live transcription — what the caller (user) is saying
+  if (evt.type === 'conversation.item.input_audio_transcription.delta') {
+    const partial = document.getElementById('voice-live-partial');
+    const txt     = document.getElementById('voice-partial-text');
+    if (partial) partial.classList.remove('hidden');
+    if (txt) txt.textContent = (txt.textContent || '') + (evt.delta || '');
+  }
+  if (evt.type === 'conversation.item.input_audio_transcription.completed') {
+    const partial = document.getElementById('voice-live-partial');
+    if (partial) partial.classList.add('hidden');
+    const txt = document.getElementById('voice-partial-text');
+    if (txt) txt.textContent = '';
+    if (evt.transcript?.trim()) voicePushBubble('user', evt.transcript.trim());
+  }
+
+  // Ana's spoken response transcript
+  if (evt.type === 'response.audio_transcript.done') {
+    if (evt.transcript?.trim()) voicePushBubble('assistant', evt.transcript.trim());
+  }
+
+  // Session ready
+  if (evt.type === 'session.created' || evt.type === 'session.updated') {
+    voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
+  }
+
+  // Errors
+  if (evt.type === 'error') {
+    voiceSetStatus(`OpenAI error: ${evt.error?.message || JSON.stringify(evt.error)}`, 'red');
+  }
+
+  // Ana is speaking
+  if (evt.type === 'output_audio_buffer.started') {
+    voiceSetStatus('🟢 Ana is speaking…', 'green');
+  }
+  if (evt.type === 'output_audio_buffer.stopped') {
+    voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
   }
 }
 

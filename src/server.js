@@ -1,6 +1,8 @@
 require('dotenv').config();
-const express = require('express');
-const path    = require('path');
+const express   = require('express');
+const http      = require('http');
+const path      = require('path');
+const WebSocket = require('ws');
 const { initDb } = require('./database/db');
 
 const app  = express();
@@ -35,7 +37,30 @@ initDb();
 const { startScheduler } = require('./services/scheduler');
 startScheduler();
 
-app.listen(PORT, '0.0.0.0', () => {
+// Create HTTP server so we can attach WebSocket for Twilio Media Streams
+const server = http.createServer(app);
+const wss    = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+  const match = req.url?.match(/^\/realtime\/twilio\/([a-z0-9-]+)$/);
+  if (!match) { socket.destroy(); return; }
+
+  wss.handleUpgrade(req, socket, head, ws => {
+    const { getClinicBySlug, getKnowledgeBase } = require('./database/db');
+    const { createTwilioRelay }                 = require('./services/realtime');
+
+    const clinic = getClinicBySlug(match[1]);
+    if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
+
+    const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
+    if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
+
+    const kb = getKnowledgeBase(clinic.id);
+    createTwilioRelay(ws, apiKey, clinic, kb);
+  });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
   const base = process.env.APP_URL || `http://localhost:${PORT}`;
   console.log('\n╔═══════════════════════════════════════════════════╗');
   console.log('║    NetCare AI Medical Receptionist  v2.0          ║');
@@ -44,6 +69,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  Clinic Admin    : ${base}/admin/:slug`);
   console.log(`  Client Portal   : ${base}/portal/:slug`);
   console.log(`  Twilio webhook  : ${base}/webhook/:slug/voice`);
+  console.log(`  Realtime voice  : ${base}/webhook/:slug/realtime-voice`);
   console.log(`  Health check    : ${base}/`);
   console.log('');
 });

@@ -727,4 +727,24 @@ async function finalizeCall(callSid, ai, clinic) {
   console.log(`[Webhook/${clinic.slug}] Call ${callSid} finalized — type=${collected.callType} lang=${ai.language}`);
 }
 
+// ── OpenAI Realtime Voice — Twilio Media Streams TwiML ───────────────────────
+// Set this URL as the Twilio webhook for a phone number to use OpenAI Realtime.
+// Requires APP_URL to be set to your public HTTPS/WSS domain (e.g. ngrok URL).
+
+router.post('/:slug/realtime-voice', (req, res) => {
+  const clinic = getClinicBySlug(req.params.slug);
+  if (!clinic) return res.status(404).type('text/plain').send('Clinic not found');
+
+  const appUrl = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`)
+    .replace(/^https?:\/\//, '')
+    .replace(/\/$/, '');
+
+  res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="wss://${appUrl}/realtime/twilio/${clinic.slug}"/>
+  </Connect>
+</Response>`);
+});
+
 module.exports = router;
