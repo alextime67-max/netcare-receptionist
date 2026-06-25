@@ -858,13 +858,27 @@
           <p class="text-xs text-slate-400">Ask Ana questions exactly as a patient would on a phone call. Ana answers using the current trained Knowledge Base.</p>
 
           <!-- Quick questions -->
-          <div class="flex flex-wrap gap-2">
-            <button onclick="trainAskAna('What insurance do you accept?')"      class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What insurance do you accept?</button>
-            <button onclick="trainAskAna('What are your office hours?')"        class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What are your office hours?</button>
-            <button onclick="trainAskAna('Where are you located?')"             class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Where are you located?</button>
-            <button onclick="trainAskAna('How do I schedule an appointment?')"  class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">How do I schedule an appointment?</button>
-            <button onclick="trainAskAna('What documents should I bring?')"     class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What documents should I bring?</button>
-            <button onclick="trainAskAna('Do you have any doctors available?')" class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Do you have any doctors available?</button>
+          <div class="space-y-2">
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide">English</p>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="trainAskAna('What insurance do you accept?')"           class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What insurance do you accept?</button>
+              <button onclick="trainAskAna('What are your office hours?')"             class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What are your office hours?</button>
+              <button onclick="trainAskAna('Where are you located?')"                  class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Where are you located?</button>
+              <button onclick="trainAskAna('How do I schedule an appointment?')"       class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">How do I schedule an appointment?</button>
+              <button onclick="trainAskAna('What documents should I bring?')"          class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What documents should I bring?</button>
+              <button onclick="trainAskAna('Do you accept new patients?')"             class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Do you accept new patients?</button>
+              <button onclick="trainAskAna('How much does a visit cost?')"             class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">How much does a visit cost?</button>
+            </div>
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-1">Español</p>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="trainAskAna('¿Qué seguros médicos aceptan?')"           class="text-xs px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">¿Qué seguros aceptan?</button>
+              <button onclick="trainAskAna('¿Cuáles son sus horarios de atención?')"   class="text-xs px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">¿Cuáles son sus horarios?</button>
+              <button onclick="trainAskAna('¿Dónde están ubicados?')"                  class="text-xs px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">¿Dónde están ubicados?</button>
+              <button onclick="trainAskAna('Necesito hacer una cita con el doctor')"   class="text-xs px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Necesito una cita</button>
+              <button onclick="trainAskAna('¿Qué documentos necesito llevar?')"        class="text-xs px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">¿Qué documentos necesito?</button>
+              <button onclick="trainAskAna('¿Aceptan pacientes nuevos?')"              class="text-xs px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">¿Aceptan pacientes nuevos?</button>
+              <button onclick="trainAskAna('¿Cuánto cuesta una consulta?')"            class="text-xs px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">¿Cuánto cuesta?</button>
+            </div>
           </div>
 
           <!-- Chat input -->
@@ -893,19 +907,31 @@
           <div class="flex flex-wrap gap-4 items-end">
             <div class="flex-1 min-w-48">
               <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">Scenario</label>
-              <select id="practice-scenario" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 text-slate-700">
-                <option value="new_patient_appointment">1. New patient wants an appointment</option>
-                <option value="reschedule_existing">2. Existing patient wants to reschedule</option>
-                <option value="ask_insurance">3. Caller asks about insurance</option>
-                <option value="ask_office_hours">4. Caller asks for office hours</option>
-                <option value="ask_location">5. Caller asks for location</option>
-                <option value="cancel_appointment">6. Caller wants to cancel appointment</option>
-                <option value="elderly_spanish_slow">7. Elderly Spanish-speaking caller (speaks slowly)</option>
-                <option value="angry_caller">8. Angry caller</option>
-                <option value="unknown_question">9. Caller asks a question Ana does not know</option>
-                <option value="emergency_urgent">10. Emergency or urgent medical question</option>
-                <option value="ask_pricing">11. Caller asks for pricing</option>
-                <option value="wants_human">12. Caller wants to speak with a human</option>
+              <select id="practice-scenario" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 text-slate-700" onchange="practiceUpdateHint()">
+                <optgroup label="Appointments">
+                  <option value="new_patient_appointment">New patient — first appointment</option>
+                  <option value="reschedule_existing">Existing patient — reschedule</option>
+                  <option value="cancel_appointment">Caller wants to cancel appointment</option>
+                  <option value="follow_up_after_visit">Follow-up question after a visit</option>
+                  <option value="prescription_refill">Prescription refill request</option>
+                </optgroup>
+                <optgroup label="Information">
+                  <option value="ask_insurance">Caller asks about insurance</option>
+                  <option value="ask_office_hours">Caller asks about office hours</option>
+                  <option value="ask_location">Caller asks for location / directions</option>
+                  <option value="ask_pricing">Caller asks about pricing / fees</option>
+                  <option value="unknown_question">Caller asks something Ana does not know</option>
+                </optgroup>
+                <optgroup label="Challenging Callers">
+                  <option value="elderly_spanish_slow">Elderly Spanish caller (speaks slowly)</option>
+                  <option value="elderly_english_slow">Elderly English caller (speaks slowly)</option>
+                  <option value="confused_caller">Confused caller (not sure why they called)</option>
+                  <option value="angry_caller">Angry / frustrated caller</option>
+                  <option value="wants_human">Caller demands a real person</option>
+                </optgroup>
+                <optgroup label="Urgent">
+                  <option value="emergency_urgent">Emergency / urgent medical situation</option>
+                </optgroup>
               </select>
             </div>
             <div>
@@ -922,6 +948,11 @@
             <button onclick="practiceReset()" id="practice-reset-btn" class="hidden px-5 py-2 bg-slate-100 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-200 transition-colors border border-slate-200 whitespace-nowrap">
               🔄 Reset
             </button>
+          </div>
+          <!-- Scenario hint -->
+          <div id="practice-hint" class="mt-3 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 hidden">
+            <span class="font-semibold text-slate-600">Suggested opening line: </span>
+            <span id="practice-hint-text"></span>
           </div>
         </div>
 
@@ -962,17 +993,9 @@
               </button>
             </div>
 
-            <!-- Quick caller phrases -->
-            <div class="flex flex-wrap gap-1.5 pt-1">
-              <span class="text-xs text-slate-400 self-center mr-1">Quick:</span>
-              <button onclick="practiceQuick('Hola, buenos días')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Hola, buenos días</button>
-              <button onclick="practiceQuick('Hello, good morning')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Hello, good morning</button>
-              <button onclick="practiceQuick('Necesito una cita')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Necesito una cita</button>
-              <button onclick="practiceQuick('I need an appointment')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">I need an appointment</button>
-              <button onclick="practiceQuick('¿Aceptan Medicare?')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">¿Aceptan Medicare?</button>
-              <button onclick="practiceQuick('What are your hours?')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">What are your hours?</button>
-              <button onclick="practiceQuick('I want to speak to a real person')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">I want a real person</button>
-              <button onclick="practiceQuick('This is an emergency')" class="text-xs px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-xs transition-colors">This is an emergency</button>
+            <!-- Quick caller phrases — dynamic per scenario -->
+            <div id="practice-quick-phrases" class="flex flex-wrap gap-1.5 pt-1">
+              <!-- Rendered by practiceUpdateQuickPhrases() -->
             </div>
           </div>
 
@@ -1565,22 +1588,61 @@
             <textarea id="ai-greeting-es" rows="2" placeholder="¡Gracias por llamar a [Clínica]! ¿En qué le puedo ayudar hoy?" class="form-input resize-none"></textarea>
           </div>
           <div>
-            <label class="form-label">Voice (Spanish)</label>
-            <select id="f-ai-voice-es" class="form-input bg-white">
-              <option value="">— Default (Lupe Neural) —</option>
-              <option value="Polly.Lupe-Neural">Lupe-Neural (es-US Female)</option>
-              <option value="Polly.Mia-Neural">Mia-Neural (es-MX Female)</option>
-            </select>
+            <label class="form-label">Voice (Spanish) <span class="normal-case font-normal text-slate-400">— Amazon Polly via Twilio</span></label>
+            <div class="flex gap-2">
+              <select id="f-ai-voice-es" class="form-input bg-white flex-1">
+                <option value="">— Default (Lupe Neural) —</option>
+                <optgroup label="Female — US Spanish">
+                  <option value="Polly.Lupe-Neural">Lupe Neural (es-US) ★ Recommended</option>
+                  <option value="Polly.Lupe">Lupe Standard (es-US)</option>
+                </optgroup>
+                <optgroup label="Female — Latin America">
+                  <option value="Polly.Mia-Neural">Mia Neural (es-MX)</option>
+                  <option value="Polly.Mia">Mia Standard (es-MX)</option>
+                </optgroup>
+                <optgroup label="Female — Spain Spanish">
+                  <option value="Polly.Lucia-Neural">Lucía Neural (es-ES)</option>
+                  <option value="Polly.Conchita">Conchita Standard (es-ES)</option>
+                </optgroup>
+                <optgroup label="Male — Spanish">
+                  <option value="Polly.Sergio-Neural">Sergio Neural (es-ES Male)</option>
+                  <option value="Polly.Enrique">Enrique Standard (es-ES Male)</option>
+                  <option value="Polly.Miguel">Miguel Standard (es-US Male)</option>
+                </optgroup>
+              </select>
+              <button type="button" onclick="testVoicePreview('es')" title="Preview voice in browser"
+                class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-600 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 transition-colors text-sm whitespace-nowrap">
+                🔊 Test
+              </button>
+            </div>
           </div>
           <div>
-            <label class="form-label">Voice (English)</label>
-            <select id="f-ai-voice-en" class="form-input bg-white">
-              <option value="">— Default (Joanna) —</option>
-              <option value="Polly.Joanna">Joanna (en-US Female)</option>
-              <option value="Polly.Kendra-Neural">Kendra-Neural (en-US Female)</option>
-              <option value="Polly.Matthew-Neural">Matthew-Neural (en-US Male)</option>
-              <option value="Polly.Stephen-Neural">Stephen-Neural (en-US Male)</option>
-            </select>
+            <label class="form-label">Voice (English) <span class="normal-case font-normal text-slate-400">— Amazon Polly via Twilio</span></label>
+            <div class="flex gap-2">
+              <select id="f-ai-voice-en" class="form-input bg-white flex-1">
+                <option value="">— Default (Joanna) —</option>
+                <optgroup label="Female — US English">
+                  <option value="Polly.Joanna">Joanna Standard (en-US)</option>
+                  <option value="Polly.Joanna-Neural">Joanna Neural (en-US) ★ Recommended</option>
+                  <option value="Polly.Kendra-Neural">Kendra Neural (en-US)</option>
+                  <option value="Polly.Salli-Neural">Salli Neural (en-US)</option>
+                  <option value="Polly.Ruth-Neural">Ruth Neural (en-US)</option>
+                  <option value="Polly.Danielle-Neural">Danielle Neural (en-US)</option>
+                  <option value="Polly.Ivy-Neural">Ivy Neural (en-US, younger tone)</option>
+                </optgroup>
+                <optgroup label="Male — US English">
+                  <option value="Polly.Matthew-Neural">Matthew Neural (en-US Male)</option>
+                  <option value="Polly.Stephen-Neural">Stephen Neural (en-US Male)</option>
+                  <option value="Polly.Joey-Neural">Joey Neural (en-US Male)</option>
+                  <option value="Polly.Kevin-Neural">Kevin Neural (en-US Male, young)</option>
+                </optgroup>
+              </select>
+              <button type="button" onclick="testVoicePreview('en')" title="Preview voice in browser"
+                class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-600 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 transition-colors text-sm whitespace-nowrap">
+                🔊 Test
+              </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-1.5">All voices use Amazon Polly via Twilio. Neural voices sound more natural. Browser preview uses system TTS (approximate match).</p>
           </div>
         </div>
       </div>
@@ -3660,6 +3722,8 @@ async function loadTrainingData() {
     renderTrainStatusBadge(d);
     trainLoadViewer();
     practiceLoadHistory();
+    practiceUpdateHint();
+    practiceUpdateQuickPhrases();
   } catch (e) { console.error('loadTrainingData', e); }
 }
 
@@ -4087,22 +4151,170 @@ async function trainAskAna(preset) {
   chat.scrollTop = chat.scrollHeight;
 }
 
+// ── Test Voice Preview (browser SpeechSynthesis) ──────────────────────────────
+
+function testVoicePreview(lang) {
+  if (!window.speechSynthesis) return alert('Your browser does not support speech preview.');
+  const voiceEl = document.getElementById(lang === 'es' ? 'f-ai-voice-es' : 'f-ai-voice-en');
+  const voiceName = voiceEl?.value || '';
+  const text = lang === 'es'
+    ? 'Buenas tardes, gracias por llamar. Soy Ana, ¿en qué le puedo ayudar?'
+    : 'Good afternoon, thank you for calling. This is Ana, how can I help you today?';
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = lang === 'es' ? 'es-US' : 'en-US';
+  // Try to find a matching browser voice
+  const voices = window.speechSynthesis.getVoices();
+  const isNeutral = voiceName.includes('Neural');
+  const isMale = /Matthew|Stephen|Joey|Kevin|Sergio|Enrique|Miguel/.test(voiceName);
+  const match = voices.find(v =>
+    v.lang.startsWith(lang === 'es' ? 'es' : 'en') &&
+    (isMale ? /(male|man)/i.test(v.name) : !/(male|man)/i.test(v.name))
+  ) || voices.find(v => v.lang.startsWith(lang === 'es' ? 'es' : 'en'));
+  if (match) utter.voice = match;
+  utter.rate = 0.9;
+  utter.pitch = 1.05;
+  window.speechSynthesis.speak(utter);
+}
+
 // ── Practice Conversation ─────────────────────────────────────────────────────
 
 const PRACTICE_SCENARIOS = {
-  new_patient_appointment: '1. New patient wants an appointment',
-  reschedule_existing:     '2. Existing patient wants to reschedule',
-  ask_insurance:           '3. Caller asks about insurance',
-  ask_office_hours:        '4. Caller asks for office hours',
-  ask_location:            '5. Caller asks for location',
-  cancel_appointment:      '6. Caller wants to cancel appointment',
-  elderly_spanish_slow:    '7. Elderly Spanish-speaking caller (slow)',
-  angry_caller:            '8. Angry caller',
-  unknown_question:        '9. Caller asks unknown question',
-  emergency_urgent:        '10. Emergency or urgent question',
-  ask_pricing:             '11. Caller asks for pricing',
-  wants_human:             '12. Caller wants a human',
+  new_patient_appointment: 'New patient — first appointment',
+  reschedule_existing:     'Existing patient — reschedule',
+  cancel_appointment:      'Cancel appointment',
+  follow_up_after_visit:   'Follow-up after a visit',
+  prescription_refill:     'Prescription refill request',
+  ask_insurance:           'Ask about insurance',
+  ask_office_hours:        'Ask about office hours',
+  ask_location:            'Ask for location / directions',
+  ask_pricing:             'Ask about pricing / fees',
+  unknown_question:        'Unknown question (not in KB)',
+  elderly_spanish_slow:    'Elderly Spanish caller (slow)',
+  elderly_english_slow:    'Elderly English caller (slow)',
+  confused_caller:         'Confused caller',
+  angry_caller:            'Angry / frustrated caller',
+  wants_human:             'Caller demands a real person',
+  emergency_urgent:        'Emergency situation',
 };
+
+const PRACTICE_HINTS = {
+  new_patient_appointment: 'Hola, buenos días. Quiero hacer una cita, soy paciente nuevo. / Hi, I\'d like to make an appointment — I\'m a new patient.',
+  reschedule_existing:     'Hola, llamo porque necesito cambiar mi cita. / Hi, I need to reschedule my appointment.',
+  cancel_appointment:      'Buenos días, quisiera cancelar mi cita del jueves. / Good morning, I need to cancel my appointment.',
+  follow_up_after_visit:   'Hola, vine ayer al doctor y tengo una pregunta sobre lo que me dijo. / Hi, I saw the doctor yesterday and have a follow-up question.',
+  prescription_refill:     'Buenos días, necesito surtir una receta. / Hi, I need a prescription refill.',
+  ask_insurance:           '¿Aceptan el seguro de Medicare? / Do you take Blue Cross Blue Shield insurance?',
+  ask_office_hours:        '¿A qué hora abren mañana? ¿Puedo ir sin cita? / What time do you open tomorrow? Can I walk in?',
+  ask_location:            '¿Me puede dar la dirección de la clínica? / Can you give me your address? I need to find parking.',
+  ask_pricing:             '¿Cuánto cuesta una consulta sin seguro? / How much is a visit if I don\'t have insurance?',
+  unknown_question:        '¿Qué médicos tienen en cardiología? / Do you have a specialist for sleep disorders?',
+  elderly_spanish_slow:    '[Speak slowly] Bue… buenos días… llamo porque… este… quiero una cita…',
+  elderly_english_slow:    '[Speak slowly] Hel… hello… I\'m calling because… I need… an appointment…',
+  confused_caller:         'Uh… someone told me to call this number… I\'m not sure what I need exactly…',
+  angry_caller:            'I\'ve been waiting three weeks for a callback and nobody has called me back! This is unacceptable.',
+  wants_human:             'I don\'t want to talk to a machine. I want to speak to a real person right now.',
+  emergency_urgent:        'I\'m having chest pain and I can\'t breathe well. / Tengo un dolor muy fuerte en el pecho.',
+};
+
+const PRACTICE_QUICK_PHRASES = {
+  new_patient_appointment: [
+    { es: true,  text: 'Necesito una cita con el doctor' },
+    { es: true,  text: 'Soy paciente nuevo' },
+    { es: true,  text: 'Sí, correcto' },
+    { es: true,  text: '¿Qué días tienen disponibles?' },
+    { es: false, text: 'I need to make an appointment' },
+    { es: false, text: 'I\'m a new patient' },
+    { es: false, text: 'Yes, that\'s correct' },
+  ],
+  reschedule_existing: [
+    { es: true,  text: 'Necesito cambiar mi cita' },
+    { es: true,  text: 'Tenía cita el martes' },
+    { es: false, text: 'I need to reschedule' },
+    { es: false, text: 'I had an appointment Tuesday' },
+    { es: false, text: 'Can I come Friday instead?' },
+  ],
+  cancel_appointment: [
+    { es: true,  text: 'Quiero cancelar mi cita' },
+    { es: true,  text: 'No puedo ir ese día' },
+    { es: false, text: 'I need to cancel my appointment' },
+    { es: false, text: 'Something came up' },
+  ],
+  elderly_spanish_slow: [
+    { es: true,  text: 'Sí… quiero… una cita…' },
+    { es: true,  text: '¿Puede repetir eso?' },
+    { es: true,  text: 'No entendí bien' },
+    { es: true,  text: 'Soy una persona mayor' },
+    { es: true,  text: 'Hable más despacio por favor' },
+  ],
+  elderly_english_slow: [
+    { es: false, text: 'I need… an appointment…' },
+    { es: false, text: 'Could you repeat that?' },
+    { es: false, text: 'I didn\'t understand' },
+    { es: false, text: 'Please speak slowly' },
+    { es: false, text: 'I\'m a little hard of hearing' },
+  ],
+  angry_caller: [
+    { es: false, text: 'I\'ve been waiting three weeks!' },
+    { es: false, text: 'This is completely unacceptable' },
+    { es: false, text: 'I want to file a complaint' },
+    { es: true,  text: 'Esto es un mal servicio' },
+    { es: false, text: 'I want to speak to a manager' },
+  ],
+  emergency_urgent: [
+    { es: true,  text: 'Tengo dolor en el pecho' },
+    { es: true,  text: 'No puedo respirar bien' },
+    { es: false, text: 'I\'m having chest pain' },
+    { es: false, text: 'I think I\'m having a stroke' },
+    { es: false, text: 'This is very urgent' },
+  ],
+  prescription_refill: [
+    { es: true,  text: 'Necesito surtir mi receta de metformina' },
+    { es: true,  text: 'Mi farmacia es Walgreens' },
+    { es: false, text: 'I need a refill for my blood pressure medication' },
+    { es: false, text: 'My pharmacy is CVS on Main Street' },
+  ],
+  _default: [
+    { es: true,  text: 'Hola, buenos días' },
+    { es: false, text: 'Hello, good morning' },
+    { es: true,  text: 'Necesito una cita' },
+    { es: false, text: 'I need an appointment' },
+    { es: true,  text: '¿Aceptan Medicare?' },
+    { es: false, text: 'What are your hours?' },
+    { es: false, text: 'I want to speak to a real person', urgent: false },
+    { es: false, text: 'This is an emergency', urgent: true },
+  ],
+};
+
+function practiceUpdateHint() {
+  const scenario = document.getElementById('practice-scenario')?.value;
+  const hint = PRACTICE_HINTS[scenario];
+  const el = document.getElementById('practice-hint');
+  const txt = document.getElementById('practice-hint-text');
+  if (hint && el && txt) {
+    txt.textContent = hint;
+    el.classList.remove('hidden');
+  } else if (el) {
+    el.classList.add('hidden');
+  }
+}
+
+function practiceUpdateQuickPhrases() {
+  const scenario = document.getElementById('practice-scenario')?.value || '_default';
+  const phrases  = PRACTICE_QUICK_PHRASES[scenario] || PRACTICE_QUICK_PHRASES._default;
+  const el = document.getElementById('practice-quick-phrases');
+  if (!el) return;
+  const html = ['<span class="text-xs text-slate-400 self-center mr-1">Quick:</span>'];
+  phrases.forEach(p => {
+    const cls = p.urgent
+      ? 'text-xs px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded transition-colors'
+      : p.es
+        ? 'text-xs px-2 py-1 bg-blue-50 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors'
+        : 'text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors';
+    html.push(`<button onclick="practiceQuick(${JSON.stringify(p.text)})" class="${cls}">${escHtml(p.text)}</button>`);
+  });
+  el.innerHTML = html.join('');
+}
 
 const QUALITY_ITEMS = [
   { key: 'greeted_correctly',      label: 'Did Ana greet correctly?' },
@@ -4164,6 +4376,9 @@ async function practiceStart() {
     const chat = document.getElementById('practice-chat');
     chat.innerHTML = '';
     practicePushBubble('assistant', d.greeting);
+
+    // Update dynamic quick phrases
+    practiceUpdateQuickPhrases();
 
     // Render quality checks
     practiceRenderQualityChecks();

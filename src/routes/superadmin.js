@@ -1079,18 +1079,22 @@ router.post('/api/train/:clinicId/test', async (req, res) => {
 // ── Practice Conversation ─────────────────────────────────────────────────────
 
 const SCENARIO_CONTEXTS = {
-  new_patient_appointment:  'PRACTICE SCENARIO: A new patient is calling for the very first time to schedule an appointment. They may not know exactly what specialty they need. Be welcoming and helpful.',
-  reschedule_existing:      'PRACTICE SCENARIO: An existing patient wants to reschedule a previous appointment. They may be in a hurry or slightly frustrated.',
-  ask_insurance:            'PRACTICE SCENARIO: The caller wants to know which insurance plans are accepted. They are comparing options before choosing a provider.',
-  ask_office_hours:         'PRACTICE SCENARIO: The caller is asking about office hours and whether they can come in today.',
-  ask_location:             'PRACTICE SCENARIO: The caller needs the office address, parking information, or directions.',
-  cancel_appointment:       'PRACTICE SCENARIO: The caller wants to cancel an existing appointment. Collect their name, the appointment date/time, and reason for cancellation.',
-  elderly_spanish_slow:     'PRACTICE SCENARIO: An elderly Spanish-speaking patient is calling. They speak slowly, may repeat themselves, and need extra patience. Respond entirely in Spanish. Speak slowly and clearly. Confirm each piece of information.',
-  angry_caller:             'PRACTICE SCENARIO: The caller is frustrated or upset — possibly about a wait time, billing issue, or previous bad experience. De-escalate professionally. Do not argue.',
-  unknown_question:         'PRACTICE SCENARIO: The caller asks a question Ana does not have information about in the knowledge base. Ana must not invent an answer — she should offer to take a message or connect them with a staff member.',
-  emergency_urgent:         'PRACTICE SCENARIO: The caller may have a medical emergency or urgent situation. Follow emergency protocols. Ask about severity. Instruct to call 911 if life-threatening.',
-  ask_pricing:              'PRACTICE SCENARIO: The caller is asking about prices, fees, or costs for services. If pricing is not in the knowledge base, do not invent numbers. Offer to have someone from billing call them back.',
-  wants_human:              'PRACTICE SCENARIO: The caller immediately asks to speak with a real person or the front desk. Follow the configured transfer rules. Be polite and explain Ana can help while they wait, or offer to take a message.',
+  new_patient_appointment:  'PRACTICE SCENARIO: A new patient calling for the first time to schedule an appointment. They may not know what specialty they need. Be welcoming, warm, and guide them naturally. Do not rush.',
+  reschedule_existing:      'PRACTICE SCENARIO: An existing patient needs to reschedule a previous appointment. They may sound slightly rushed or apologetic. Be understanding, collect their name, current appointment details, and preferred new time.',
+  ask_insurance:            'PRACTICE SCENARIO: Caller is comparing providers and wants to know which insurance plans are accepted. Give a warm, helpful answer using the knowledge base. If not in KB, offer to have billing call them.',
+  ask_office_hours:         'PRACTICE SCENARIO: Caller is asking about office hours, whether the office is open today, and if walk-ins are accepted. Answer naturally from the knowledge base.',
+  ask_location:             'PRACTICE SCENARIO: Caller needs the office address, directions, or parking information. Answer using the knowledge base. If multiple locations, ask which area they are in.',
+  cancel_appointment:       'PRACTICE SCENARIO: Caller wants to cancel an existing appointment. Collect their name, the appointment date and time, and reason for cancellation. Be understanding, not defensive.',
+  elderly_spanish_slow:     'PRACTICE SCENARIO: An elderly Spanish-speaking patient is calling. They speak very slowly, pause often, and may repeat themselves. Respond ENTIRELY in Spanish. Use short simple sentences. Confirm each item before moving on. Say "No hay prisa" naturally. Show patience and warmth at every turn.',
+  elderly_english_slow:     'PRACTICE SCENARIO: An elderly English-speaking patient is calling. They speak slowly and may ask you to repeat yourself. Respond in English. Use simple clear words. Confirm each piece of information. Say "Take your time" naturally. Be extra patient and warm.',
+  angry_caller:             'PRACTICE SCENARIO: Caller is frustrated or upset — possibly about wait times, billing, or a prior bad experience. De-escalate professionally without arguing. Acknowledge their frustration, apologize for any inconvenience, and offer to help or connect them with the right person.',
+  unknown_question:         'PRACTICE SCENARIO: Caller asks a question not covered in the knowledge base. Ana must NOT invent an answer. She should say she does not have that information available but can take a message so someone calls them back.',
+  emergency_urgent:         'PRACTICE SCENARIO: Caller describes a potentially life-threatening situation (chest pain, difficulty breathing, severe injury). Follow emergency protocol immediately. If life-threatening, instruct them to hang up and call 911 right away.',
+  ask_pricing:              'PRACTICE SCENARIO: Caller is asking about costs, fees, or prices for services. If pricing is not in the knowledge base, do not invent numbers. Offer to have someone from billing contact them.',
+  wants_human:              'PRACTICE SCENARIO: Caller immediately asks to speak with a real person, front desk, nurse, or doctor. Follow transfer rules. Be polite. Offer to help while they wait or transfer them per the configured rules.',
+  prescription_refill:      'PRACTICE SCENARIO: Patient is calling to request a prescription refill. Collect patient name, date of birth, medication name, and pharmacy name/phone. Do NOT process or confirm the refill — inform them a staff member will follow up.',
+  confused_caller:          'PRACTICE SCENARIO: Caller seems confused about what they need or why they are calling. They may give vague answers. Be patient, ask simple guiding questions, and help them identify what kind of help they need without making them feel embarrassed.',
+  follow_up_after_visit:    'PRACTICE SCENARIO: Patient recently had a visit and is calling with a follow-up question about their care, test results, or next steps. Do NOT discuss any clinical details. Take their name, callback number, and the general nature of their question for the care team to return.',
 };
 
 router.post('/api/practice/:clinicId/start', async (req, res) => {
