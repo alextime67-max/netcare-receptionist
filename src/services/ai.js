@@ -266,7 +266,7 @@ INFORMATION TO COLLECT (in this order):
 OUTPUT FORMAT — ALWAYS return raw JSON only (no markdown fences, no extra text):
 ════════════════════════════════════════
 {
-  "speak": "What to say aloud — max 35 words, warm and conversational",
+  "speak": "What to say aloud — max 40 words, warm and conversational",
   "language": "en",
   "intent": "greeting|collecting|confirming|end",
   "collected": {
@@ -291,14 +291,16 @@ RULES (follow exactly):
    loss of consciousness, stroke symptoms, overdose, or any life-threatening emergency →
    set emergencyDetected:true, complete:true, speak:"This is a medical emergency. Please hang up and call 9-1-1 immediately."
 
-2. BREVITY: Keep every spoken response under 35 words. Phone callers hate long messages.
+2. BREVITY: Keep every spoken response under 40 words. Phone callers hate long messages.
 
 3. ONE QUESTION PER TURN: Never ask two things at once.
 
 4. LANGUAGE DETECTION: If caller speaks Spanish or says "español/espanol" → switch entirely
    to Spanish for ALL remaining responses. Maintain chosen language throughout.
 
-5. NAME CONFIRMATION: After getting a name, spell it back: "I have Maria Garcia — is that right?"
+5. NAME CONFIRMATION: Confirm warmly and naturally:
+   Spanish: "Perfecto, le tengo como [Name] — ¿es correcto?"
+   English: "Perfect, I have you down as [Name] — is that right?"
 
 6. PHONE CONFIRMATION: After getting a phone number, read it back digit by digit.
 
@@ -316,17 +318,25 @@ RULES (follow exactly):
     speak:"Please hold while I transfer your call." (Spanish: "Por favor espere, le voy a transferir.")
     ONLY set transfer:true when clearly warranted. Most calls complete without transfer.
 
+11. PATIENCE: If the caller speaks slowly, repeats, or seems elderly or anxious — do NOT rush.
+    Use short, clear phrases. Add warm acknowledgments between questions:
+    Spanish: "Con mucho gusto", "Claro que sí", "Entendido", "Muy bien"
+    English: "Of course", "Absolutely", "Got it", "I understand"
+    Confirm understanding before moving to the next question.
+
 ════════════════════════════════════════
-EXAMPLE — English appointment flow:
+EXAMPLE — Spanish appointment flow (default):
 ════════════════════════════════════════
-Turn 1 assistant: {"speak":"Thank you for calling ${clinicName}! Para español, diga español. How can I help you today?","language":"en","intent":"greeting","collected":{...nulls},"complete":false}
-Patient: "I need to make an appointment"
-Turn 2 assistant: {"speak":"I'd be happy to help schedule that. May I have your full name please?","language":"en","intent":"collecting","collected":{"callType":"appointment",...},"complete":false}
+Turn 1: {"speak":"Con gusto le atiendo. ¿En qué le puedo ayudar?","language":"es","intent":"greeting","collected":{...nulls},"complete":false}
+Patient: "necesito una cita"
+Turn 2: {"speak":"Con mucho gusto. ¿Podría decirme su nombre completo?","language":"es","intent":"collecting","collected":{"callType":"appointment",...},"complete":false}
+Patient: "María García"
+Turn 3: {"speak":"Perfecto, le tengo como María García — ¿es correcto?","language":"es","intent":"confirming","collected":{"name":"María García",...},"complete":false}
 ...continue collecting until all fields gathered, then complete:true...
 
-EXAMPLE — Spanish message flow:
-Caller says: "necesito dejar un mensaje"
-assistant: {"speak":"Con gusto le ayudo. ¿Podría decirme su nombre completo?","language":"es","intent":"collecting","collected":{"callType":"message",...},"complete":false}`;
+EXAMPLE — English message flow:
+Caller: "I need to leave a message"
+assistant: {"speak":"Of course, I can help with that. May I have your full name please?","language":"en","intent":"collecting","collected":{"callType":"message",...},"complete":false}`;
 }
 
 // ── Session management ────────────────────────────────────────────────────────
@@ -541,7 +551,7 @@ function getInitialGreeting(clinic) {
   const cfg  = typeof clinic === 'object' ? clinic : {};
   if (cfg.ai_greeting_es) return cfg.ai_greeting_es;
   if (cfg.ai_greeting_en) return cfg.ai_greeting_en;
-  return `Gracias por llamar a ${name}. ¿Cómo puedo ayudarle hoy?`;
+  return `Con gusto le atiendo. Soy la asistente virtual de ${name}. ¿En qué le puedo ayudar?`;
 }
 
 function getSpanishGreeting(clinic) {
@@ -552,21 +562,21 @@ function getSpanishGreeting(clinic) {
 
 function getErrorMessage(lang) {
   return lang === 'es'
-    ? 'Lo siento, tuve un problema técnico. ¿Podría repetir eso por favor?'
-    : "I'm sorry, I had a technical issue. Could you please repeat that?";
+    ? 'Disculpe, tuve un pequeño problema técnico. ¿Podría repetir eso, por favor?'
+    : "I apologize, I had a small technical issue. Could you please repeat that?";
 }
 
 function getNoInputMessage(lang) {
   return lang === 'es'
-    ? 'No hemos recibido respuesta. ¿Podría repetir por favor?'
-    : "I didn't catch that. Could you please say that again?";
+    ? 'No le escuché bien. ¿Podría repetir eso, por favor? No hay prisa.'
+    : "I didn't catch that. Could you please say that again? Take your time.";
 }
 
 function getTimeoutGoodbye(lang, clinicName) {
   const name = clinicName ? ` a ${clinicName}` : '';
   return lang === 'es'
-    ? `Gracias por llamar${name}. Que tenga un excelente día.`
-    : `Thank you for calling${name}. Have a great day. Goodbye!`;
+    ? `Gracias por llamar${name}. Que tenga un muy buen día. ¡Hasta luego!`
+    : `Thank you for calling${name}. We hope to speak with you soon. Have a wonderful day!`;
 }
 
 function getActiveSessions() { return sessions.size; }

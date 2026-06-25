@@ -194,8 +194,16 @@ function initDb() {
 
   // ── Migrations: appointment location + SMS tracking ──────────────────────
 
-  _addColumnIfMissing('appointments', 'location', 'TEXT');
-  _addColumnIfMissing('appointments', 'sms_sent', 'INTEGER DEFAULT 0');
+  _addColumnIfMissing('appointments', 'location',          'TEXT');
+  _addColumnIfMissing('appointments', 'sms_sent',          'INTEGER DEFAULT 0');
+  _addColumnIfMissing('appointments', 'reminder_24h_sent', 'INTEGER DEFAULT 0');
+  _addColumnIfMissing('appointments', 'reminder_1h_sent',  'INTEGER DEFAULT 0');
+
+  // ── Migrations: AI voice selection + website KB ──────────────────────────
+
+  _addColumnIfMissing('clinics',        'ai_voice_es', 'TEXT');
+  _addColumnIfMissing('clinics',        'ai_voice_en', 'TEXT');
+  _addColumnIfMissing('knowledge_base', 'website_url', 'TEXT');
 
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
@@ -820,6 +828,30 @@ function updateAppointmentSmsStatus(apptId, status) {
   db.prepare('UPDATE appointments SET sms_sent = ? WHERE id = ?').run(status, apptId);
 }
 
+function markReminderSent(apptId, reminderType) {
+  const col = reminderType === '24h' ? 'reminder_24h_sent' : 'reminder_1h_sent';
+  db.prepare(`UPDATE appointments SET ${col} = 1 WHERE id = ?`).run(apptId);
+}
+
+// Returns appointments with confirmed date+time whose reminder hasn't been sent yet.
+// windowStart / windowEnd are ISO datetime strings for the target reminder window.
+function getAppointmentsDueForReminder(reminderType, windowStart, windowEnd) {
+  const col = reminderType === '24h' ? 'reminder_24h_sent' : 'reminder_1h_sent';
+  return db.prepare(`
+    SELECT a.*, c.name AS clinic_name, c.slug AS clinic_slug,
+           c.twilio_sid, c.twilio_token, c.twilio_phone, c.sms_follow_up_enabled,
+           ca.language
+    FROM appointments a
+    INNER JOIN clinics c ON a.clinic_id = c.id
+    LEFT JOIN calls ca ON ca.id = a.call_id
+    WHERE a.preferred_date IS NOT NULL
+      AND a.preferred_time IS NOT NULL
+      AND a.${col} = 0
+      AND a.status IN ('pending', 'confirmed')
+      AND datetime(a.preferred_date || ' ' || a.preferred_time) BETWEEN datetime(?) AND datetime(?)
+  `).all(windowStart, windowEnd);
+}
+
 function getAppointments(limit = 50, clinicId) {
   return db.prepare(`
     SELECT a.*, c.call_sid, c.language, c.created_at AS call_date
@@ -901,7 +933,8 @@ function getClinicAiConfig(id) {
            ai_business_description, ai_services, ai_faq,
            ai_appointment_instructions, ai_transfer_rules,
            ai_office_hours, ai_after_hours_message, ai_emergency_instructions,
-           ai_industry_template, ai_master_prompt
+           ai_industry_template, ai_master_prompt,
+           ai_voice_es, ai_voice_en
     FROM clinics WHERE id = ?
   `).get(id);
 }
@@ -913,6 +946,7 @@ function updateClinicAiConfig(id, data) {
     'ai_appointment_instructions', 'ai_transfer_rules',
     'ai_office_hours', 'ai_after_hours_message', 'ai_emergency_instructions',
     'ai_industry_template', 'ai_master_prompt',
+    'ai_voice_es', 'ai_voice_en',
   ];
   const map = {
     ai_assistant_name:           data.assistantName,
@@ -928,6 +962,8 @@ function updateClinicAiConfig(id, data) {
     ai_emergency_instructions:   data.emergencyInstructions,
     ai_industry_template:        data.industryTemplate,
     ai_master_prompt:            data.masterPrompt,
+    ai_voice_es:                 data.voiceEs,
+    ai_voice_en:                 data.voiceEn,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])
@@ -1057,6 +1093,17 @@ function upsertKnowledgeBase(clinicId, data) {
   invalidateKbCache(clinicId);
 }
 
+function saveWebsiteUrl(clinicId, url) {
+  const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  if (existing) {
+    db.prepare('UPDATE knowledge_base SET website_url = ?, updated_at = CURRENT_TIMESTAMP WHERE clinic_id = ?')
+      .run(url || null, clinicId);
+  } else {
+    db.prepare('INSERT INTO knowledge_base (clinic_id, website_url) VALUES (?, ?)').run(clinicId, url || null);
+  }
+  invalidateKbCache(clinicId);
+}
+
 function logUnansweredQuestion(clinicId, callId, question) {
   if (!question?.trim()) return;
   db.prepare('INSERT INTO unanswered_questions (clinic_id, call_id, question) VALUES (?, ?, ?)')
@@ -1166,6 +1213,8 @@ module.exports = {
   // appointments
   createAppointment,
   updateAppointmentSmsStatus,
+  markReminderSent,
+  getAppointmentsDueForReminder,
   getAppointments,
   updateAppointmentStatus,
   // messages
@@ -1184,6 +1233,7 @@ module.exports = {
   // knowledge base
   getKnowledgeBase,
   upsertKnowledgeBase,
+  saveWebsiteUrl,
   logUnansweredQuestion,
   getUnansweredQuestions,
   // cost management

@@ -419,6 +419,44 @@
         <span id="kb-save-status" class="text-xs text-slate-400"></span>
       </div>
 
+      <!-- Website Knowledge Import -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-800">Import from Website</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Enter your website URL to automatically extract business info into the Knowledge Base. You can review and edit before saving.</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <input id="kb-website-url" type="url" placeholder="https://yourwebsite.com"
+            class="flex-1 min-w-48 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <button onclick="importFromWebsite()" id="kb-import-btn"
+            class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">
+            Import from Website
+          </button>
+          <button onclick="saveWebsiteUrlAction()" id="kb-save-url-btn"
+            class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200 whitespace-nowrap">
+            Save URL
+          </button>
+        </div>
+        <div id="kb-import-status" class="hidden text-xs px-3 py-2 rounded-lg"></div>
+
+        <!-- Preview panel (hidden until import succeeds) -->
+        <div id="kb-import-preview" class="hidden border border-indigo-200 rounded-xl bg-indigo-50 p-4 space-y-3">
+          <p class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Extracted Information — Review &amp; Edit Before Applying</p>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3" id="kb-import-fields"></div>
+          <div class="flex gap-2 pt-1">
+            <button onclick="applyImportedKb()"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+              Apply to Knowledge Base
+            </button>
+            <button onclick="cancelImport()"
+              class="px-4 py-2 bg-white text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
+              Cancel
+            </button>
+          </div>
+          <p class="text-xs text-slate-400">Applying will append to existing fields (or replace if empty). You must still click "Save Knowledge Base" to persist the changes.</p>
+        </div>
+      </div>
+
       <!-- KB Fields Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
@@ -902,6 +940,47 @@
           </div>
         </div>
 
+        <!-- IVR Location Menu -->
+        <div class="border-t border-slate-100 pt-4">
+          <div class="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">IVR Location Menu</p>
+              <p class="text-xs text-slate-400 mt-1">When enabled, callers hear a numbered menu to select a location before the AI starts. Add each location with its keypad digit below.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+              <input type="checkbox" id="f-ivr-enabled" class="sr-only peer" onchange="toggleIvrSection()">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            </label>
+          </div>
+          <div id="ivr-settings" class="hidden space-y-3">
+            <div>
+              <label class="form-label">Display Name <span class="normal-case font-normal text-slate-400">— used in greeting and AI responses</span></label>
+              <input type="text" id="f-ivr-display-name" placeholder="e.g. MDcare Medical Centers" class="form-input">
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+              <div>
+                <p class="text-xs font-semibold text-slate-600">Bilingual Language Menu</p>
+                <p class="text-xs text-slate-400">Add a Spanish / English selection step before the location menu</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                <input type="checkbox" id="f-ivr-lang-menu" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+              </label>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs font-semibold text-slate-600">Location Options</p>
+                <button type="button" onclick="addIvrOption()"
+                  class="text-xs text-blue-600 hover:text-blue-800 font-semibold border border-blue-200 rounded px-2 py-0.5 transition-colors">
+                  + Add Location
+                </button>
+              </div>
+              <div id="ivr-options-list" class="space-y-2"></div>
+              <p class="text-xs text-slate-400 mt-1">Press 9 to repeat is added automatically.</p>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- ── TAB: Billing & Plan ── -->
@@ -1020,6 +1099,24 @@
           <div class="col-span-2">
             <label class="form-label">Spanish Greeting <span class="normal-case font-normal text-slate-400">— override when caller switches to Spanish</span></label>
             <textarea id="ai-greeting-es" rows="2" placeholder="¡Gracias por llamar a [Clínica]! ¿En qué le puedo ayudar hoy?" class="form-input resize-none"></textarea>
+          </div>
+          <div>
+            <label class="form-label">Voice (Spanish)</label>
+            <select id="f-ai-voice-es" class="form-input bg-white">
+              <option value="">— Default (Lupe Neural) —</option>
+              <option value="Polly.Lupe-Neural">Lupe-Neural (es-US Female)</option>
+              <option value="Polly.Mia-Neural">Mia-Neural (es-MX Female)</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Voice (English)</label>
+            <select id="f-ai-voice-en" class="form-input bg-white">
+              <option value="">— Default (Joanna) —</option>
+              <option value="Polly.Joanna">Joanna (en-US Female)</option>
+              <option value="Polly.Kendra-Neural">Kendra-Neural (en-US Female)</option>
+              <option value="Polly.Matthew-Neural">Matthew-Neural (en-US Male)</option>
+              <option value="Polly.Stephen-Neural">Stephen-Neural (en-US Male)</option>
+            </select>
           </div>
         </div>
       </div>
@@ -1462,6 +1559,8 @@ function openAddModal() {
   document.getElementById('clinic-form').reset();
   document.getElementById('f-admin-user').value = 'admin';
   document.getElementById('f-status').value = 'active';
+  renderIvrOptions([]);
+  toggleIvrSection();
   document.getElementById('f-business-type').value = 'Medical';
   document.getElementById('f-monthly-plan').value = 'Starter';
   document.getElementById('f-monthly-price').value = '99';
@@ -1499,6 +1598,14 @@ async function openEditModal(id) {
     document.getElementById('f-twilio-validate').value = c.twilio_validate ? '1' : '0';
     document.getElementById('f-transfer-phone').value  = c.transfer_phone || '';
     document.getElementById('f-sms-follow-up').checked = !!c.sms_follow_up_enabled;
+    // IVR
+    document.getElementById('f-ivr-enabled').checked = !!c.ivr_enabled;
+    let ivrCfg = null;
+    try { ivrCfg = c.ivr_config ? JSON.parse(c.ivr_config) : null; } catch {}
+    document.getElementById('f-ivr-display-name').value = ivrCfg?.clinicDisplayName || '';
+    document.getElementById('f-ivr-lang-menu').checked  = !!(ivrCfg?.languageMenu);
+    renderIvrOptions(ivrCfg?.options || []);
+    toggleIvrSection();
     document.getElementById('f-clinic-email').value  = c.clinic_email || '';
     document.getElementById('f-email-from').value    = c.email_from || '';
     document.getElementById('f-gmail-user').value    = c.gmail_user || '';
@@ -1581,6 +1688,8 @@ async function saveClinic(e) {
     twilioValidate:      document.getElementById('f-twilio-validate').value === '1',
     transferPhone:       document.getElementById('f-transfer-phone').value.trim(),
     smsFollowUpEnabled:  document.getElementById('f-sms-follow-up').checked,
+    ivrEnabled:     document.getElementById('f-ivr-enabled').checked,
+    ivrConfig:      buildIvrConfig(),
     clinicEmail:    document.getElementById('f-clinic-email').value.trim(),
     emailFrom:      document.getElementById('f-email-from').value.trim(),
     gmailUser:      document.getElementById('f-gmail-user').value.trim(),
@@ -1776,6 +1885,8 @@ async function loadAiConfig(clinicId) {
     document.getElementById('ai-emergency').value      = c.ai_emergency_instructions   || '';
     document.getElementById('ai-industry-template').value = c.ai_industry_template     || '';
     document.getElementById('ai-master-prompt').value  = c.ai_master_prompt            || '';
+    document.getElementById('f-ai-voice-es').value     = c.ai_voice_es                 || '';
+    document.getElementById('f-ai-voice-en').value     = c.ai_voice_en                 || '';
     onTemplateChange();
     // Rebuild FAQ list
     const list = document.getElementById('faq-list');
@@ -1819,6 +1930,8 @@ async function saveAiConfig() {
     faq:                     JSON.stringify(faqs),
     industryTemplate:        document.getElementById('ai-industry-template').value,
     masterPrompt:            document.getElementById('ai-master-prompt').value.trim(),
+    voiceEs:                 document.getElementById('f-ai-voice-es').value || null,
+    voiceEn:                 document.getElementById('f-ai-voice-en').value || null,
   };
 
   try {
@@ -2124,6 +2237,15 @@ async function viewCallDetail(callId) {
         '<div class="space-y-2 max-h-72 overflow-y-auto">' + rows + '</div></div>';
     }
 
+    const recordingHtml = data.recording_url
+      ? '<div class="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200">' +
+          '<p class="text-xs font-semibold text-amber-700 uppercase mb-2">Voicemail Recording</p>' +
+          '<audio controls class="w-full h-10" src="/superadmin/api/calls/' + callId + '/recording">' +
+            'Your browser does not support the audio element.' +
+          '</audio>' +
+        '</div>'
+      : '';
+
     body.innerHTML =
       '<div class="grid grid-cols-2 gap-3 text-sm">' +
         '<div><span class="text-xs text-slate-400">Clinic</span><div class="font-medium">' + (data.clinic_name || data.clinic_id) + '</div></div>' +
@@ -2134,7 +2256,7 @@ async function viewCallDetail(callId) {
         '<div><span class="text-xs text-slate-400">Duration</span><div>' + (data.duration ? data.duration + 's' : '—') + '</div></div>' +
         '<div><span class="text-xs text-slate-400">Language</span><div>' + (data.language === 'es' ? 'Spanish' : 'English') + '</div></div>' +
         '<div><span class="text-xs text-slate-400">Status</span><div>' + (data.status || '—') + '</div></div>' +
-      '</div>' + transcriptHtml;
+      '</div>' + recordingHtml + transcriptHtml;
 
     modal.classList.remove('hidden');
   } catch(e) { alert('Could not load call: ' + e.message); }
@@ -2146,6 +2268,73 @@ function closeCallDetail() {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── IVR UI helpers ────────────────────────────────────────────────────────────
+
+function toggleIvrSection() {
+  const enabled = document.getElementById('f-ivr-enabled').checked;
+  document.getElementById('ivr-settings').classList.toggle('hidden', !enabled);
+}
+
+function renderIvrOptions(options) {
+  const list = document.getElementById('ivr-options-list');
+  list.innerHTML = '';
+  (options || []).forEach(opt => addIvrOptionRow(opt.digit || '', opt.label || ''));
+}
+
+function addIvrOption() {
+  const list  = document.getElementById('ivr-options-list');
+  const next  = list.children.length + 1;
+  addIvrOptionRow(String(next <= 8 ? next : ''), '');
+}
+
+function addIvrOptionRow(digit, label) {
+  const list = document.getElementById('ivr-options-list');
+  const row  = document.createElement('div');
+  row.className = 'flex gap-2 items-center ivr-option-row';
+  row.innerHTML =
+    '<span class="text-xs text-slate-400 w-12 flex-shrink-0 text-center">#</span>' +
+    '<input type="text" value="' + escHtml(digit) + '" maxlength="1" placeholder="1"' +
+    '  class="form-input w-14 font-mono text-center text-sm ivr-digit flex-shrink-0" style="min-width:3rem">' +
+    '<input type="text" value="' + escHtml(label) + '" placeholder="Location name"' +
+    '  class="form-input flex-1 text-sm ivr-label">' +
+    '<button type="button" onclick="this.closest(\'.ivr-option-row\').remove()"' +
+    '  class="text-slate-300 hover:text-red-500 text-xl leading-none flex-shrink-0 px-1">&times;</button>';
+  list.appendChild(row);
+}
+
+function buildIvrConfig() {
+  const enabled = document.getElementById('f-ivr-enabled').checked;
+  if (!enabled) return null;
+
+  const displayName = document.getElementById('f-ivr-display-name').value.trim();
+  const langMenu    = document.getElementById('f-ivr-lang-menu').checked;
+  const rows        = document.querySelectorAll('#ivr-options-list .ivr-option-row');
+  const options     = Array.from(rows)
+    .map(r => ({ digit: r.querySelector('.ivr-digit').value.trim(), label: r.querySelector('.ivr-label').value.trim() }))
+    .filter(o => o.digit && o.label);
+
+  const cfg = {
+    clinicDisplayName: displayName,
+    greeting:          `Thank you for calling ${displayName || 'us'}.`,
+    options,
+    repeatDigit:       '9',
+    voice:             'Polly.Joanna',
+    language:          'en-US',
+  };
+
+  if (langMenu) {
+    cfg.languageMenu = {
+      greeting:    `Gracias por comunicarse con ${displayName || 'nosotros'}.`,
+      options:     [{ digit: '1', lang: 'es', label: 'Spanish' }, { digit: '2', lang: 'en', label: 'English' }],
+      repeatDigit: '9',
+      voice:       'Polly.Lupe-Neural',
+      langCode:    'es-US',
+    };
+  }
+
+  return JSON.stringify(cfg);
 }
 
 // ── Populate clinic filter dropdown ──────────────────────────────────────────
@@ -2633,7 +2822,10 @@ async function loadKb() {
       const el = document.getElementById(`kb-${f.replace(/_/g,'-')}`);
       if (el) el.value = kb[f] || '';
     });
+    if (kb.website_url) document.getElementById('kb-website-url').value = kb.website_url;
     document.getElementById('kb-save-status').textContent = '';
+    document.getElementById('kb-import-preview').classList.add('hidden');
+    document.getElementById('kb-import-status').classList.add('hidden');
     await loadUnanswered();
   } catch (e) {
     alert('Error loading knowledge base: ' + e.message);
@@ -2718,6 +2910,118 @@ async function loadUnanswered() {
     </table>`;
   } catch (e) {
     container.innerHTML = `<p class="text-xs text-red-400">Error: ${e.message}</p>`;
+  }
+}
+
+// ── Website Knowledge Import ──────────────────────────────────────────────────
+
+const KB_IMPORT_FIELDS = [
+  { key: 'services',           label: 'Services Offered',    kbId: 'kb-services' },
+  { key: 'locations',          label: 'Locations',           kbId: 'kb-locations' },
+  { key: 'office_hours',       label: 'Office Hours',        kbId: 'kb-office-hours' },
+  { key: 'insurance',          label: 'Insurance Accepted',  kbId: 'kb-insurance' },
+  { key: 'appointment_policy', label: 'Appointment Policy',  kbId: 'kb-appointment-policy' },
+  { key: 'faqs',               label: 'FAQs',                kbId: 'kb-faqs' },
+];
+
+let _importedData = {};
+
+async function importFromWebsite() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) return alert('Select a clinic first.');
+  const url = document.getElementById('kb-website-url')?.value?.trim();
+  if (!url) return alert('Enter a website URL first.');
+
+  const btn    = document.getElementById('kb-import-btn');
+  const status = document.getElementById('kb-import-status');
+  const preview = document.getElementById('kb-import-preview');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+  preview.classList.add('hidden');
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  status.textContent = 'Fetching website and extracting information…';
+  status.classList.remove('hidden');
+
+  try {
+    const r = await fetch(`/superadmin/api/kb/${clinicId}/import-website`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Import failed');
+
+    _importedData = data.extracted || {};
+    const populated = KB_IMPORT_FIELDS.filter(f => _importedData[f.key]);
+    if (!populated.length) {
+      status.className = 'text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-700';
+      status.textContent = 'No usable business information found on this page. Try a more content-rich URL (e.g. About or Services page).';
+      return;
+    }
+
+    // Render preview with editable textareas
+    const fieldsEl = document.getElementById('kb-import-fields');
+    fieldsEl.innerHTML = populated.map(f => `
+      <div class="space-y-1">
+        <label class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">${f.label}</label>
+        <textarea id="imp-${f.key}" rows="3"
+          class="w-full text-xs border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y bg-white">${(_importedData[f.key] || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+      </div>`).join('');
+
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+    status.textContent = `Extracted ${populated.length} section(s) from ${url}. Review below and click "Apply to Knowledge Base".`;
+    preview.classList.remove('hidden');
+  } catch (e) {
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Import from Website';
+  }
+}
+
+function applyImportedKb() {
+  KB_IMPORT_FIELDS.forEach(f => {
+    const srcEl = document.getElementById(`imp-${f.key}`);
+    const dstEl = document.getElementById(f.kbId);
+    if (!srcEl || !dstEl) return;
+    const newContent = srcEl.value.trim();
+    if (!newContent) return;
+    const existing = dstEl.value.trim();
+    dstEl.value = existing ? `${existing}\n\n--- Imported ---\n${newContent}` : newContent;
+  });
+  document.getElementById('kb-import-preview').classList.add('hidden');
+  const status = document.getElementById('kb-import-status');
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+  status.textContent = 'Applied to Knowledge Base fields. Click "Save Knowledge Base" to persist.';
+}
+
+function cancelImport() {
+  document.getElementById('kb-import-preview').classList.add('hidden');
+  document.getElementById('kb-import-status').classList.add('hidden');
+}
+
+async function saveWebsiteUrlAction() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) return alert('Select a clinic first.');
+  const url = document.getElementById('kb-website-url')?.value?.trim();
+  const btn = document.getElementById('kb-save-url-btn');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/superadmin/api/kb/${clinicId}/save-website-url`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url || null }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    const status = document.getElementById('kb-import-status');
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+    status.textContent = url ? `Website URL saved: ${url}` : 'Website URL cleared.';
+    status.classList.remove('hidden');
+    setTimeout(() => status.classList.add('hidden'), 3000);
+  } catch (e) {
+    alert('Save URL failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 

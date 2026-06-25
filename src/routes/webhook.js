@@ -15,7 +15,7 @@ const {
   getClinicBySlug, getKnowledgeBase, logUnansweredQuestion,
 } = require('../database/db');
 
-const { sendAppointmentNotification, sendDoctorMessageNotification } = require('../services/email');
+const { sendAppointmentNotification, sendDoctorMessageNotification, sendEmergencyAlert } = require('../services/email');
 const {
   sendAppointmentConfirmationSms,
   sendMessageReceiptSms,
@@ -31,9 +31,11 @@ function esc(text) {
     .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
-function gatherTwiml(speakText, lang, slug) {
-  const voice    = lang === 'es' ? 'Polly.Lupe-Neural'  : 'Polly.Joanna';
-  const langCode = lang === 'es' ? 'es-US'       : 'en-US';
+function gatherTwiml(speakText, lang, slug, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
   const hints    = lang === 'es'
     ? 'cita,doctor,mensaje,sí,no,urgente,nombre,apellido,teléfono,fecha,hora'
     : 'appointment,doctor,message,yes,no,urgent,name,phone,date,time,morning,afternoon';
@@ -49,9 +51,11 @@ function gatherTwiml(speakText, lang, slug) {
 </Response>`;
 }
 
-function endTwiml(speakText, lang) {
-  const voice    = lang === 'es' ? 'Polly.Lupe-Neural'  : 'Polly.Joanna';
-  const langCode = lang === 'es' ? 'es-US'       : 'en-US';
+function endTwiml(speakText, lang, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
@@ -59,9 +63,11 @@ function endTwiml(speakText, lang) {
 </Response>`;
 }
 
-function transferTwiml(speakText, lang, transferPhone, callerPhone) {
-  const voice    = lang === 'es' ? 'Polly.Lupe-Neural'  : 'Polly.Joanna';
-  const langCode = lang === 'es' ? 'es-US'       : 'en-US';
+function transferTwiml(speakText, lang, transferPhone, callerPhone, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
@@ -69,9 +75,11 @@ function transferTwiml(speakText, lang, transferPhone, callerPhone) {
 </Response>`;
 }
 
-function voicemailTwiml(speakText, lang, slug) {
-  const voice    = lang === 'es' ? 'Polly.Lupe-Neural'  : 'Polly.Joanna';
-  const langCode = lang === 'es' ? 'es-US'       : 'en-US';
+function voicemailTwiml(speakText, lang, slug, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
@@ -85,8 +93,10 @@ function voicemailTwiml(speakText, lang, slug) {
 }
 
 // Waiting prompt: plays while AI is processing, then redirects to /gather-resume
-function waitingTwiml(text, lang, slug) {
-  const voice    = lang === 'es' ? 'Polly.Lupe-Neural' : 'Polly.Joanna';
+function waitingTwiml(text, lang, slug, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
   const langCode = lang === 'es' ? 'es-US' : 'en-US';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -97,15 +107,15 @@ function waitingTwiml(text, lang, slug) {
 
 const WAITING_PROMPTS = {
   es: [
-    'Un momento por favor mientras verifico esa información.',
+    'Con mucho gusto, un momento por favor.',
     'Permítame un momento.',
-    'Estoy revisando su solicitud.',
-    'Gracias por esperar.',
+    'Claro que sí, enseguida le atiendo.',
+    'Gracias por su paciencia.',
   ],
   en: [
-    'One moment please while I check that information.',
-    'Please hold for a moment.',
-    "I'm reviewing your request.",
+    'Absolutely, just one moment please.',
+    'Of course, let me check that for you.',
+    'Sure, one moment.',
     'Thank you for your patience.',
   ],
 };
@@ -150,7 +160,7 @@ function ivrMenuTwiml(clinic, slug, lang) {
   const useLang = lang || 'es';
   if (!cfg) {
     const greeting = getInitialGreeting(clinic);
-    return gatherTwiml(greeting, useLang, slug);
+    return gatherTwiml(greeting, useLang, slug, clinic);
   }
   const isEs     = useLang === 'es';
   const voice    = isEs ? 'Polly.Lupe-Neural'  : (cfg.voice    || 'Polly.Joanna');
@@ -227,7 +237,7 @@ router.post('/:slug/voice', clinicMiddleware, (req, res) => {
   const greeting = getInitialGreeting(clinic);
   addTranscript(dbId, 'assistant', greeting);
   console.log(`[Webhook/${clinic.slug}] /voice → gather  ${Date.now() - t0}ms  CallSid=${CallSid}`);
-  res.type('text/xml').send(gatherTwiml(greeting, 'es', clinic.slug));
+  res.type('text/xml').send(gatherTwiml(greeting, 'es', clinic.slug, clinic));
 });
 
 // ── Route: IVR repeat / timeout ───────────────────────────────────────────────
@@ -346,8 +356,8 @@ router.post('/:slug/ivr-select', clinicMiddleware, (req, res) => {
   setSelectedCenter(CallSid, option);
   prewarmSession(CallSid); // build system prompt now while caller hears greeting + speaks
   const greeting = isEs
-    ? `Gracias por comunicarse con ${dispName} ${option.label} Medical Center. Soy Ana, su asistente virtual. Estoy aquí para ayudarle con citas, información general y mensajes para nuestro equipo. ¿Cómo puedo ayudarle hoy?`
-    : `Thank you for calling ${dispName} ${option.label} Medical Center. I am Ana, your virtual assistant. I am here to help with appointments, general information, and messages for our team. How may I assist you today?`;
+    ? `Con gusto le atiendo. Soy Ana, su asistente virtual de ${dispName} ${option.label}. ¿En qué le puedo ayudar hoy?`
+    : `Thank you for calling ${dispName} ${option.label}. I'm Ana, your virtual assistant. How may I assist you today?`;
   if (session?.dbId) addTranscript(session.dbId, 'assistant', greeting);
   console.log(`[Webhook/${clinic.slug}] /ivr-select location=${option.label} lang=${lang}  ${Date.now() - t0}ms  CallSid=${CallSid}`);
 
@@ -395,16 +405,16 @@ async function sendAiResponse(ai, session, clinic, CallSid, speechResult, res) {
     endSession(CallSid);
     console.log(`[Webhook/${clinic.slug}] Transferring call ${CallSid} → ${clinic.transfer_phone}`);
     return res.type('text/xml').send(
-      transferTwiml(ai.speak, ai.language, clinic.transfer_phone, clinic.twilio_phone)
+      transferTwiml(ai.speak, ai.language, clinic.transfer_phone, clinic.twilio_phone, clinic)
     );
   }
 
   if (ai.complete) {
     await finalizeCall(CallSid, ai, clinic);
-    return res.type('text/xml').send(endTwiml(ai.speak, ai.language));
+    return res.type('text/xml').send(endTwiml(ai.speak, ai.language, clinic));
   }
 
-  return res.type('text/xml').send(gatherTwiml(ai.speak, ai.language, clinic.slug));
+  return res.type('text/xml').send(gatherTwiml(ai.speak, ai.language, clinic.slug, clinic));
 }
 
 // ── Route: speech gathered ────────────────────────────────────────────────────
@@ -422,7 +432,7 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
   const session = getSession(CallSid);
   if (!session) {
     return res.type('text/xml').send(
-      endTwiml(`Perdimos su sesión. Por favor llame nuevamente. Gracias por llamar a ${clinic.name}.`, 'es')
+      endTwiml(`Perdimos su sesión. Por favor llame nuevamente. Gracias por llamar a ${clinic.name}.`, 'es', clinic)
     );
   }
 
@@ -455,9 +465,9 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
       const lang = session.language || 'es';
       return res.type('text/xml').send(gatherTwiml(
         lang === 'es'
-          ? 'Lo siento, tuve un problema técnico. ¿Podría repetir eso?'
-          : "I'm sorry, I had a technical issue. Could you please repeat that?",
-        lang, clinic.slug
+          ? 'Disculpe, tuve un pequeño problema técnico. ¿Podría repetir eso?'
+          : "I apologize, I had a small technical issue. Could you please repeat that?",
+        lang, clinic.slug, clinic
       ));
     }
   }
@@ -472,7 +482,7 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
       .catch(() => { /* handled in /gather-resume */ });
     const prompt = pickWaitingPrompt(lang);
     console.log(`[Latency] gather→waiting prompt  pre-ai=${Date.now()-t0}ms  CallSid=${CallSid}`);
-    return res.type('text/xml').send(waitingTwiml(prompt, lang, clinic.slug));
+    return res.type('text/xml').send(waitingTwiml(prompt, lang, clinic.slug, clinic));
   }
 
   // AI responded within threshold — send immediately, no waiting prompt
@@ -493,7 +503,7 @@ router.post('/:slug/gather-resume', clinicMiddleware, async (req, res) => {
 
   if (!session) {
     return res.type('text/xml').send(
-      endTwiml(`Perdimos su sesión. Por favor llame nuevamente. Gracias por llamar a ${clinic.name}.`, 'es')
+      endTwiml(`Perdimos su sesión. Por favor llame nuevamente. Gracias por llamar a ${clinic.name}.`, 'es', clinic)
     );
   }
 
@@ -503,7 +513,7 @@ router.post('/:slug/gather-resume', clinicMiddleware, async (req, res) => {
     const lang = session.language || 'es';
     return res.type('text/xml').send(gatherTwiml(
       lang === 'es' ? '¿Cómo puedo ayudarle?' : 'How may I assist you?',
-      lang, clinic.slug
+      lang, clinic.slug, clinic
     ));
   }
 
@@ -518,9 +528,9 @@ router.post('/:slug/gather-resume', clinicMiddleware, async (req, res) => {
     const lang = session.language || 'es';
     return res.type('text/xml').send(gatherTwiml(
       lang === 'es'
-        ? 'Lo siento, tuve un problema técnico. ¿Podría repetir eso?'
-        : "I'm sorry, I had a technical issue. Could you please repeat that?",
-      lang, clinic.slug
+        ? 'Disculpe, tuve un pequeño problema técnico. ¿Podría repetir eso?'
+        : "I apologize, I had a small technical issue. Could you please repeat that?",
+      lang, clinic.slug, clinic
     ));
   }
 
@@ -554,7 +564,7 @@ router.post('/:slug/no-input', clinicMiddleware, (req, res) => {
         }
       }
       endSession(CallSid);
-      return res.type('text/xml').send(endTwiml(getTimeoutGoodbye(lang, clinic.name), lang));
+      return res.type('text/xml').send(endTwiml(getTimeoutGoodbye(lang, clinic.name), lang, clinic));
     }
 
     // On 2nd silence, offer voicemail
@@ -563,11 +573,11 @@ router.post('/:slug/no-input', clinicMiddleware, (req, res) => {
         ? 'No hemos recibido respuesta. Después del tono puede dejar un mensaje detallando su problema. Presione # cuando termine.'
         : "We didn't receive a response. After the beep, please leave a message describing your issue. Press # when done.";
       if (session.dbId) addTranscript(session.dbId, 'assistant', prompt);
-      return res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug));
+      return res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug, clinic));
     }
   }
 
-  res.type('text/xml').send(gatherTwiml(getNoInputMessage(lang), lang, clinic.slug));
+  res.type('text/xml').send(gatherTwiml(getNoInputMessage(lang), lang, clinic.slug, clinic));
 });
 
 // ── Route: Twilio status callback ─────────────────────────────────────────────
@@ -611,7 +621,7 @@ router.post('/:slug/voicemail', clinicMiddleware, (req, res) => {
   if (session?.dbId) addTranscript(session.dbId, 'assistant', prompt);
 
   console.log(`[Webhook/${clinic.slug}] Voicemail started  CallSid=${CallSid}`);
-  res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug));
+  res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug, clinic));
 });
 
 // ── Route: recording complete callback ────────────────────────────────────────
@@ -643,7 +653,7 @@ router.post('/:slug/recording-complete', clinicMiddleware, async (req, res) => {
     ? '¡Su mensaje ha sido grabado! Le llamaremos pronto. ¡Adiós!'
     : 'Your message has been recorded. We will call you back soon. Goodbye!';
 
-  res.type('text/xml').send(endTwiml(goodbye, lang));
+  res.type('text/xml').send(endTwiml(goodbye, lang, clinic));
 });
 
 // ── Internal: finalize completed call ─────────────────────────────────────────
@@ -664,6 +674,12 @@ async function finalizeCall(callSid, ai, clinic) {
     status:             ai.emergencyDetected ? 'emergency' : 'completed',
     emergency_detected: ai.emergencyDetected ? 1 : 0,
   });
+
+  if (ai.emergencyDetected) {
+    const callerPhone = ai.collected?.phone || session?.collected?.phone || 'unknown';
+    sendEmergencyAlert(callId, callerPhone, clinic)
+      .catch(e => console.error('[Email] Emergency alert failed:', e.message));
+  }
 
   if (!ai.emergencyDetected) {
     try {

@@ -6,6 +6,9 @@ const fs        = require('fs');
 
 const twilio = require('twilio');
 
+const Anthropic = require('@anthropic-ai/sdk');
+const _anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
 const {
   getClinics, getClinicBySlug, getClinicById,
   createClinic, updateClinic, deleteClinic,
@@ -13,7 +16,7 @@ const {
   getClinicAiConfig, updateClinicAiConfig,
   getAllCalls, getCallCount, getCallWithTranscript,
   getCallVolumeByDay, getCallAnalyticsSummary,
-  getKnowledgeBase, upsertKnowledgeBase, getUnansweredQuestions,
+  getKnowledgeBase, upsertKnowledgeBase, saveWebsiteUrl, getUnansweredQuestions,
   getCostConfig, saveCostConfig, getCostAlerts,
   db,
 } = require('../database/db');
@@ -224,6 +227,36 @@ router.get('/api/calls/:id', (req, res) => {
     if (!detail) return res.status(404).json({ error: 'Not found' });
     res.json(detail);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Voicemail recording proxy (fetches from Twilio with clinic credentials) ────
+
+router.get('/api/calls/:id/recording', async (req, res) => {
+  try {
+    const detail = getCallWithTranscript(+req.params.id);
+    if (!detail?.recording_url) return res.status(404).json({ error: 'No recording for this call' });
+
+    const clinic = getClinicById(detail.clinic_id);
+    if (!clinic?.twilio_sid || !clinic?.twilio_token)
+      return res.status(400).json({ error: 'Twilio credentials not configured for this clinic' });
+
+    // Ensure URL ends with .mp3 for audio streaming
+    const mp3Url = detail.recording_url.replace(/\.json$/, '').replace(/\/?$/, '.mp3');
+
+    const auth     = Buffer.from(`${clinic.twilio_sid}:${clinic.twilio_token}`).toString('base64');
+    const upstream = await fetch(mp3Url, { headers: { Authorization: `Basic ${auth}` } });
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: `Recording fetch failed: ${upstream.statusText}` });
+    }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Content-Disposition', `inline; filename="voicemail-${detail.id}.mp3"`);
+    upstream.body.pipe(res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Twilio credential test ────────────────────────────────────────────────────
@@ -533,6 +566,127 @@ router.post('/api/kb/test', async (req, res) => {
     const kb = getKnowledgeBase(+clinicId);
     const result = await runKbTest(clinic, kb, question);
     res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Website Knowledge Import ──────────────────────────────────────────────────
+
+const SSRF_BLOCKED = [
+  /^localhost$/i, /^127\./, /^10\./, /^192\.168\./,
+  /^172\.(1[6-9]|2\d|3[01])\./, /^::1$/, /^0\.0\.0\.0$/, /^169\.254\./,
+];
+
+function validatePublicUrl(rawUrl) {
+  let parsed;
+  try { parsed = new URL(rawUrl); } catch { return 'Invalid URL format'; }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return 'URL must use http or https';
+  const host = parsed.hostname;
+  if (SSRF_BLOCKED.some(r => r.test(host))) return 'Private or internal addresses are not allowed';
+  return null; // valid
+}
+
+router.post('/api/kb/:clinicId/import-website', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'url is required' });
+    const urlErr = validatePublicUrl(url);
+    if (urlErr) return res.status(400).json({ error: urlErr });
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not configured' });
+    }
+
+    // Fetch website with timeout + size limit
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    let rawHtml = '';
+    try {
+      const resp = await fetch(url, { signal: controller.signal, redirect: 'follow' });
+      if (!resp.ok) return res.status(400).json({ error: `Site returned HTTP ${resp.status}` });
+      const reader = resp.body.getReader();
+      let bytesRead = 0;
+      const MAX_BYTES = 500 * 1024;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesRead += value.length;
+        rawHtml += Buffer.from(value).toString('utf8');
+        if (bytesRead >= MAX_BYTES) { reader.cancel(); break; }
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Strip dangerous and nav HTML, then all tags
+    let text = rawHtml
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+      .replace(/<header[\s\S]*?<\/header>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ')
+      .replace(/\s+/g, ' ').trim()
+      .slice(0, 8000);
+
+    if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this URL' });
+
+    // Ask Claude to extract structured info
+    const aiResp = await _anthropicClient.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      messages: [{
+        role: 'user',
+        content: `You are extracting business information from a website to populate a knowledge base for an AI phone receptionist.
+
+From the text below, extract and organize information into these categories:
+- services: List of services offered
+- locations: Physical addresses, neighborhoods, cities
+- office_hours: Days and hours of operation
+- insurance: Insurance plans accepted
+- faqs: Common questions and answers
+- appointment_policy: How to schedule appointments
+
+Return a JSON object with exactly these keys. Only include categories where you found clear, relevant information. Keep content concise and factual. Do not include HTML, scripts, or navigation text. Return only valid JSON with no markdown fences.
+
+Website text:
+${text}`,
+      }],
+    });
+
+    let extracted = {};
+    try {
+      const raw = aiResp.content[0].text.trim()
+        .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      extracted = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? raw);
+    } catch {
+      return res.status(500).json({ error: 'AI could not parse website content into structured data' });
+    }
+
+    res.json({ ok: true, extracted });
+  } catch (e) {
+    if (e.name === 'AbortError') return res.status(408).json({ error: 'Website request timed out (10s)' });
+    console.error('[KB Import]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/api/kb/:clinicId/save-website-url', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const { url } = req.body;
+    if (url) {
+      const urlErr = validatePublicUrl(url);
+      if (urlErr) return res.status(400).json({ error: urlErr });
+    }
+    saveWebsiteUrl(+req.params.clinicId, url || null);
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
