@@ -1,8 +1,8 @@
 # NetCare AI Receptionist — Project Status
 
-**Last updated:** 2026-06-20
+**Last updated:** 2026-06-24
 **Branch:** `master`
-**Latest commit:** `35b6051`
+**Latest commit:** (pending commit)
 
 ---
 
@@ -51,7 +51,14 @@
 - `buildSystemPrompt()` assembles: template persona → tone → call types → business info → services → hours → appt instructions → transfer rules → after-hours → emergency → FAQ → industry rules → master prompt
 - Backward-compatible: accepts plain string (clinic name) or full clinic object
 
-### Phase 9 — Knowledge Base System (AI Intelligence) ✅ LATEST
+### Phase 10 — Appointment Reminders, Emergency Alerts, Voicemail Playback & IVR UI ✅ LATEST
+
+- **Appointment reminder SMS** (`node-cron`): A scheduler fires every 5 minutes and checks for appointments due in 24 h and 1 h windows. Sends a bilingual (English/Spanish) reminder SMS via Twilio. New columns `reminder_24h_sent` and `reminder_1h_sent` on the `appointments` table prevent duplicate sends. Scheduler started in `server.js`.
+- **Emergency escalation email**: When the AI detects an emergency call (`emergencyDetected: true`), `sendEmergencyAlert()` immediately emails the clinic's `contact_email` (or `clinic_email` as fallback) with caller phone, call ID, and a prominent warning. Non-fatal — logged if no email is configured.
+- **Voicemail playback in Super Admin**: New proxy route `GET /superadmin/api/calls/:id/recording` fetches the Twilio MP3 recording using the clinic's credentials and streams it to the browser. The Call Detail modal now shows an `<audio>` player when a recording URL is present.
+- **IVR Super Admin UI**: The Technical Setup tab in the clinic edit slide-over now has a full IVR configuration section — enable/disable toggle, display name field, bilingual language menu toggle, and a dynamic location options editor (add/remove rows with digit + label). On save, the IVR config JSON is serialized and persisted to the `ivr_config` column. Existing MDcare IVR config loads correctly on edit.
+
+### Phase 9 — Knowledge Base System (AI Intelligence) ✅
 
 - **Per-clinic Knowledge Base**: 13 content categories stored in `knowledge_base` table (`services`, `doctors`, `locations`, `office_hours`, `insurance`, `appointment_policy`, `cancellation_policy`, `new_patient_requirements`, `documents_needed`, `faqs`, `transfer_rules`, `emergency_instructions`, `do_not_answer`).
 - **AI Prompt Injection**: `buildKbPromptSection()` appends approved clinic content + medical safety rules to Claude system prompt on every call. When a caller selects an IVR location, that center's details are highlighted in the KB section.
@@ -168,26 +175,22 @@ Per-clinic (stored in DB, set via Super Admin UI):
 
 ---
 
-## Phase 9 — Suggested Next Steps
+## Phase 10 — Suggested Next Steps
 
 ### High Priority
-1. **Appointment reminder SMS** — `node-cron` job fires 24h and 1h before each appointment's `preferred_date`/`preferred_time`. Requires: `node-cron` dependency, `reminders_sent` flag on appointments, scheduler started in `server.js`.
-2. **Voicemail playback in Super Admin** — Recording URL is stored but the call detail modal has no player. Add an `<audio>` element or a `/superadmin/api/calls/:id/recording` proxy endpoint (Twilio recording URLs require auth; the proxy handles that transparently).
-3. **Escalation email on emergency** — When `emergency_detected = 1`, immediately email the clinic's `contact_email`. Currently no email fires on emergency — only the AI voice response.
-4. **IVR Super Admin UI** — Add IVR enable/disable toggle and location editor to the clinic edit slide-over (Technical tab). Currently IVR config can only be set via DB or API.
+1. **Per-location call tracking** — Add `selected_location` column to `calls` table so analytics can break down call volume by center (Hialeah vs Homestead vs Coral Gables).
+2. **Client portal enhancements** — View AI config (read-only tab), download call transcript as PDF (`pdfkit`), self-serve webhook URL update after provisioning a number.
+3. **Call recording for all calls** — Add `record="record-from-answer"` to `<Dial>` with per-clinic `call_recording_enabled` flag.
 
 ### Medium Priority
-5. **Per-location call tracking** — Add `selected_location` column to `calls` table so analytics can break down call volume by center (Hialeah vs Homestead vs Coral Gables).
-6. **Appointment reminders per location** — When a patient selects a center via IVR, store the location on the appointment so reminder SMS says the correct address.
-7. **Client portal enhancements** — View AI config (read-only tab), download call transcript as PDF (`pdfkit`), self-serve webhook URL update after provisioning a number.
-8. **Call recording for all calls** — Add `record="record-from-answer"` to `<Dial>` with per-clinic `call_recording_enabled` flag.
+4. **Analytics export** — Download call analytics as CSV from the Analytics view.
+5. **Appointment status management** — Confirm/cancel/reschedule appointments from the admin panel (update status, trigger SMS confirmation).
+6. **Rate limiting** — Add `express-rate-limit` on webhook routes to prevent abuse and runaway Twilio billing.
+7. **Webhook signature validation enforcement** — Make Twilio signature validation the default for new clinics; current setting is opt-in per clinic.
 
 ### Lower Priority
-9. **Multi-language IVR** — Spanish IVR option: if caller presses a language key first, serve the rest of the IVR in Spanish.
-10. **Analytics export** — Download call analytics as CSV from the Analytics view.
-11. **Production deployment guide** — `Dockerfile`, `docker-compose.yml`, nginx reverse proxy config, PM2 `ecosystem.config.js`, SSL/Let's Encrypt.
-12. **Webhook signature validation enforcement** — Make Twilio signature validation the default for new clinics; current setting is opt-in per clinic.
-13. **Rate limiting** — Add `express-rate-limit` on webhook routes to prevent abuse and runaway Twilio billing.
+8. **Production deployment guide** — `Dockerfile`, `docker-compose.yml`, nginx reverse proxy config, PM2 `ecosystem.config.js`, SSL/Let's Encrypt.
+9. **Tebra EHR integration** — Implement the stubbed `findPatient`, `createPatient`, `createAppointment` calls in `src/services/tebra.js` using Tebra SOAP API when credentials are available.
 
 ---
 

@@ -9,6 +9,9 @@ const twilio = require('twilio');
 const Anthropic = require('@anthropic-ai/sdk');
 const _anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const multer  = require('multer');
+const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
 const {
   getClinics, getClinicBySlug, getClinicById,
   createClinic, updateClinic, deleteClinic,
@@ -16,7 +19,7 @@ const {
   getClinicAiConfig, updateClinicAiConfig,
   getAllCalls, getCallCount, getCallWithTranscript,
   getCallVolumeByDay, getCallAnalyticsSummary,
-  getKnowledgeBase, upsertKnowledgeBase, saveWebsiteUrl, getUnansweredQuestions,
+  getKnowledgeBase, upsertKnowledgeBase, upsertKbSources, saveWebsiteUrl, getUnansweredQuestions,
   getCostConfig, saveCostConfig, getCostAlerts,
   db,
 } = require('../database/db');
@@ -544,6 +547,9 @@ router.put('/api/kb/:clinicId', (req, res) => {
     const clinic = getClinicById(+req.params.clinicId);
     if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
     upsertKnowledgeBase(+req.params.clinicId, req.body);
+    if (req.body.fieldSources && Object.keys(req.body.fieldSources).length > 0) {
+      upsertKbSources(+req.params.clinicId, req.body.fieldSources);
+    }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -569,7 +575,7 @@ router.post('/api/kb/test', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Website Knowledge Import ──────────────────────────────────────────────────
+// ── Business Knowledge Engine ─────────────────────────────────────────────────
 
 const SSRF_BLOCKED = [
   /^localhost$/i, /^127\./, /^10\./, /^192\.168\./,
@@ -582,8 +588,88 @@ function validatePublicUrl(rawUrl) {
   if (!['http:', 'https:'].includes(parsed.protocol)) return 'URL must use http or https';
   const host = parsed.hostname;
   if (SSRF_BLOCKED.some(r => r.test(host))) return 'Private or internal addresses are not allowed';
-  return null; // valid
+  return null;
 }
+
+const KB_EXTRACTION_PROMPT = `You are an expert at understanding businesses and building structured knowledge bases for AI phone receptionists.
+
+Your task: Read the content below, DEEPLY UNDERSTAND this business, then write CONVERSATIONAL, FACTUAL content for each Knowledge Base section that an AI phone receptionist named Ana will use to answer callers naturally and accurately.
+
+CRITICAL RULES:
+- Only state facts EXPLICITLY found in this content. NEVER invent, assume, or fill gaps with generic text.
+- Write naturally as if briefing a human receptionist — not copying raw text
+- For phone numbers, addresses, and hours: be exact and complete
+- For services and providers: be specific (specialties, languages spoken, certifications)
+- Leave a field as "" if no relevant information was found — do not guess
+- FAQs must follow the format: Q: [question]\\nA: [answer]
+
+Return a JSON object with EXACTLY these keys (all must be present, use "" for missing fields):
+{
+  "business_name": "Official business name",
+  "services": "All services, specialties, treatments, procedures, and programs offered. Include pricing if mentioned.",
+  "doctors": "Each provider's full name, title (MD, DO, NP, PA, etc.), specialty, languages spoken, certifications. One provider per line.",
+  "locations": "Each physical location with: full street address, city/state/zip, phone number, fax, email, parking, transit, accessibility. One location per paragraph.",
+  "office_hours": "Complete operating hours for every day and every location. Be exact with times. Note holiday closures or after-hours procedures.",
+  "insurance": "All insurance plans, networks, and coverage types accepted. Include Medicare, Medicaid, self-pay options. Note any restrictions.",
+  "appointment_policy": "How to book (phone, online, walk-in), appointment types (new patient, follow-up, telehealth, same-day), preparation instructions.",
+  "cancellation_policy": "Rules for cancelling or rescheduling, advance notice required, fees for late cancellations or no-shows.",
+  "new_patient_requirements": "What new patients must do before their first visit: pre-registration, referral requirements, intake forms, insurance verification.",
+  "documents_needed": "Complete list of documents patients must bring: photo ID, insurance cards, referral letters, medical records, medication lists.",
+  "faqs": "The most important questions callers ask, with clear helpful answers. Format: Q: [question]\\nA: [answer]\\n\\nQ: [question]\\nA: [answer]",
+  "transfer_rules": "Specific situations when Ana should transfer to a live person: urgent clinical questions, billing disputes, specific staff requests. Include department phone numbers if available.",
+  "emergency_instructions": "After-hours emergency procedures, on-call nurse lines, when patients must call 911, nearest emergency room info."
+}
+
+Return ONLY valid JSON. No markdown fences. No text outside the JSON object.`;
+
+async function runKbExtraction(text) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured');
+  const aiResp = await _anthropicClient.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 3000,
+    messages: [{ role: 'user', content: `${KB_EXTRACTION_PROMPT}\n\nContent:\n${text}` }],
+  });
+  const raw = aiResp.content[0].text.trim()
+    .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+  const parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? raw);
+  return parsed;
+}
+
+router.post('/api/kb/:clinicId/import-file', _upload.single('file'), async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const fileName = req.file.originalname;
+    const ext = fileName.split('.').pop().toLowerCase();
+    let text = '';
+
+    if (ext === 'txt') {
+      text = req.file.buffer.toString('utf8');
+    } else if (ext === 'pdf') {
+      const pdfParse = require('pdf-parse');
+      const result = await pdfParse(req.file.buffer);
+      text = result.text;
+    } else if (ext === 'docx') {
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      text = result.value;
+    } else {
+      return res.status(400).json({ error: 'Only PDF, DOCX, and TXT files are supported' });
+    }
+
+    text = text.replace(/\s+/g, ' ').trim().slice(0, 12000);
+    if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this file' });
+
+    const extracted = await runKbExtraction(text);
+    res.json({ ok: true, extracted, sourceType: ext, sourceName: fileName });
+  } catch (e) {
+    console.error('[KB File Import]', e.message);
+    if (e.message.includes('JSON')) return res.status(500).json({ error: 'AI could not structure file content. Try a different file.' });
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.post('/api/kb/:clinicId/import-website', async (req, res) => {
   try {
@@ -636,53 +722,9 @@ router.post('/api/kb/:clinicId/import-website', async (req, res) => {
 
     if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this URL' });
 
-    // Ask Claude to deeply understand the business and structure conversational KB content
-    const aiResp = await _anthropicClient.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
-      messages: [{
-        role: 'user',
-        content: `You are an expert at understanding businesses from their websites and building structured knowledge bases for AI phone receptionists.
-
-Your task: Read the website text below, DEEPLY UNDERSTAND this business, then write CONVERSATIONAL, FACTUAL content for each Knowledge Base section that an AI phone receptionist named Ana will use to answer callers naturally and accurately.
-
-CRITICAL RULES:
-- Only state facts EXPLICITLY found on this website. NEVER invent, assume, or fill gaps with generic text.
-- Write naturally as if briefing a human receptionist — not copying raw website text
-- For phone numbers, addresses, and hours: be exact and complete
-- For services and providers: be specific (specialties, languages spoken, certifications)
-- Leave a field as "" if no relevant information was found — do not guess
-- FAQs must follow the format: Q: [question]\\nA: [answer]
-
-Return a JSON object with EXACTLY these keys (all must be present, use "" for missing fields):
-{
-  "business_name": "Official business name as shown on the website",
-  "services": "All services, specialties, treatments, procedures, and programs offered. Include pricing if mentioned. Write as clear readable paragraphs, not a raw copy.",
-  "doctors": "Each provider's full name, title (MD, DO, NP, PA, etc.), specialty or focus area, languages spoken, and any certifications mentioned. One provider per line.",
-  "locations": "Each physical location with: full street address, city/state/zip, phone number, fax, email, parking instructions, public transit, accessibility info. One location per paragraph.",
-  "office_hours": "Complete operating hours for every day and every location. Be exact with times. Note holiday closures, after-hours procedures, or seasonal changes if mentioned.",
-  "insurance": "All insurance plans, networks, and coverage types accepted. Include Medicare, Medicaid, and self-pay options if mentioned. Note any restrictions.",
-  "appointment_policy": "How to book appointments (phone, online, walk-in), appointment types available (new patient, follow-up, telehealth, same-day), preparation instructions, what to expect.",
-  "cancellation_policy": "Rules for cancelling or rescheduling, advance notice required, fees for late cancellations or no-shows, exceptions policy.",
-  "new_patient_requirements": "What new patients must do before their first visit: pre-registration, referral requirements, intake forms, insurance verification steps.",
-  "documents_needed": "Complete list of documents patients must bring to every visit and to specific visit types: photo ID, insurance cards, referral letters, medical records, medication lists.",
-  "faqs": "The most important questions callers typically ask, with clear helpful answers. Format: Q: [question]\\nA: [answer]\\n\\nQ: [question]\\nA: [answer]",
-  "transfer_rules": "Specific situations when Ana should transfer the caller to a live person: urgent clinical questions, billing disputes, specific staff requests, prescription issues. Include direct department phone numbers if available.",
-  "emergency_instructions": "After-hours emergency procedures, on-call nurse lines, when patients must call 911 immediately, nearest emergency room info if mentioned."
-}
-
-Return ONLY valid JSON. No markdown fences. No text outside the JSON object.
-
-Website text:
-${text}`,
-      }],
-    });
-
-    let extracted = {};
+    let extracted;
     try {
-      const raw = aiResp.content[0].text.trim()
-        .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-      extracted = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? raw);
+      extracted = await runKbExtraction(text);
     } catch {
       return res.status(500).json({ error: 'AI could not structure website content. Try a more content-rich page.' });
     }

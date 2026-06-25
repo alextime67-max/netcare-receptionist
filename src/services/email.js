@@ -175,4 +175,66 @@ async function sendWebRequestNotification(requestId, data, clinic) {
   console.log(`[Email] Web request notification sent for request ${requestId}`);
 }
 
-module.exports = { sendAppointmentNotification, sendDoctorMessageNotification, sendWebRequestNotification };
+async function sendEmergencyAlert(callId, callerPhone, clinic) {
+  const transporter = createTransporter(clinic);
+  const toEmail     = clinic?.contact_email || clinic?.clinic_email || process.env.CLINIC_EMAIL;
+  const fromEmail   = clinic?.email_from    || process.env.EMAIL_FROM || 'receptionist@netcare.com';
+
+  if (!toEmail) {
+    console.log(`[Email] Emergency alert: no recipient email configured — call ${callId} from ${callerPhone}`);
+    return;
+  }
+  if (!transporter) {
+    console.log(`[Email] Emergency alert: no email transporter configured — call ${callId} from ${callerPhone}`);
+    return;
+  }
+
+  const html = baseHtmlLayout(
+    `EMERGENCY DETECTED — ${clinic?.name || 'NetCare'}`,
+    `<div style="background:#fee2e2;border:2px solid #f87171;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+      <strong style="color:#991b1b;font-size:15px;">⚠️ A caller may have reported a medical emergency.</strong>
+      <p style="color:#7f1d1d;margin:6px 0 0;">The AI receptionist detected emergency keywords and directed the caller to call 911 immediately.</p>
+    </div>
+    <table>
+      ${row('Caller Phone', callerPhone || 'Unknown')}
+      ${row('Call ID',      callId)}
+      ${row('Clinic',       clinic?.name || 'Unknown')}
+      ${row('Time',         new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))}
+    </table>
+    <p style="margin-top:16px;font-size:13px;color:#475569;">
+      This alert is for awareness only. If the emergency is still ongoing, contact 911 directly.
+      Review the call transcript in your admin dashboard for details.
+    </p>`,
+    clinic
+  );
+
+  await transporter.sendMail({
+    from:    fromEmail,
+    to:      toEmail,
+    subject: `[EMERGENCY] ${clinic?.name || 'NetCare'} — Emergency Call Detected`,
+    html,
+  });
+
+  console.log(`[Email] Emergency alert sent for call ${callId} to ${toEmail}`);
+}
+
+async function sendAppointmentReminderSms(clinic, toPhone, patientName, location, date, time, language, hoursAhead) {
+  const { sendSmsFollowUp } = require('./sms');
+  const name     = patientName || 'there';
+  const loc      = location ? ` at ${location}` : '';
+  const timeLabel = hoursAhead >= 20 ? 'tomorrow' : `in ${hoursAhead} hour${hoursAhead !== 1 ? 's' : ''}`;
+
+  const message = language === 'es'
+    ? `${clinic.name}: Recordatorio — su cita${location ? ` en ${location}` : ''} es ${timeLabel === 'tomorrow' ? 'mañana' : `en ${hoursAhead} hora${hoursAhead !== 1 ? 's' : ''}`} (${date} ${time}). Llame para cancelar con 24h de anticipación.`
+    : `${clinic.name}: Reminder — your appointment${loc} is ${timeLabel} (${date} ${time}). Call us to cancel with 24h notice. Reply STOP to opt out.`;
+
+  return sendSmsFollowUp(clinic, toPhone, message);
+}
+
+module.exports = {
+  sendAppointmentNotification,
+  sendDoctorMessageNotification,
+  sendWebRequestNotification,
+  sendEmergencyAlert,
+  sendAppointmentReminderSms,
+};

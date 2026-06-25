@@ -201,9 +201,10 @@ function initDb() {
 
   // ── Migrations: AI voice selection + website KB ──────────────────────────
 
-  _addColumnIfMissing('clinics',        'ai_voice_es', 'TEXT');
-  _addColumnIfMissing('clinics',        'ai_voice_en', 'TEXT');
-  _addColumnIfMissing('knowledge_base', 'website_url', 'TEXT');
+  _addColumnIfMissing('clinics',        'ai_voice_es',   'TEXT');
+  _addColumnIfMissing('clinics',        'ai_voice_en',   'TEXT');
+  _addColumnIfMissing('knowledge_base', 'website_url',   'TEXT');
+  _addColumnIfMissing('knowledge_base', 'field_sources', 'TEXT');
 
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
@@ -1104,6 +1105,18 @@ function saveWebsiteUrl(clinicId, url) {
   invalidateKbCache(clinicId);
 }
 
+function upsertKbSources(clinicId, sources) {
+  const json = typeof sources === 'string' ? sources : JSON.stringify(sources);
+  const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  if (existing) {
+    db.prepare('UPDATE knowledge_base SET field_sources = ?, updated_at = CURRENT_TIMESTAMP WHERE clinic_id = ?')
+      .run(json, clinicId);
+  } else {
+    db.prepare('INSERT INTO knowledge_base (clinic_id, field_sources) VALUES (?, ?)').run(clinicId, json);
+  }
+  invalidateKbCache(clinicId);
+}
+
 function logUnansweredQuestion(clinicId, callId, question) {
   if (!question?.trim()) return;
   db.prepare('INSERT INTO unanswered_questions (clinic_id, call_id, question) VALUES (?, ?, ?)')
@@ -1233,6 +1246,7 @@ module.exports = {
   // knowledge base
   getKnowledgeBase,
   upsertKnowledgeBase,
+  upsertKbSources,
   saveWebsiteUrl,
   logUnansweredQuestion,
   getUnansweredQuestions,

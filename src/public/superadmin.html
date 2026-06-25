@@ -419,31 +419,66 @@
         <span id="kb-save-status" class="text-xs text-slate-400"></span>
       </div>
 
-      <!-- Website Knowledge Import -->
+      <!-- Business Knowledge Engine -->
       <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
         <div>
-          <h3 class="text-sm font-semibold text-slate-800">Import from Website</h3>
-          <p class="text-xs text-slate-400 mt-0.5">Enter your website URL to automatically extract business info into the Knowledge Base. You can review and edit before saving.</p>
+          <h3 class="text-sm font-semibold text-slate-800">Business Knowledge Engine</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Import knowledge from multiple sources. Priority order: <span class="font-medium text-emerald-700">Manual Notes</span> &gt; <span class="font-medium text-purple-700">File (PDF/DOCX/TXT)</span> &gt; <span class="font-medium text-blue-700">Website</span>. Higher-priority sources are never overwritten.</p>
         </div>
-        <div class="flex gap-2 flex-wrap">
-          <input id="kb-website-url" type="url" placeholder="https://yourwebsite.com"
-            class="flex-1 min-w-48 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <button onclick="importFromWebsite()" id="kb-import-btn"
-            class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">
-            Import from Website
+
+        <!-- Source tabs -->
+        <div class="flex gap-1 border border-slate-200 rounded-lg p-1 bg-slate-50 w-fit">
+          <button id="kb-tab-website" onclick="switchKbTab('website')"
+            class="px-3 py-1.5 text-xs font-medium rounded-md bg-white shadow-sm text-slate-700 transition-all">
+            Website
           </button>
-          <button onclick="saveWebsiteUrlAction()" id="kb-save-url-btn"
-            class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200 whitespace-nowrap">
-            Save URL
+          <button id="kb-tab-file" onclick="switchKbTab('file')"
+            class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:text-slate-700 transition-all">
+            Upload File
           </button>
         </div>
+
+        <!-- Website source panel -->
+        <div id="kb-source-website">
+          <div class="flex gap-2 flex-wrap">
+            <input id="kb-website-url" type="url" placeholder="https://yourwebsite.com"
+              class="flex-1 min-w-48 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button onclick="importFromWebsite()" id="kb-import-btn"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">
+              Import from Website
+            </button>
+            <button onclick="saveWebsiteUrlAction()" id="kb-save-url-btn"
+              class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200 whitespace-nowrap">
+              Save URL
+            </button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">Lowest priority. Won't overwrite fields already set by uploaded files or manual edits.</p>
+        </div>
+
+        <!-- File upload source panel -->
+        <div id="kb-source-file" class="hidden">
+          <div class="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center space-y-3 hover:border-indigo-300 transition-colors">
+            <p class="text-sm font-medium text-slate-700">Upload a PDF, DOCX, or TXT file</p>
+            <p class="text-xs text-slate-400">Max 10 MB. Ana's AI will extract and structure business knowledge from the file content.</p>
+            <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt" class="hidden" onchange="importFromFile(this)">
+            <button onclick="document.getElementById('kb-file-input').click()"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+              Choose File
+            </button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">Medium priority. Won't overwrite fields already set by manual edits.</p>
+        </div>
+
         <div id="kb-import-status" class="hidden text-xs px-3 py-2 rounded-lg"></div>
 
-        <!-- Preview panel (hidden until import succeeds) -->
+        <!-- Preview panel (shared between website and file) -->
         <div id="kb-import-preview" class="hidden border border-indigo-200 rounded-xl bg-indigo-50 p-4 space-y-3">
-          <p class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Extracted Information — Review &amp; Edit Before Applying</p>
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <p class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Extracted Information — Review &amp; Edit Before Applying</p>
+            <span id="kb-import-source-badge" class="text-xs px-2 py-0.5 rounded-full bg-indigo-200 text-indigo-800 font-medium"></span>
+          </div>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-3" id="kb-import-fields"></div>
-          <div class="flex gap-2 pt-1">
+          <div class="flex gap-2 pt-1 flex-wrap items-center">
             <button onclick="applyImportedKb()"
               class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
               Apply to Knowledge Base
@@ -453,75 +488,114 @@
               Cancel
             </button>
           </div>
-          <p class="text-xs text-slate-400">Applying will append to existing fields (or replace if empty). You must still click "Save Knowledge Base" to persist the changes.</p>
+          <p class="text-xs text-slate-400">Applies to fields only where this source has equal or higher priority. Click "Save Knowledge Base" to persist.</p>
         </div>
       </div>
 
       <!-- KB Fields Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4" id="kb-fields-grid">
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Services Offered</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Services Offered</label>
+            <span id="src-kb-services" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-services" rows="4" placeholder="List the services your clinic provides..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Doctors &amp; Staff</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Doctors &amp; Staff</label>
+            <span id="src-kb-doctors" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-doctors" rows="4" placeholder="List doctors, their specialties, languages..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Locations &amp; Addresses</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Locations &amp; Addresses</label>
+            <span id="src-kb-locations" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-locations" rows="4" placeholder="Address, phone, parking info per location..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Office Hours</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Office Hours</label>
+            <span id="src-kb-office-hours" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-office-hours" rows="4" placeholder="Mon–Fri 8am–5pm, Sat 9am–1pm..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Insurance Accepted</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Insurance Accepted</label>
+            <span id="src-kb-insurance" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-insurance" rows="4" placeholder="List accepted insurance plans..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Appointment Policy</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Appointment Policy</label>
+            <span id="src-kb-appointment-policy" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-appointment-policy" rows="4" placeholder="How to book, wait times, same-day availability..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Cancellation Policy</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Cancellation Policy</label>
+            <span id="src-kb-cancellation-policy" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-cancellation-policy" rows="4" placeholder="24-hour notice required, no-show fee..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">New Patient Requirements</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">New Patient Requirements</label>
+            <span id="src-kb-new-patient-requirements" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-new-patient-requirements" rows="4" placeholder="What new patients need to bring or do..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Documents Needed</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Documents Needed</label>
+            <span id="src-kb-documents-needed" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-documents-needed" rows="4" placeholder="ID, insurance card, referral, medical records..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">FAQs</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">FAQs</label>
+            <span id="src-kb-faqs" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-faqs" rows="4" placeholder="Common questions and approved answers..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Transfer Rules</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Transfer Rules</label>
+            <span id="src-kb-transfer-rules" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-transfer-rules" rows="4" placeholder="When to transfer: billing questions → ext 105..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Emergency Instructions</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Emergency Instructions</label>
+            <span id="src-kb-emergency-instructions" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-emergency-instructions" rows="4" placeholder="If patient reports emergency → call 911..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2 lg:col-span-2">
-          <label class="text-sm font-semibold text-slate-700">Do NOT Answer <span class="text-xs font-normal text-slate-400">(topics the AI must deflect)</span></label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Do NOT Answer <span class="text-xs font-normal text-slate-400">(topics the AI must deflect)</span></label>
+            <span id="src-kb-do-not-answer" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-do-not-answer" rows="3" placeholder="Specific diagnoses, medication dosages, legal questions..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
@@ -2818,9 +2892,23 @@ async function loadKb() {
   if (!clinicId) return;
   try {
     const kb = await (await fetch(`/superadmin/api/kb/${clinicId}`)).json();
+    let sources = {};
+    try { sources = kb.field_sources ? (typeof kb.field_sources === 'string' ? JSON.parse(kb.field_sources) : kb.field_sources) : {}; } catch { sources = {}; }
     KB_FIELDS.forEach(f => {
-      const el = document.getElementById(`kb-${f.replace(/_/g,'-')}`);
-      if (el) el.value = kb[f] || '';
+      const elId = `kb-${f.replace(/_/g,'-')}`;
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.value = kb[f] || '';
+      const src = sources[f];
+      if (src?.type) {
+        el.dataset.sourceType = src.type;
+        el.dataset.sourceName = src.name || '';
+        updateSourceBadge(elId, src.type, src.name || '');
+      } else {
+        delete el.dataset.sourceType;
+        delete el.dataset.sourceName;
+        updateSourceBadge(elId, '', '');
+      }
     });
     if (kb.website_url) document.getElementById('kb-website-url').value = kb.website_url;
     document.getElementById('kb-save-status').textContent = '';
@@ -2835,10 +2923,14 @@ async function loadKb() {
 async function saveKb() {
   const clinicId = document.getElementById('kb-clinic')?.value;
   if (!clinicId) return alert('Please select a clinic first.');
-  const body = {};
+  const body = { fieldSources: {} };
   KB_FIELDS.forEach(f => {
     const el = document.getElementById(`kb-${f.replace(/_/g,'-')}`);
-    if (el) body[f] = el.value.trim();
+    if (!el) return;
+    body[f] = el.value.trim();
+    if (el.dataset.sourceType) {
+      body.fieldSources[f] = { type: el.dataset.sourceType, name: el.dataset.sourceName || '' };
+    }
   });
   try {
     const r = await fetch(`/superadmin/api/kb/${clinicId}`, {
@@ -2913,7 +3005,7 @@ async function loadUnanswered() {
   }
 }
 
-// ── Website Knowledge Import ──────────────────────────────────────────────────
+// ── Business Knowledge Engine ─────────────────────────────────────────────────
 
 const KB_IMPORT_FIELDS = [
   { key: 'services',                 label: 'Services Offered',          kbId: 'kb-services' },
@@ -2930,7 +3022,94 @@ const KB_IMPORT_FIELDS = [
   { key: 'emergency_instructions',   label: 'Emergency Instructions',     kbId: 'kb-emergency-instructions' },
 ];
 
+const SOURCE_PRIORITY = { manual: 3, pdf: 2, docx: 2, txt: 2, website: 1 };
+function getSourcePriority(type) { return SOURCE_PRIORITY[type] || 0; }
+
+function updateSourceBadge(kbId, type, name) {
+  const el = document.getElementById(`src-${kbId}`);
+  if (!el) return;
+  if (!type) { el.className = 'text-xs px-2 py-0.5 rounded-full hidden shrink-0'; return; }
+  const colors = { manual: 'bg-emerald-100 text-emerald-700', pdf: 'bg-purple-100 text-purple-700', docx: 'bg-purple-100 text-purple-700', txt: 'bg-purple-100 text-purple-700', website: 'bg-blue-100 text-blue-700' };
+  const labels = { manual: 'Manual', pdf: `PDF`, docx: `DOCX`, txt: `TXT`, website: 'Website' };
+  el.className = `text-xs px-2 py-0.5 rounded-full shrink-0 ${colors[type] || 'bg-slate-100 text-slate-600'}`;
+  el.textContent = labels[type] || type;
+  el.title = name ? `Source: ${type.toUpperCase()} — ${name}` : `Source: ${type}`;
+}
+
 let _importedData = {};
+let _currentImportSource = { type: 'website', name: '' };
+
+// Track manual edits — any direct textarea input marks that field as "Manual Notes"
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('kb-fields-grid')?.addEventListener('input', e => {
+    const ta = e.target;
+    if (!ta.matches || !ta.matches('textarea[id^="kb-"]')) return;
+    ta.dataset.sourceType = 'manual';
+    ta.dataset.sourceName = '';
+    updateSourceBadge(ta.id, 'manual', '');
+  });
+});
+
+function switchKbTab(tab) {
+  const isWebsite = tab === 'website';
+  document.getElementById('kb-source-website').classList.toggle('hidden', !isWebsite);
+  document.getElementById('kb-source-file').classList.toggle('hidden', isWebsite);
+  const active   = 'px-3 py-1.5 text-xs font-medium rounded-md bg-white shadow-sm text-slate-700 transition-all';
+  const inactive = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:text-slate-700 transition-all';
+  document.getElementById('kb-tab-website').className = isWebsite  ? active : inactive;
+  document.getElementById('kb-tab-file').className    = !isWebsite ? active : inactive;
+}
+
+function renderImportPreview(sourceType, sourceName) {
+  const status  = document.getElementById('kb-import-status');
+  const preview = document.getElementById('kb-import-preview');
+  const bizName = (_importedData.business_name || '').trim();
+  const incomingPriority = getSourcePriority(sourceType);
+
+  const populated = KB_IMPORT_FIELDS.filter(f => {
+    const v = _importedData[f.key];
+    return v && String(v).trim().length > 0;
+  });
+  if (!populated.length) {
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-700';
+    status.textContent = 'No structured business information could be extracted. Try a more content-rich page or file.';
+    return;
+  }
+
+  const badgeEl = document.getElementById('kb-import-source-badge');
+  if (badgeEl) badgeEl.textContent = sourceType === 'website' ? 'Source: Website' : `Source: ${sourceType.toUpperCase()} — ${sourceName}`;
+
+  let conflictCount = 0;
+  const fieldsEl = document.getElementById('kb-import-fields');
+  const bizHeader = bizName
+    ? `<div class="col-span-full bg-indigo-100 border border-indigo-200 rounded-lg px-3 py-2 text-xs">
+         <span class="font-semibold text-indigo-800">Business identified:</span>
+         <span class="text-indigo-700 ml-1">${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+       </div>` : '';
+  fieldsEl.innerHTML = bizHeader + populated.map(f => {
+    const content = String(_importedData[f.key] || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const rows = Math.min(10, Math.max(3, Math.ceil(content.length / 80)));
+    const dstEl = document.getElementById(f.kbId);
+    const curPriority = getSourcePriority(dstEl?.dataset?.sourceType);
+    const blocked = curPriority > incomingPriority && (dstEl?.value?.trim() || '').length > 0;
+    if (blocked) conflictCount++;
+    const blockNote = blocked
+      ? `<span class="text-amber-600 font-medium text-xs ml-1">— skipped (${dstEl.dataset.sourceType} has priority)</span>` : '';
+    return `<div class="space-y-1 ${blocked ? 'opacity-50' : ''}">
+      <div class="flex items-center flex-wrap gap-1">
+        <label class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">${f.label}</label>${blockNote}
+      </div>
+      <textarea id="imp-${f.key}" rows="${rows}" ${blocked ? 'disabled' : ''}
+        class="w-full text-xs border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y bg-white disabled:bg-slate-50 disabled:text-slate-400">${content}</textarea>
+    </div>`;
+  }).join('');
+
+  const bizLabel = bizName ? ` for <strong>${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong>` : '';
+  const skipNote = conflictCount > 0 ? ` <span class="font-medium text-amber-600">${conflictCount} field(s) will be skipped — higher-priority source already set.</span>` : '';
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+  status.innerHTML = `Extracted ${populated.length} section(s)${bizLabel}.${skipNote} Review below, then click "Apply to Knowledge Base".`;
+  preview.classList.remove('hidden');
+}
 
 async function importFromWebsite() {
   const clinicId = document.getElementById('kb-clinic')?.value;
@@ -2938,14 +3117,13 @@ async function importFromWebsite() {
   const url = document.getElementById('kb-website-url')?.value?.trim();
   if (!url) return alert('Enter a website URL first.');
 
-  const btn    = document.getElementById('kb-import-btn');
+  const btn = document.getElementById('kb-import-btn');
   const status = document.getElementById('kb-import-status');
-  const preview = document.getElementById('kb-import-preview');
   btn.disabled = true;
   btn.textContent = 'Importing…';
-  preview.classList.add('hidden');
+  document.getElementById('kb-import-preview').classList.add('hidden');
   status.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
-  status.textContent = 'Fetching website and extracting information…';
+  status.textContent = 'Fetching website and extracting information with AI…';
   status.classList.remove('hidden');
 
   try {
@@ -2955,40 +3133,9 @@ async function importFromWebsite() {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Import failed');
-
+    _currentImportSource = { type: 'website', name: url };
     _importedData = data.extracted || {};
-    const bizName  = (_importedData.business_name || '').trim();
-    const populated = KB_IMPORT_FIELDS.filter(f => {
-      const v = _importedData[f.key];
-      return v && String(v).trim().length > 0;
-    });
-    if (!populated.length) {
-      status.className = 'text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-700';
-      status.textContent = 'No structured business information could be extracted. Try a more content-rich URL (e.g. About, Services, or Contact page).';
-      return;
-    }
-
-    // Render preview with editable textareas — larger rows for richer content
-    const fieldsEl = document.getElementById('kb-import-fields');
-    const bizHeader = bizName
-      ? `<div class="col-span-full bg-indigo-100 border border-indigo-200 rounded-lg px-3 py-2 text-xs">
-           <span class="font-semibold text-indigo-800">Business identified:</span>
-           <span class="text-indigo-700 ml-1">${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
-         </div>` : '';
-    fieldsEl.innerHTML = bizHeader + populated.map(f => {
-      const content = String(_importedData[f.key] || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const rows = Math.min(10, Math.max(3, Math.ceil(content.length / 80)));
-      return `<div class="space-y-1">
-        <label class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">${f.label}</label>
-        <textarea id="imp-${f.key}" rows="${rows}"
-          class="w-full text-xs border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y bg-white">${content}</textarea>
-      </div>`;
-    }).join('');
-
-    const bizLabel = bizName ? ` for <strong>${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong>` : '';
-    status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
-    status.innerHTML = `Extracted ${populated.length} section(s)${bizLabel}. Review below, edit if needed, then click "Apply to Knowledge Base".`;
-    preview.classList.remove('hidden');
+    renderImportPreview('website', url);
   } catch (e) {
     status.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
     status.textContent = 'Error: ' + e.message;
@@ -2998,20 +3145,62 @@ async function importFromWebsite() {
   }
 }
 
+async function importFromFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) { input.value = ''; return alert('Select a clinic first.'); }
+
+  const status = document.getElementById('kb-import-status');
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  status.textContent = `Reading "${file.name}" and extracting information with AI…`;
+  status.classList.remove('hidden');
+  document.getElementById('kb-import-preview').classList.add('hidden');
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetch(`/superadmin/api/kb/${clinicId}/import-file`, {
+      method: 'POST', body: formData,
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Import failed');
+    _currentImportSource = { type: data.sourceType, name: data.sourceName };
+    _importedData = data.extracted || {};
+    renderImportPreview(data.sourceType, data.sourceName);
+  } catch (e) {
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    input.value = '';
+  }
+}
+
 function applyImportedKb() {
+  let applied = 0, skipped = 0;
+  const incomingPriority = getSourcePriority(_currentImportSource.type);
   KB_IMPORT_FIELDS.forEach(f => {
     const srcEl = document.getElementById(`imp-${f.key}`);
     const dstEl = document.getElementById(f.kbId);
-    if (!srcEl || !dstEl) return;
+    if (!srcEl || !dstEl || srcEl.disabled) return;
     const newContent = srcEl.value.trim();
     if (!newContent) return;
-    const existing = dstEl.value.trim();
-    dstEl.value = existing ? `${existing}\n\n--- Imported ---\n${newContent}` : newContent;
+    const curPriority = getSourcePriority(dstEl.dataset?.sourceType);
+    if (curPriority > incomingPriority && (dstEl.value?.trim() || '').length > 0) { skipped++; return; }
+    dstEl.value = newContent;
+    dstEl.dataset.sourceType = _currentImportSource.type;
+    dstEl.dataset.sourceName = _currentImportSource.name;
+    updateSourceBadge(f.kbId, _currentImportSource.type, _currentImportSource.name);
+    applied++;
   });
   document.getElementById('kb-import-preview').classList.add('hidden');
   const status = document.getElementById('kb-import-status');
   status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
-  status.textContent = 'Applied to Knowledge Base fields. Click "Save Knowledge Base" to persist.';
+  let msg = `Applied ${applied} field(s) to Knowledge Base.`;
+  if (skipped > 0) msg += ` ${skipped} field(s) skipped (higher-priority source protected).`;
+  msg += ' Click "Save Knowledge Base" to persist.';
+  status.textContent = msg;
+  status.classList.remove('hidden');
 }
 
 function cancelImport() {
