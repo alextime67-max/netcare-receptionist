@@ -664,6 +664,10 @@
           class="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
           🧪 Test Ana
         </button>
+        <button onclick="switchTrainSection('practice')"
+          class="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+          🎤 Practice
+        </button>
         <span id="train-action-msg" class="text-sm text-slate-500 px-2"></span>
       </div>
 
@@ -678,6 +682,7 @@
         <button id="ttab-notes"   onclick="switchTrainSection('notes')"   class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📝 Manual Notes</button>
         <button id="ttab-viewer"  onclick="switchTrainSection('viewer')"  class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📚 Knowledge</button>
         <button id="ttab-test"    onclick="switchTrainSection('test')"    class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🧪 Test Ana</button>
+        <button id="ttab-practice" onclick="switchTrainSection('practice')" class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🎤 Practice</button>
       </div>
 
       <!-- ── SECTION: Sources ─────────────────────────────────── -->
@@ -879,6 +884,137 @@
           </div>
         </div>
       </div>
+
+      <!-- ── SECTION: Practice Conversation ──────────────────────── -->
+      <div id="tsec-practice" class="hidden space-y-4">
+
+        <!-- Config row -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div class="flex flex-wrap gap-4 items-end">
+            <div class="flex-1 min-w-48">
+              <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">Scenario</label>
+              <select id="practice-scenario" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 text-slate-700">
+                <option value="new_patient_appointment">1. New patient wants an appointment</option>
+                <option value="reschedule_existing">2. Existing patient wants to reschedule</option>
+                <option value="ask_insurance">3. Caller asks about insurance</option>
+                <option value="ask_office_hours">4. Caller asks for office hours</option>
+                <option value="ask_location">5. Caller asks for location</option>
+                <option value="cancel_appointment">6. Caller wants to cancel appointment</option>
+                <option value="elderly_spanish_slow">7. Elderly Spanish-speaking caller (speaks slowly)</option>
+                <option value="angry_caller">8. Angry caller</option>
+                <option value="unknown_question">9. Caller asks a question Ana does not know</option>
+                <option value="emergency_urgent">10. Emergency or urgent medical question</option>
+                <option value="ask_pricing">11. Caller asks for pricing</option>
+                <option value="wants_human">12. Caller wants to speak with a human</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">Language</label>
+              <select id="practice-language" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 text-slate-700">
+                <option value="es">Español (Spanish)</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <button onclick="practiceStart()" id="practice-start-btn"
+              class="px-5 py-2 bg-violet-600 text-white text-sm font-semibold rounded-xl hover:bg-violet-700 transition-colors shadow-sm whitespace-nowrap">
+              ▶ Start Practice
+            </button>
+            <button onclick="practiceReset()" id="practice-reset-btn" class="hidden px-5 py-2 bg-slate-100 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-200 transition-colors border border-slate-200 whitespace-nowrap">
+              🔄 Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Active session -->
+        <div id="practice-session-area" class="hidden space-y-4">
+
+          <!-- Scenario badge -->
+          <div class="flex items-center gap-3 px-4 py-2 bg-violet-50 border border-violet-200 rounded-xl text-sm text-violet-700 font-medium">
+            <span>🎭</span>
+            <span id="practice-scenario-label">Scenario: —</span>
+            <span class="ml-auto text-xs font-normal text-violet-500" id="practice-lang-badge"></span>
+          </div>
+
+          <!-- Conversation -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-slate-800">Conversation</h3>
+              <div class="flex items-center gap-2">
+                <span id="practice-status-indicator" class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Active</span>
+                <button onclick="practiceSpeakLast()" id="practice-speak-btn" title="Preview voice (browser TTS)"
+                  class="text-xs px-3 py-1 bg-slate-100 rounded-lg hover:bg-slate-200 text-slate-600 transition-colors">🔊 Speak</button>
+              </div>
+            </div>
+
+            <!-- Chat transcript -->
+            <div id="practice-chat" class="space-y-3 max-h-80 overflow-y-auto rounded-xl bg-slate-50 p-4 min-h-32">
+              <p class="text-xs text-slate-400 italic text-center">Practice conversation will appear here.</p>
+            </div>
+
+            <!-- Input area -->
+            <div class="flex gap-2 pt-1">
+              <input id="practice-input" type="text" placeholder="Type what the caller says…"
+                class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); practiceSend(); }">
+              <button onclick="practiceSend()" id="practice-send-btn"
+                class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors whitespace-nowrap">
+                Send
+              </button>
+            </div>
+
+            <!-- Quick caller phrases -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-xs text-slate-400 self-center mr-1">Quick:</span>
+              <button onclick="practiceQuick('Hola, buenos días')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Hola, buenos días</button>
+              <button onclick="practiceQuick('Hello, good morning')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Hello, good morning</button>
+              <button onclick="practiceQuick('Necesito una cita')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Necesito una cita</button>
+              <button onclick="practiceQuick('I need an appointment')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">I need an appointment</button>
+              <button onclick="practiceQuick('¿Aceptan Medicare?')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">¿Aceptan Medicare?</button>
+              <button onclick="practiceQuick('What are your hours?')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">What are your hours?</button>
+              <button onclick="practiceQuick('I want to speak to a real person')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">I want a real person</button>
+              <button onclick="practiceQuick('This is an emergency')" class="text-xs px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-xs transition-colors">This is an emergency</button>
+            </div>
+          </div>
+
+          <!-- Quality Evaluation -->
+          <div id="practice-quality-panel" class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Quality Evaluation</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Rate this practice session after you're done.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="practice-quality-checks">
+              <!-- Rendered by JS -->
+            </div>
+
+            <div>
+              <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">Notes</label>
+              <textarea id="practice-notes" rows="3" placeholder="Write any observations, issues, or improvements needed…"
+                class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"></textarea>
+            </div>
+
+            <div class="flex gap-3 items-center">
+              <button onclick="practiceSaveResult()" id="practice-save-btn"
+                class="px-5 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
+                💾 Save Test Result
+              </button>
+              <span id="practice-save-status" class="text-xs text-slate-400"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Past sessions -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-slate-800">Saved Practice Sessions</h3>
+            <button onclick="practiceLoadHistory()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+          </div>
+          <div id="practice-history-list">
+            <p class="text-xs text-slate-400 italic">No saved sessions yet.</p>
+          </div>
+        </div>
+
+      </div><!-- /tsec-practice -->
 
     </div><!-- /view-train -->
 
@@ -3523,6 +3659,7 @@ async function loadTrainingData() {
     renderTrainRules();
     renderTrainStatusBadge(d);
     trainLoadViewer();
+    practiceLoadHistory();
   } catch (e) { console.error('loadTrainingData', e); }
 }
 
@@ -3540,7 +3677,7 @@ function renderTrainStatusBadge(d) {
 }
 
 function switchTrainSection(sec) {
-  ['sources','faqs','rules','notes','viewer','test'].forEach(s => {
+  ['sources','faqs','rules','notes','viewer','test','practice'].forEach(s => {
     document.getElementById(`tsec-${s}`)?.classList.toggle('hidden', s !== sec);
     const tab = document.getElementById(`ttab-${s}`);
     if (tab) {
@@ -3948,6 +4085,269 @@ async function trainAskAna(preset) {
     thinking.outerHTML = `<div class="text-xs text-red-500 px-2 mb-2">Error: ${e.message}</div>`;
   }
   chat.scrollTop = chat.scrollHeight;
+}
+
+// ── Practice Conversation ─────────────────────────────────────────────────────
+
+const PRACTICE_SCENARIOS = {
+  new_patient_appointment: '1. New patient wants an appointment',
+  reschedule_existing:     '2. Existing patient wants to reschedule',
+  ask_insurance:           '3. Caller asks about insurance',
+  ask_office_hours:        '4. Caller asks for office hours',
+  ask_location:            '5. Caller asks for location',
+  cancel_appointment:      '6. Caller wants to cancel appointment',
+  elderly_spanish_slow:    '7. Elderly Spanish-speaking caller (slow)',
+  angry_caller:            '8. Angry caller',
+  unknown_question:        '9. Caller asks unknown question',
+  emergency_urgent:        '10. Emergency or urgent question',
+  ask_pricing:             '11. Caller asks for pricing',
+  wants_human:             '12. Caller wants a human',
+};
+
+const QUALITY_ITEMS = [
+  { key: 'greeted_correctly',      label: 'Did Ana greet correctly?' },
+  { key: 'detected_intent',        label: 'Did Ana detect caller intent?' },
+  { key: 'asked_necessary_only',   label: 'Did Ana ask only necessary questions?' },
+  { key: 'used_kb_correctly',      label: 'Did Ana use the business knowledge correctly?' },
+  { key: 'no_invented_info',       label: 'Did Ana avoid inventing information?' },
+  { key: 'escalated_correctly',    label: 'Did Ana escalate correctly when needed?' },
+  { key: 'sounded_natural',        label: 'Did Ana sound natural?' },
+  { key: 'correct_language',       label: 'Did Ana keep the correct language?' },
+];
+
+let _practiceSessionId = null;
+let _practiceTranscript = [];
+let _practiceLastSpeak  = '';
+
+function practiceRenderQualityChecks() {
+  const el = document.getElementById('practice-quality-checks');
+  if (!el) return;
+  el.innerHTML = QUALITY_ITEMS.map(item => `
+    <label class="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-violet-300 transition-colors">
+      <select id="pq-${item.key}" class="text-sm border border-slate-200 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white">
+        <option value="">—</option>
+        <option value="yes">✓ Yes</option>
+        <option value="no">✗ No</option>
+        <option value="na">N/A</option>
+      </select>
+      <span class="text-sm text-slate-700">${item.label}</span>
+    </label>
+  `).join('');
+}
+
+async function practiceStart() {
+  if (!_trainClinicId) return alert('Select a clinic first from the top of the Train Ana section.');
+  const scenario = document.getElementById('practice-scenario')?.value || 'new_patient_appointment';
+  const language = document.getElementById('practice-language')?.value || 'es';
+  const btn = document.getElementById('practice-start-btn');
+  btn.disabled = true; btn.textContent = '⏳ Starting…';
+  try {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/start`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ scenario, language }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _practiceSessionId  = d.sessionId;
+    _practiceTranscript = [{ role: 'assistant', content: d.greeting }];
+    _practiceLastSpeak  = d.greeting;
+
+    // Update UI
+    document.getElementById('practice-scenario-label').textContent = 'Scenario: ' + (PRACTICE_SCENARIOS[scenario] || scenario);
+    document.getElementById('practice-lang-badge').textContent = language === 'es' ? '🇲🇽 Spanish' : '🇺🇸 English';
+    document.getElementById('practice-session-area').classList.remove('hidden');
+    document.getElementById('practice-reset-btn').classList.remove('hidden');
+    document.getElementById('practice-start-btn').textContent = '▶ New Practice';
+    btn.disabled = false;
+
+    // Render chat with initial greeting
+    const chat = document.getElementById('practice-chat');
+    chat.innerHTML = '';
+    practicePushBubble('assistant', d.greeting);
+
+    // Render quality checks
+    practiceRenderQualityChecks();
+    document.getElementById('practice-notes').value = '';
+    document.getElementById('practice-save-status').textContent = '';
+
+    // Load history
+    practiceLoadHistory();
+  } catch (e) {
+    alert('Error starting practice: ' + e.message);
+    btn.disabled = false; btn.textContent = '▶ Start Practice';
+  }
+}
+
+async function practiceSend() {
+  if (!_practiceSessionId || !_trainClinicId) return;
+  const input = document.getElementById('practice-input');
+  const msg   = input?.value?.trim();
+  if (!msg) return;
+  input.value = '';
+
+  // Show caller bubble immediately
+  practicePushBubble('user', msg);
+
+  const sendBtn = document.getElementById('practice-send-btn');
+  sendBtn.disabled = true; sendBtn.textContent = '…';
+
+  // Show typing indicator
+  const chat = document.getElementById('practice-chat');
+  const typing = document.createElement('div');
+  typing.className = 'flex justify-start items-center gap-2';
+  typing.id = 'practice-typing';
+  typing.innerHTML = '<div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0">🤖</div><div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-3 py-2 text-slate-400 text-xs italic shadow-sm">Ana is thinking…</div>';
+  chat.appendChild(typing);
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/message/${_practiceSessionId}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message: msg }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+
+    _practiceTranscript = d.transcript;
+    _practiceLastSpeak  = d.speak;
+
+    // Remove typing indicator and add Ana's bubble
+    document.getElementById('practice-typing')?.remove();
+    practicePushBubble('assistant', d.speak, { intent: d.intent, lang: d.language, emergency: d.emergencyDetected, complete: d.complete });
+
+    if (d.complete) {
+      document.getElementById('practice-status-indicator').textContent = 'Complete';
+      document.getElementById('practice-status-indicator').className = 'text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 font-medium';
+    }
+  } catch (e) {
+    document.getElementById('practice-typing')?.remove();
+    const errDiv = document.createElement('div');
+    errDiv.className = 'text-xs text-red-500 px-2';
+    errDiv.textContent = 'Error: ' + e.message;
+    chat.appendChild(errDiv);
+  } finally {
+    sendBtn.disabled = false; sendBtn.textContent = 'Send';
+    chat.scrollTop = chat.scrollHeight;
+  }
+}
+
+function practiceQuick(text) {
+  const input = document.getElementById('practice-input');
+  if (input) { input.value = text; input.focus(); }
+}
+
+function practicePushBubble(role, content, meta) {
+  const chat = document.getElementById('practice-chat');
+  if (!chat) return;
+  if (chat.querySelector('.text-center')) chat.innerHTML = '';
+
+  const isAna = role === 'assistant';
+  const emergency = meta?.emergency;
+  const complete  = meta?.complete;
+
+  let badges = '';
+  if (meta?.intent && meta.intent !== 'collecting')
+    badges += `<span class="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-1">${meta.intent}</span>`;
+  if (emergency)
+    badges += `<span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600 ml-1">🚨 Emergency</span>`;
+  if (complete)
+    badges += `<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 ml-1">✓ Complete</span>`;
+
+  const bubble = document.createElement('div');
+  bubble.className = isAna ? 'flex justify-start items-start gap-2' : 'flex justify-end';
+  bubble.innerHTML = isAna
+    ? `<div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div>
+       <div class="max-w-sm">
+         <div class="bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm">${escHtml(content)}${badges}</div>
+       </div>`
+    : `<div class="bg-violet-600 text-white text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-sm">${escHtml(content)}</div>`;
+
+  chat.appendChild(bubble);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function practiceSpeakLast() {
+  if (!_practiceLastSpeak) return;
+  if (!('speechSynthesis' in window)) return alert('Voice preview is not available in this browser. Try Chrome or Edge.');
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(_practiceLastSpeak);
+  const lang = document.getElementById('practice-language')?.value || 'es';
+  utt.lang = lang === 'es' ? 'es-US' : 'en-US';
+  utt.rate = 0.95;
+  window.speechSynthesis.speak(utt);
+}
+
+function practiceReset() {
+  _practiceSessionId  = null;
+  _practiceTranscript = [];
+  _practiceLastSpeak  = '';
+  document.getElementById('practice-session-area').classList.add('hidden');
+  document.getElementById('practice-reset-btn').classList.add('hidden');
+  document.getElementById('practice-start-btn').textContent = '▶ Start Practice';
+  document.getElementById('practice-status-indicator').textContent = 'Active';
+  document.getElementById('practice-status-indicator').className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium';
+  document.getElementById('practice-chat').innerHTML = '<p class="text-xs text-slate-400 italic text-center">Practice conversation will appear here.</p>';
+}
+
+async function practiceSaveResult() {
+  if (!_practiceSessionId || !_trainClinicId) return alert('No active session to save.');
+  const quality = {};
+  QUALITY_ITEMS.forEach(item => {
+    const el = document.getElementById(`pq-${item.key}`);
+    if (el) quality[item.key] = el.value || null;
+  });
+  const notes = document.getElementById('practice-notes')?.value?.trim() || null;
+  const st = document.getElementById('practice-save-status');
+  try {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/sessions/${_practiceSessionId}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ quality, notes }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    st.textContent = 'Saved ✓';
+    st.className = 'text-xs text-emerald-600 font-medium';
+    setTimeout(() => { st.textContent = ''; st.className = 'text-xs text-slate-400'; }, 4000);
+    practiceLoadHistory();
+  } catch (e) {
+    st.textContent = 'Error: ' + e.message;
+    st.className = 'text-xs text-red-500';
+  }
+}
+
+async function practiceLoadHistory() {
+  if (!_trainClinicId) return;
+  const el = document.getElementById('practice-history-list');
+  if (!el) return;
+  try {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/sessions`);
+    if (!r.ok) return;
+    const sessions = await r.json();
+    if (!sessions.length) {
+      el.innerHTML = '<p class="text-xs text-slate-400 italic">No saved sessions yet.</p>';
+      return;
+    }
+    el.innerHTML = sessions.map(s => {
+      const saved = s.status === 'saved';
+      return `<div class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl ${saved ? 'bg-emerald-50' : 'bg-slate-50'}">
+        <span class="text-lg shrink-0">🎤</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-slate-700 truncate">${escHtml(PRACTICE_SCENARIOS[s.scenario] || s.scenario || 'Practice')}</p>
+          <p class="text-xs text-slate-400">${s.language === 'es' ? 'Spanish' : 'English'} · ${new Date(s.created_at).toLocaleDateString()} ${new Date(s.created_at).toLocaleTimeString()} · ${saved ? '<span class="text-emerald-600 font-medium">Saved</span>' : 'Not saved'}</p>
+          ${s.notes ? `<p class="text-xs text-slate-500 italic truncate mt-0.5">"${escHtml(s.notes)}"</p>` : ''}
+        </div>
+        <button onclick="practiceDeleteSession(${s.id})" title="Delete session" class="shrink-0 text-slate-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50 text-lg leading-none">✕</button>
+      </div>`;
+    }).join('');
+  } catch (e) { console.error('practiceLoadHistory', e); }
+}
+
+async function practiceDeleteSession(id) {
+  if (!_trainClinicId || !confirm('Delete this practice session?')) return;
+  try {
+    await fetch(`/superadmin/api/practice/${_trainClinicId}/sessions/${id}`, { method: 'DELETE' });
+    practiceLoadHistory();
+  } catch (e) { alert('Error: ' + e.message); }
 }
 
 // ── Cost Dashboard ────────────────────────────────────────────────────────────

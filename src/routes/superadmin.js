@@ -25,13 +25,15 @@ const {
   getTrainingFaqs, addTrainingFaq, updateTrainingFaq, deleteTrainingFaq,
   getBusinessRules, addBusinessRule, updateBusinessRule, deleteBusinessRule,
   saveManualNotes, getTrainingStatus,
+  createPracticeSession, getPracticeSession, updatePracticeTranscript,
+  savePracticeResult, listPracticeSessions, deletePracticeSession,
   db,
 } = require('../database/db');
 
 const { getDashboardStats, getPerClinicCosts } = require('../services/costs');
 const { checkAndSendAlerts, getActiveAlerts }  = require('../services/alerts');
 
-const { runTestMessage, runKbTest, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
+const { runTestMessage, runKbTest, getInitialGreeting, buildSystemPrompt, buildKbPromptSection, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
 
 const SA_USER = process.env.SUPERADMIN_USER || 'superadmin';
 const SA_PASS = process.env.SUPERADMIN_PASS || 'SuperAdmin2024!';
@@ -1071,6 +1073,156 @@ router.post('/api/train/:clinicId/test', async (req, res) => {
     const kb = getKnowledgeBase(+req.params.clinicId);
     const result = await runKbTest(clinic, kb, question);
     res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Practice Conversation ─────────────────────────────────────────────────────
+
+const SCENARIO_CONTEXTS = {
+  new_patient_appointment:  'PRACTICE SCENARIO: A new patient is calling for the very first time to schedule an appointment. They may not know exactly what specialty they need. Be welcoming and helpful.',
+  reschedule_existing:      'PRACTICE SCENARIO: An existing patient wants to reschedule a previous appointment. They may be in a hurry or slightly frustrated.',
+  ask_insurance:            'PRACTICE SCENARIO: The caller wants to know which insurance plans are accepted. They are comparing options before choosing a provider.',
+  ask_office_hours:         'PRACTICE SCENARIO: The caller is asking about office hours and whether they can come in today.',
+  ask_location:             'PRACTICE SCENARIO: The caller needs the office address, parking information, or directions.',
+  cancel_appointment:       'PRACTICE SCENARIO: The caller wants to cancel an existing appointment. Collect their name, the appointment date/time, and reason for cancellation.',
+  elderly_spanish_slow:     'PRACTICE SCENARIO: An elderly Spanish-speaking patient is calling. They speak slowly, may repeat themselves, and need extra patience. Respond entirely in Spanish. Speak slowly and clearly. Confirm each piece of information.',
+  angry_caller:             'PRACTICE SCENARIO: The caller is frustrated or upset — possibly about a wait time, billing issue, or previous bad experience. De-escalate professionally. Do not argue.',
+  unknown_question:         'PRACTICE SCENARIO: The caller asks a question Ana does not have information about in the knowledge base. Ana must not invent an answer — she should offer to take a message or connect them with a staff member.',
+  emergency_urgent:         'PRACTICE SCENARIO: The caller may have a medical emergency or urgent situation. Follow emergency protocols. Ask about severity. Instruct to call 911 if life-threatening.',
+  ask_pricing:              'PRACTICE SCENARIO: The caller is asking about prices, fees, or costs for services. If pricing is not in the knowledge base, do not invent numbers. Offer to have someone from billing call them back.',
+  wants_human:              'PRACTICE SCENARIO: The caller immediately asks to speak with a real person or the front desk. Follow the configured transfer rules. Be polite and explain Ana can help while they wait, or offer to take a message.',
+};
+
+router.post('/api/practice/:clinicId/start', async (req, res) => {
+  try {
+    const clinic = getClinicAiConfig(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const { scenario = 'new_patient_appointment', language = 'es' } = req.body;
+    const sessionId = createPracticeSession(+req.params.clinicId, scenario, language);
+    const greeting  = getInitialGreeting(clinic);
+
+    const initialTranscript = [{ role: 'assistant', content: greeting, ts: new Date().toISOString() }];
+    updatePracticeTranscript(sessionId, +req.params.clinicId, initialTranscript);
+
+    res.json({ ok: true, sessionId, greeting, scenario, language });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/practice/:clinicId/message/:sessionId', async (req, res) => {
+  try {
+    const clinic = getClinicAiConfig(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const session = getPracticeSession(+req.params.sessionId, +req.params.clinicId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const { message } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error: 'message is required' });
+
+    // Load current transcript as conversation history for the AI
+    let transcriptArr = [];
+    try { transcriptArr = JSON.parse(session.transcript || '[]'); } catch {}
+
+    // Build conversationMessages in Claude format (role: user/assistant, content: string)
+    // The existing transcript stores full objects; extract just role+content for the AI call
+    const conversationMessages = transcriptArr.map(t => ({ role: t.role, content: t.content }));
+
+    // Add scenario context to the clinic object for this practice call
+    const scenarioCtx = SCENARIO_CONTEXTS[session.scenario] || '';
+    const practiceClinic = {
+      ...clinic,
+      ai_master_prompt: [
+        scenarioCtx,
+        'PRACTICE MODE: You are being tested by a NetCare Super Admin. Behave exactly as you would on a real phone call.',
+        session.language === 'es' ? 'DEFAULT LANGUAGE: Start in Spanish unless the caller uses English.' : 'DEFAULT LANGUAGE: Start in English unless the caller uses Spanish.',
+        clinic.ai_master_prompt || '',
+      ].filter(Boolean).join('\n\n'),
+    };
+
+    // Build system prompt with KB so practice uses the same knowledge as live calls
+    const kb = getKnowledgeBase(+req.params.clinicId);
+    let systemPrompt = buildSystemPrompt(practiceClinic);
+    if (kb) systemPrompt += buildKbPromptSection(kb, null);
+
+    const allMessages = [...conversationMessages, { role: 'user', content: message }];
+    const aiResp = await _anthropicClient.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 600,
+      system: systemPrompt,
+      messages: allMessages,
+    });
+
+    const rawText = aiResp.content[0].text.trim();
+    let parsed;
+    try {
+      const jsonStr = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      parsed = JSON.parse(jsonStr.match(/\{[\s\S]*\}/)?.[0] ?? jsonStr);
+    } catch {
+      parsed = { speak: rawText.substring(0, 200), language: session.language || 'es', intent: 'collecting', collected: {}, complete: false, emergencyDetected: false };
+    }
+
+    const result = {
+      speak:             parsed.speak             || 'I had a technical issue.',
+      language:          parsed.language          || session.language || 'es',
+      complete:          parsed.complete          || false,
+      emergencyDetected: parsed.emergencyDetected || false,
+      intent:            parsed.intent            || 'collecting',
+      collected:         parsed.collected         || {},
+    };
+
+    // Append both the user turn and Ana's response to the transcript
+    transcriptArr.push({ role: 'user',      content: message,        ts: new Date().toISOString() });
+    transcriptArr.push({ role: 'assistant', content: result.speak,   ts: new Date().toISOString(), intent: result.intent, language: result.language, complete: result.complete, emergencyDetected: result.emergencyDetected });
+
+    updatePracticeTranscript(+req.params.sessionId, +req.params.clinicId, transcriptArr);
+
+    res.json({
+      speak:             result.speak,
+      language:          result.language,
+      intent:            result.intent,
+      complete:          result.complete,
+      emergencyDetected: result.emergencyDetected,
+      collected:         result.collected,
+      transcript:        transcriptArr,
+    });
+  } catch (e) {
+    console.error('[Practice]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put('/api/practice/:clinicId/sessions/:sessionId', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.clinicId)) return res.status(404).json({ error: 'Clinic not found' });
+    const { quality, notes } = req.body;
+    savePracticeResult(+req.params.sessionId, +req.params.clinicId, quality || {}, notes);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/practice/:clinicId/sessions', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.clinicId)) return res.status(404).json({ error: 'Clinic not found' });
+    res.json(listPracticeSessions(+req.params.clinicId, 30));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/practice/:clinicId/sessions/:sessionId', (req, res) => {
+  try {
+    const session = getPracticeSession(+req.params.sessionId, +req.params.clinicId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    let transcript = []; let quality = {};
+    try { transcript = JSON.parse(session.transcript || '[]'); } catch {}
+    try { quality    = JSON.parse(session.quality    || '{}'); } catch {}
+    res.json({ ...session, transcript, quality });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/practice/:clinicId/sessions/:sessionId', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.clinicId)) return res.status(404).json({ error: 'Clinic not found' });
+    deletePracticeSession(+req.params.sessionId, +req.params.clinicId);
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

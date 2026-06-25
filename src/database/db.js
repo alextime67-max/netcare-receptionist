@@ -167,6 +167,19 @@ function initDb() {
       created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS practice_sessions (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      scenario    TEXT,
+      language    TEXT DEFAULT 'es',
+      transcript  TEXT,
+      quality     TEXT,
+      notes       TEXT,
+      status      TEXT DEFAULT 'active',
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
   `);
 
   // ── Migrations: add clinic_id to all data tables ──────────────────────────
@@ -1215,6 +1228,39 @@ function getTrainingStatus(clinicId) {
   };
 }
 
+// ── Practice Sessions ─────────────────────────────────────────────────────────
+
+function createPracticeSession(clinicId, scenario, language) {
+  const r = db.prepare(
+    'INSERT INTO practice_sessions (clinic_id, scenario, language) VALUES (?, ?, ?)'
+  ).run(clinicId, scenario || null, language || 'es');
+  return r.lastInsertRowid;
+}
+
+function getPracticeSession(id, clinicId) {
+  return db.prepare('SELECT * FROM practice_sessions WHERE id = ? AND clinic_id = ?').get(id, clinicId);
+}
+
+function updatePracticeTranscript(id, clinicId, transcript) {
+  db.prepare('UPDATE practice_sessions SET transcript = ? WHERE id = ? AND clinic_id = ?')
+    .run(JSON.stringify(transcript), id, clinicId);
+}
+
+function savePracticeResult(id, clinicId, quality, notes) {
+  db.prepare('UPDATE practice_sessions SET quality = ?, notes = ?, status = ? WHERE id = ? AND clinic_id = ?')
+    .run(JSON.stringify(quality), notes || null, 'saved', id, clinicId);
+}
+
+function listPracticeSessions(clinicId, limit) {
+  return db.prepare(
+    'SELECT id, scenario, language, status, notes, created_at FROM practice_sessions WHERE clinic_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(clinicId, limit || 20);
+}
+
+function deletePracticeSession(id, clinicId) {
+  db.prepare('DELETE FROM practice_sessions WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
 function upsertKbSources(clinicId, sources) {
   const json = typeof sources === 'string' ? sources : JSON.stringify(sources);
   const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
@@ -1381,4 +1427,11 @@ module.exports = {
   deleteBusinessRule,
   saveManualNotes,
   getTrainingStatus,
+  // practice sessions
+  createPracticeSession,
+  getPracticeSession,
+  updatePracticeTranscript,
+  savePracticeResult,
+  listPracticeSessions,
+  deletePracticeSession,
 };
