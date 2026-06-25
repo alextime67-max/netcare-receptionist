@@ -138,6 +138,35 @@ function initDb() {
       question   TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS training_sources (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      source_type TEXT    NOT NULL,
+      source_name TEXT,
+      raw_text    TEXT    NOT NULL,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS training_faqs (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      question    TEXT    NOT NULL,
+      answer      TEXT    NOT NULL,
+      sort_order  INTEGER DEFAULT 0,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS business_rules (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      rule_text   TEXT    NOT NULL,
+      sort_order  INTEGER DEFAULT 0,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
   `);
 
   // ── Migrations: add clinic_id to all data tables ──────────────────────────
@@ -205,6 +234,7 @@ function initDb() {
   _addColumnIfMissing('clinics',        'ai_voice_en',   'TEXT');
   _addColumnIfMissing('knowledge_base', 'website_url',   'TEXT');
   _addColumnIfMissing('knowledge_base', 'field_sources', 'TEXT');
+  _addColumnIfMissing('knowledge_base', 'manual_notes',  'TEXT');
 
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
@@ -1105,6 +1135,86 @@ function saveWebsiteUrl(clinicId, url) {
   invalidateKbCache(clinicId);
 }
 
+// ── Training Center ───────────────────────────────────────────────────────────
+
+function getTrainingSources(clinicId) {
+  return db.prepare('SELECT id, clinic_id, source_type, source_name, created_at, LENGTH(raw_text) AS char_count FROM training_sources WHERE clinic_id = ? ORDER BY created_at DESC').all(clinicId);
+}
+
+function getTrainingSourceText(clinicId) {
+  return db.prepare('SELECT id, source_type, source_name, raw_text FROM training_sources WHERE clinic_id = ? ORDER BY created_at ASC').all(clinicId);
+}
+
+function addTrainingSource(clinicId, sourceType, sourceName, rawText) {
+  const r = db.prepare(
+    'INSERT INTO training_sources (clinic_id, source_type, source_name, raw_text) VALUES (?, ?, ?, ?)'
+  ).run(clinicId, sourceType, sourceName || null, rawText);
+  return r.lastInsertRowid;
+}
+
+function deleteTrainingSource(id, clinicId) {
+  db.prepare('DELETE FROM training_sources WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
+function getTrainingFaqs(clinicId) {
+  return db.prepare('SELECT * FROM training_faqs WHERE clinic_id = ? ORDER BY sort_order, id').all(clinicId);
+}
+
+function addTrainingFaq(clinicId, question, answer) {
+  const r = db.prepare('INSERT INTO training_faqs (clinic_id, question, answer) VALUES (?, ?, ?)').run(clinicId, question.trim(), answer.trim());
+  return r.lastInsertRowid;
+}
+
+function updateTrainingFaq(id, clinicId, question, answer) {
+  db.prepare('UPDATE training_faqs SET question = ?, answer = ? WHERE id = ? AND clinic_id = ?').run(question.trim(), answer.trim(), id, clinicId);
+}
+
+function deleteTrainingFaq(id, clinicId) {
+  db.prepare('DELETE FROM training_faqs WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
+function getBusinessRules(clinicId) {
+  return db.prepare('SELECT * FROM business_rules WHERE clinic_id = ? ORDER BY sort_order, id').all(clinicId);
+}
+
+function addBusinessRule(clinicId, ruleText) {
+  const r = db.prepare('INSERT INTO business_rules (clinic_id, rule_text) VALUES (?, ?)').run(clinicId, ruleText.trim());
+  return r.lastInsertRowid;
+}
+
+function updateBusinessRule(id, clinicId, ruleText) {
+  db.prepare('UPDATE business_rules SET rule_text = ? WHERE id = ? AND clinic_id = ?').run(ruleText.trim(), id, clinicId);
+}
+
+function deleteBusinessRule(id, clinicId) {
+  db.prepare('DELETE FROM business_rules WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
+function saveManualNotes(clinicId, notes) {
+  const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  if (existing) {
+    db.prepare('UPDATE knowledge_base SET manual_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE clinic_id = ?').run(notes || null, clinicId);
+  } else {
+    db.prepare('INSERT INTO knowledge_base (clinic_id, manual_notes) VALUES (?, ?)').run(clinicId, notes || null);
+  }
+  invalidateKbCache(clinicId);
+}
+
+function getTrainingStatus(clinicId) {
+  const src  = db.prepare('SELECT COUNT(*) as cnt, MAX(created_at) as last_added FROM training_sources WHERE clinic_id = ?').get(clinicId);
+  const faqs = db.prepare('SELECT COUNT(*) as cnt FROM training_faqs WHERE clinic_id = ?').get(clinicId);
+  const rules= db.prepare('SELECT COUNT(*) as cnt FROM business_rules WHERE clinic_id = ?').get(clinicId);
+  const kb   = db.prepare('SELECT updated_at, manual_notes FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  return {
+    sourcesCount:   src.cnt,
+    lastSourceAdded: src.last_added,
+    faqsCount:      faqs.cnt,
+    rulesCount:     rules.cnt,
+    lastTrained:    kb?.updated_at || null,
+    manualNotes:    kb?.manual_notes || '',
+  };
+}
+
 function upsertKbSources(clinicId, sources) {
   const json = typeof sources === 'string' ? sources : JSON.stringify(sources);
   const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
@@ -1256,4 +1366,19 @@ module.exports = {
   logCostAlert,
   getLastAlertByType,
   getCostAlerts,
+  // training center
+  getTrainingSources,
+  getTrainingSourceText,
+  addTrainingSource,
+  deleteTrainingSource,
+  getTrainingFaqs,
+  addTrainingFaq,
+  updateTrainingFaq,
+  deleteTrainingFaq,
+  getBusinessRules,
+  addBusinessRule,
+  updateBusinessRule,
+  deleteBusinessRule,
+  saveManualNotes,
+  getTrainingStatus,
 };

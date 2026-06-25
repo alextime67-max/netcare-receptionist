@@ -138,6 +138,13 @@
       </svg>
       Knowledge Base
     </button>
+    <button onclick="switchView('train')" id="nav-train"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.346A3.51 3.51 0 0114 18.5H10a3.51 3.51 0 01-2.47-1.025l-.347-.346z"/>
+      </svg>
+      Train Ana
+    </button>
 
     <div class="mt-2 pt-2 border-t border-slate-700/40">
       <p class="px-3 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Cost Management</p>
@@ -627,6 +634,253 @@
       </div>
 
     </div><!-- /view-kb -->
+
+    <!-- ── AI TRAINING CENTER VIEW ──────────────────────────────────────────── -->
+    <div id="view-train" class="hidden p-6 space-y-6">
+
+      <!-- Header -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4 flex flex-wrap gap-4 items-center">
+        <div class="flex-1 min-w-0">
+          <h2 class="text-base font-bold text-slate-800">AI Training Center</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Teach Ana everything about a business. Super Admin only — business clients cannot access this.</p>
+        </div>
+        <select id="train-clinic" onchange="loadTrainingData()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 text-slate-700">
+          <option value="">— select a clinic —</option>
+        </select>
+        <span id="train-status-badge" class="hidden px-3 py-1 rounded-full text-xs font-medium"></span>
+      </div>
+
+      <!-- Action bar -->
+      <div class="flex gap-3 flex-wrap items-center">
+        <button onclick="runTrainAna()" id="train-run-btn"
+          class="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white text-sm font-semibold rounded-xl hover:bg-violet-700 transition-colors shadow-sm">
+          🧠 Train Ana
+        </button>
+        <button onclick="runRefreshKnowledge()"
+          class="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+          🔄 Refresh Knowledge
+        </button>
+        <button onclick="switchTrainSection('test')"
+          class="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+          🧪 Test Ana
+        </button>
+        <span id="train-action-msg" class="text-sm text-slate-500 px-2"></span>
+      </div>
+
+      <!-- Training log -->
+      <div id="train-log" class="hidden bg-slate-900 text-emerald-400 rounded-xl p-4 text-xs font-mono space-y-0.5 max-h-36 overflow-y-auto"></div>
+
+      <!-- Section tabs -->
+      <div class="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit flex-wrap">
+        <button id="ttab-sources" onclick="switchTrainSection('sources')" class="train-stab px-4 py-2 text-xs font-medium rounded-lg bg-white shadow-sm text-slate-700">📥 Sources</button>
+        <button id="ttab-faqs"    onclick="switchTrainSection('faqs')"    class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">❓ FAQs</button>
+        <button id="ttab-rules"   onclick="switchTrainSection('rules')"   class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📋 Rules</button>
+        <button id="ttab-notes"   onclick="switchTrainSection('notes')"   class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📝 Manual Notes</button>
+        <button id="ttab-viewer"  onclick="switchTrainSection('viewer')"  class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📚 Knowledge</button>
+        <button id="ttab-test"    onclick="switchTrainSection('test')"    class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🧪 Test Ana</button>
+      </div>
+
+      <!-- ── SECTION: Sources ─────────────────────────────────── -->
+      <div id="tsec-sources" class="space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-5">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-800">Knowledge Sources</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Add website URLs and files. Ana will extract and learn from all of them during training.</p>
+          </div>
+
+          <!-- Uploaded sources list -->
+          <div id="train-src-list" class="space-y-2">
+            <p class="text-xs text-slate-400 italic">No sources yet.</p>
+          </div>
+
+          <!-- Add website -->
+          <div class="border-t border-slate-100 pt-4 space-y-3">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Import from Website</p>
+            <div class="flex gap-2 flex-wrap">
+              <input id="train-web-url" type="url" placeholder="https://businesswebsite.com"
+                class="flex-1 min-w-52 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400">
+              <button onclick="trainAddWebsite()" id="train-web-btn"
+                class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
+                🌐 Import Website
+              </button>
+            </div>
+          </div>
+
+          <!-- Upload files -->
+          <div class="border-t border-slate-100 pt-4 space-y-3">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Upload Documents</p>
+            <div class="flex gap-2 flex-wrap">
+              <input type="file" id="train-file-pdf"  accept=".pdf"  class="hidden" onchange="trainAddFile(this)">
+              <input type="file" id="train-file-docx" accept=".docx" class="hidden" onchange="trainAddFile(this)">
+              <input type="file" id="train-file-txt"  accept=".txt"  class="hidden" onchange="trainAddFile(this)">
+              <button onclick="document.getElementById('train-file-pdf').click()"
+                class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200">
+                📄 Upload PDF
+              </button>
+              <button onclick="document.getElementById('train-file-docx').click()"
+                class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200">
+                📄 Upload DOCX
+              </button>
+              <button onclick="document.getElementById('train-file-txt').click()"
+                class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200">
+                📄 Upload TXT
+              </button>
+            </div>
+          </div>
+          <div id="train-src-status" class="hidden text-xs px-3 py-2 rounded-lg"></div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: FAQs ────────────────────────────────────── -->
+      <div id="tsec-faqs" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">FAQ Manager</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Create Q&amp;A pairs. Ana will use these to answer callers accurately.</p>
+            </div>
+            <button onclick="trainShowFaqForm()"
+              class="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors">
+              + Add FAQ
+            </button>
+          </div>
+
+          <!-- Add/Edit FAQ form -->
+          <div id="train-faq-form" class="hidden border border-violet-200 rounded-xl bg-violet-50 p-4 space-y-3">
+            <input type="hidden" id="train-faq-editing-id">
+            <p id="train-faq-form-title" class="text-xs font-semibold text-violet-700 uppercase tracking-wide">New FAQ</p>
+            <div>
+              <label class="text-xs font-medium text-slate-600">Question</label>
+              <input id="train-faq-q" type="text" placeholder="Do you accept Medicare?"
+                class="w-full mt-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400">
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-600">Answer</label>
+              <textarea id="train-faq-a" rows="3" placeholder="Yes, we accept Medicare Part A and B..."
+                class="w-full mt-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"></textarea>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="trainSaveFaq()"
+                class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors">Save FAQ</button>
+              <button onclick="trainHideFaqForm()"
+                class="px-4 py-2 bg-white text-slate-600 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">Cancel</button>
+            </div>
+          </div>
+
+          <div id="train-faq-list" class="space-y-2">
+            <p class="text-xs text-slate-400 italic">No FAQs yet. Click "+ Add FAQ" to create one.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Business Rules ──────────────────────────── -->
+      <div id="tsec-rules" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Business Rules</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Rules Ana must always follow. Example: "Never provide lab results." "Always verify patient's full name."</p>
+            </div>
+            <button onclick="trainShowRuleForm()"
+              class="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors">
+              + Add Rule
+            </button>
+          </div>
+
+          <!-- Add/Edit Rule form -->
+          <div id="train-rule-form" class="hidden border border-violet-200 rounded-xl bg-violet-50 p-4 space-y-3">
+            <input type="hidden" id="train-rule-editing-id">
+            <p id="train-rule-form-title" class="text-xs font-semibold text-violet-700 uppercase tracking-wide">New Rule</p>
+            <div class="flex gap-2">
+              <input id="train-rule-text" type="text" placeholder="Never provide lab results to patients."
+                class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400">
+              <button onclick="trainSaveRule()"
+                class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors whitespace-nowrap">Save Rule</button>
+              <button onclick="trainHideRuleForm()"
+                class="px-4 py-2 bg-white text-slate-600 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">Cancel</button>
+            </div>
+          </div>
+
+          <div id="train-rule-list" class="space-y-2">
+            <p class="text-xs text-slate-400 italic">No rules yet. Click "+ Add Rule" to create one.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Manual Notes ────────────────────────────── -->
+      <div id="tsec-notes" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-800">Manual Notes <span class="text-emerald-600 text-xs font-normal ml-1">(Highest Priority)</span></h3>
+            <p class="text-xs text-slate-400 mt-0.5">Write operational notes for Ana. These always override information from websites and documents during training.</p>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700">
+            <strong>Examples:</strong> "The doctor is on vacation next week." &middot; "Do not schedule appointments after 4 PM." &middot; "Walk-ins only on Saturdays."
+          </div>
+          <textarea id="train-manual-notes" rows="8"
+            placeholder="Write notes here. These have the highest priority and will override information from websites and files..."
+            class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y"></textarea>
+          <div class="flex gap-2 items-center">
+            <button onclick="trainSaveManualNotes()"
+              class="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors">
+              Save Manual Notes
+            </button>
+            <span id="train-notes-status" class="text-xs text-slate-400"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Knowledge Viewer ────────────────────────── -->
+      <div id="tsec-viewer" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Knowledge Viewer</h3>
+              <p class="text-xs text-slate-400 mt-0.5">What Ana currently knows. Click "Train Ana" after adding sources to update.</p>
+            </div>
+            <button onclick="trainLoadViewer()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+          </div>
+          <div id="train-viewer-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <p class="text-xs text-slate-400 italic col-span-full">Select a clinic and click Refresh to view what Ana knows.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Test Ana ─────────────────────────────────── -->
+      <div id="tsec-test" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-slate-800">Test Ana</h3>
+          <p class="text-xs text-slate-400">Ask Ana questions exactly as a patient would on a phone call. Ana answers using the current trained Knowledge Base.</p>
+
+          <!-- Quick questions -->
+          <div class="flex flex-wrap gap-2">
+            <button onclick="trainAskAna('What insurance do you accept?')"      class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What insurance do you accept?</button>
+            <button onclick="trainAskAna('What are your office hours?')"        class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What are your office hours?</button>
+            <button onclick="trainAskAna('Where are you located?')"             class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Where are you located?</button>
+            <button onclick="trainAskAna('How do I schedule an appointment?')"  class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">How do I schedule an appointment?</button>
+            <button onclick="trainAskAna('What documents should I bring?')"     class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What documents should I bring?</button>
+            <button onclick="trainAskAna('Do you have any doctors available?')" class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Do you have any doctors available?</button>
+          </div>
+
+          <!-- Chat input -->
+          <div class="flex gap-2">
+            <input id="train-test-input" type="text" placeholder="Ask Ana a question as a patient would..."
+              class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+              onkeydown="if(event.key==='Enter') trainAskAna()">
+            <button onclick="trainAskAna()"
+              class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors">
+              Ask Ana
+            </button>
+          </div>
+
+          <!-- Chat output -->
+          <div id="train-test-chat" class="space-y-3 max-h-96 overflow-y-auto rounded-xl bg-slate-50 p-4 min-h-24">
+            <p class="text-xs text-slate-400 italic text-center">Chat will appear here after you ask Ana a question.</p>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /view-train -->
 
     <!-- ── COST DASHBOARD VIEW ──────────────────────────────────────────── -->
     <div id="view-costs" class="hidden p-6 space-y-6">
@@ -1418,13 +1672,14 @@ function typeBadge(t) {
 
 function switchView(view) {
   currentView = view;
-  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb', 'costs', 'cost-config'];
+  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb', 'train', 'costs', 'cost-config'];
   const titles = {
     dashboard:   ['Dashboard',      'NetCare Phone platform overview'],
     clients:     ['Clients',        'Manage all clinic accounts'],
     calls:       ['Call Log',       'All inbound calls across every clinic'],
     analytics:   ['Analytics',      'Call volume, intent breakdown, and language trends'],
     kb:          ['Knowledge Base', 'AI knowledge base and test simulator'],
+    train:       ['Train Ana', 'AI Training Center — teach Ana everything about a business'],
     costs:       ['Cost Dashboard', 'Monthly costs, revenue, and profit per client'],
     'cost-config': ['Alert Settings', 'Admin contact, cost rates, and alert thresholds'],
   };
@@ -1443,6 +1698,7 @@ function switchView(view) {
   if (view === 'analytics')   loadAnalytics();
   if (view === 'dashboard')   loadHealth();
   if (view === 'kb')          loadKb();
+  if (view === 'train')       { loadTrainingData(); }
   if (view === 'costs')       loadCostDashboard();
   if (view === 'cost-config') loadCostConfig();
 }
@@ -1493,6 +1749,7 @@ async function loadClients() {
     populateCallClinicFilter();
     populateAnalyticsClinicFilter();
     populateKbClinicFilter();
+    populateTrainClinicFilter();
   } catch(e) {
     document.getElementById('clients-tbody').innerHTML =
       `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400 text-sm">Error: ${e.message}</td></tr>`;
@@ -3231,6 +3488,466 @@ async function saveWebsiteUrlAction() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// ── AI Training Center ────────────────────────────────────────────────────────
+
+let _trainClinicId = null;
+let _trainFaqs     = [];
+let _trainRules    = [];
+let _trainSources  = [];
+
+function populateTrainClinicFilter() {
+  const sel = document.getElementById('train-clinic');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— select a clinic —</option>' +
+    allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected':''}>${escHtml(c.name)}</option>`).join('');
+}
+
+async function loadTrainingData() {
+  _trainClinicId = document.getElementById('train-clinic')?.value || null;
+  if (!_trainClinicId) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/status`);
+    if (!r.ok) return;
+    const d = await r.json();
+    _trainFaqs    = d.faqs    || [];
+    _trainRules   = d.rules   || [];
+    _trainSources = d.sources || [];
+    const notes = d.manualNotes || '';
+    const el = document.getElementById('train-manual-notes');
+    if (el) el.value = notes;
+    renderTrainSources();
+    renderTrainFaqs();
+    renderTrainRules();
+    renderTrainStatusBadge(d);
+    trainLoadViewer();
+  } catch (e) { console.error('loadTrainingData', e); }
+}
+
+function renderTrainStatusBadge(d) {
+  const badge = document.getElementById('train-status-badge');
+  if (!badge) return;
+  if (d.lastTrained) {
+    badge.textContent = `Ana trained ${new Date(d.lastTrained).toLocaleDateString()} · ${d.sourcesCount} source(s) · ${d.faqsCount} FAQ(s) · ${d.rulesCount} rule(s)`;
+    badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700';
+  } else {
+    badge.textContent = `Not trained yet · ${d.sourcesCount} source(s) · ${d.faqsCount} FAQ(s) · ${d.rulesCount} rule(s)`;
+    badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700';
+  }
+  badge.classList.remove('hidden');
+}
+
+function switchTrainSection(sec) {
+  ['sources','faqs','rules','notes','viewer','test'].forEach(s => {
+    document.getElementById(`tsec-${s}`)?.classList.toggle('hidden', s !== sec);
+    const tab = document.getElementById(`ttab-${s}`);
+    if (tab) {
+      tab.className = s === sec
+        ? 'train-stab px-4 py-2 text-xs font-medium rounded-lg bg-white shadow-sm text-violet-700'
+        : 'train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700';
+    }
+  });
+  if (sec === 'viewer') trainLoadViewer();
+}
+
+// ── Sources ───────────────────────────────────────────────────────────────────
+
+function renderTrainSources() {
+  const el = document.getElementById('train-src-list');
+  if (!el) return;
+  if (!_trainSources.length) {
+    el.innerHTML = '<p class="text-xs text-slate-400 italic">No sources added yet.</p>';
+    return;
+  }
+  const icons = { website:'🌐', pdf:'📄', docx:'📄', txt:'📝' };
+  el.innerHTML = _trainSources.map(s => `
+    <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+      <span class="text-lg shrink-0">${icons[s.source_type] || '📄'}</span>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-slate-700 truncate">${escHtml(s.source_name || s.source_type)}</p>
+        <p class="text-xs text-slate-400">${s.source_type.toUpperCase()} · Added ${new Date(s.created_at).toLocaleDateString()} · ${(s.char_count||0).toLocaleString()} chars</p>
+      </div>
+      <button onclick="trainDeleteSource(${s.id})" title="Remove source"
+        class="shrink-0 text-slate-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50 text-lg leading-none">✕</button>
+    </div>
+  `).join('');
+}
+
+async function trainAddWebsite() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const url = document.getElementById('train-web-url')?.value?.trim();
+  if (!url) return alert('Enter a website URL first.');
+  const btn = document.getElementById('train-web-btn');
+  const st  = document.getElementById('train-src-status');
+  btn.disabled = true; btn.textContent = '🌐 Importing…';
+  st.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  st.textContent = 'Fetching and extracting text from website…';
+  st.classList.remove('hidden');
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/website`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    _trainSources = d.sources;
+    renderTrainSources();
+    document.getElementById('train-web-url').value = '';
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+    st.textContent = `Website imported: ${d.charCount.toLocaleString()} characters extracted. Click "Train Ana" to update Ana's knowledge.`;
+  } catch (e) {
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    st.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🌐 Import Website';
+  }
+}
+
+async function trainAddFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  if (!_trainClinicId) { input.value = ''; return alert('Select a clinic first.'); }
+  const st = document.getElementById('train-src-status');
+  st.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  st.textContent = `Reading "${escHtml(file.name)}"…`;
+  st.classList.remove('hidden');
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/file`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    _trainSources = d.sources;
+    renderTrainSources();
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+    st.textContent = `"${escHtml(file.name)}" uploaded: ${d.charCount.toLocaleString()} characters extracted. Click "Train Ana" to update Ana's knowledge.`;
+  } catch (e) {
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    st.textContent = 'Error: ' + e.message;
+  } finally { input.value = ''; }
+}
+
+async function trainDeleteSource(id) {
+  if (!_trainClinicId || !confirm('Remove this knowledge source?')) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/source/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainSources = d.sources;
+    renderTrainSources();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── FAQs ──────────────────────────────────────────────────────────────────────
+
+function renderTrainFaqs() {
+  const el = document.getElementById('train-faq-list');
+  if (!el) return;
+  if (!_trainFaqs.length) {
+    el.innerHTML = '<p class="text-xs text-slate-400 italic">No FAQs yet. Click "+ Add FAQ" to create one.</p>';
+    return;
+  }
+  el.innerHTML = _trainFaqs.map(f => `
+    <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-1.5">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 space-y-1 min-w-0">
+          <p class="text-sm font-semibold text-slate-800">Q: ${escHtml(f.question)}</p>
+          <p class="text-sm text-slate-600 whitespace-pre-wrap">A: ${escHtml(f.answer)}</p>
+        </div>
+        <div class="flex gap-1 shrink-0">
+          <button onclick="trainEditFaq(${f.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100 text-slate-600 transition-colors">Edit</button>
+          <button onclick="trainDeleteFaq(${f.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 transition-colors">✕</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function trainShowFaqForm(id) {
+  const form  = document.getElementById('train-faq-form');
+  const title = document.getElementById('train-faq-form-title');
+  const idEl  = document.getElementById('train-faq-editing-id');
+  if (id) {
+    const faq = _trainFaqs.find(f => f.id === id);
+    if (!faq) return;
+    document.getElementById('train-faq-q').value = faq.question;
+    document.getElementById('train-faq-a').value = faq.answer;
+    idEl.value = id;
+    title.textContent = 'Edit FAQ';
+  } else {
+    document.getElementById('train-faq-q').value = '';
+    document.getElementById('train-faq-a').value = '';
+    idEl.value = '';
+    title.textContent = 'New FAQ';
+  }
+  form.classList.remove('hidden');
+  document.getElementById('train-faq-q').focus();
+}
+
+function trainHideFaqForm() {
+  document.getElementById('train-faq-form').classList.add('hidden');
+}
+
+function trainEditFaq(id) { trainShowFaqForm(id); }
+
+async function trainSaveFaq() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const q   = document.getElementById('train-faq-q')?.value?.trim();
+  const a   = document.getElementById('train-faq-a')?.value?.trim();
+  const eid = document.getElementById('train-faq-editing-id')?.value;
+  if (!q || !a) return alert('Both question and answer are required.');
+  try {
+    const url    = eid ? `/superadmin/api/train/${_trainClinicId}/faqs/${eid}` : `/superadmin/api/train/${_trainClinicId}/faqs`;
+    const method = eid ? 'PUT' : 'POST';
+    const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({ question: q, answer: a }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainFaqs = d.faqs;
+    renderTrainFaqs();
+    trainHideFaqForm();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function trainDeleteFaq(id) {
+  if (!_trainClinicId || !confirm('Delete this FAQ?')) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/faqs/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainFaqs = d.faqs;
+    renderTrainFaqs();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── Business Rules ────────────────────────────────────────────────────────────
+
+function renderTrainRules() {
+  const el = document.getElementById('train-rule-list');
+  if (!el) return;
+  if (!_trainRules.length) {
+    el.innerHTML = '<p class="text-xs text-slate-400 italic">No rules yet. Click "+ Add Rule" to create one.</p>';
+    return;
+  }
+  el.innerHTML = _trainRules.map((r, i) => `
+    <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+      <span class="text-xs font-mono text-slate-400 shrink-0 w-5 text-right">${i+1}.</span>
+      <p class="flex-1 text-sm text-slate-700">${escHtml(r.rule_text)}</p>
+      <div class="flex gap-1 shrink-0">
+        <button onclick="trainEditRule(${r.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100 text-slate-600 transition-colors">Edit</button>
+        <button onclick="trainDeleteRule(${r.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 transition-colors">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function trainShowRuleForm(id) {
+  const form  = document.getElementById('train-rule-form');
+  const title = document.getElementById('train-rule-form-title');
+  const idEl  = document.getElementById('train-rule-editing-id');
+  if (id) {
+    const rule = _trainRules.find(r => r.id === id);
+    if (!rule) return;
+    document.getElementById('train-rule-text').value = rule.rule_text;
+    idEl.value = id;
+    title.textContent = 'Edit Rule';
+  } else {
+    document.getElementById('train-rule-text').value = '';
+    idEl.value = '';
+    title.textContent = 'New Rule';
+  }
+  form.classList.remove('hidden');
+  document.getElementById('train-rule-text').focus();
+}
+
+function trainHideRuleForm() {
+  document.getElementById('train-rule-form').classList.add('hidden');
+}
+
+function trainEditRule(id) { trainShowRuleForm(id); }
+
+async function trainSaveRule() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const text = document.getElementById('train-rule-text')?.value?.trim();
+  const eid  = document.getElementById('train-rule-editing-id')?.value;
+  if (!text) return alert('Please enter a rule.');
+  try {
+    const url    = eid ? `/superadmin/api/train/${_trainClinicId}/rules/${eid}` : `/superadmin/api/train/${_trainClinicId}/rules`;
+    const method = eid ? 'PUT' : 'POST';
+    const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({ rule_text: text }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainRules = d.rules;
+    renderTrainRules();
+    trainHideRuleForm();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function trainDeleteRule(id) {
+  if (!_trainClinicId || !confirm('Delete this rule?')) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/rules/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainRules = d.rules;
+    renderTrainRules();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── Manual Notes ──────────────────────────────────────────────────────────────
+
+async function trainSaveManualNotes() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const notes = document.getElementById('train-manual-notes')?.value?.trim() || null;
+  const st = document.getElementById('train-notes-status');
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/manual`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ notes }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    st.textContent = 'Saved ✓';
+    st.className = 'text-xs text-emerald-600 font-medium';
+    setTimeout(() => { st.textContent = ''; st.className = 'text-xs text-slate-400'; }, 3000);
+  } catch (e) {
+    st.textContent = 'Error: ' + e.message;
+    st.className = 'text-xs text-red-500';
+  }
+}
+
+// ── Knowledge Viewer ──────────────────────────────────────────────────────────
+
+async function trainLoadViewer() {
+  const el = document.getElementById('train-viewer-grid');
+  if (!el || !_trainClinicId) return;
+  try {
+    const kb = await (await fetch(`/superadmin/api/kb/${_trainClinicId}`)).json();
+    const labels = {
+      services:'Services', doctors:'Doctors & Staff', locations:'Locations',
+      office_hours:'Office Hours', insurance:'Insurance', appointment_policy:'Appointment Policy',
+      cancellation_policy:'Cancellation Policy', new_patient_requirements:'New Patient Requirements',
+      documents_needed:'Documents Needed', faqs:'FAQs', transfer_rules:'Transfer Rules',
+      emergency_instructions:'Emergency Instructions', do_not_answer:'Do NOT Answer',
+    };
+    let sources = {};
+    try { sources = kb.field_sources ? JSON.parse(kb.field_sources) : {}; } catch {}
+    const srcColors = { manual:'bg-emerald-100 text-emerald-700', pdf:'bg-purple-100 text-purple-700', docx:'bg-purple-100 text-purple-700', txt:'bg-purple-100 text-purple-700', website:'bg-blue-100 text-blue-700', trained:'bg-violet-100 text-violet-700' };
+    const populated = Object.entries(labels).filter(([k]) => kb[k]?.trim());
+    if (!populated.length) {
+      el.innerHTML = '<p class="text-xs text-slate-400 italic col-span-full">No knowledge yet. Add sources and click "Train Ana" to populate.</p>';
+      return;
+    }
+    el.innerHTML = populated.map(([k, label]) => {
+      const src = sources[k];
+      const badge = src?.type ? `<span class="text-xs px-2 py-0.5 rounded-full font-medium ${srcColors[src.type]||'bg-slate-100 text-slate-500'}">${src.type}</span>` : '';
+      const preview = escHtml((kb[k]||'').slice(0,400)) + ((kb[k]||'').length>400 ? '…' : '');
+      return `<div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="text-xs font-semibold text-slate-600 uppercase tracking-wide">${label}</span>${badge}
+        </div>
+        <p class="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">${preview}</p>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<p class="text-xs text-red-400 col-span-full">Error: ${e.message}</p>`;
+  }
+}
+
+// ── Train Ana ─────────────────────────────────────────────────────────────────
+
+async function runTrainAna() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const btn = document.getElementById('train-run-btn');
+  const msg = document.getElementById('train-action-msg');
+  const log = document.getElementById('train-log');
+
+  btn.disabled = true; btn.textContent = '🧠 Training…';
+  log.classList.remove('hidden'); log.innerHTML = '';
+  msg.textContent = '';
+
+  const addLog = t => {
+    const d = document.createElement('div');
+    d.textContent = `> ${t}`;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const clinic = allClients.find(c => c.id == _trainClinicId);
+  addLog('Starting Ana training…');
+  addLog(`Clinic: ${clinic?.name || _trainClinicId}`);
+  addLog(`Sources: ${_trainSources.length} | FAQs: ${_trainFaqs.length} | Rules: ${_trainRules.length}`);
+  addLog('Sending to AI for consolidation (15–30 seconds)…');
+
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/train`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Training failed');
+
+    addLog(`✓ Business: ${d.businessName}`);
+    addLog(`✓ ${d.fieldsTrained} knowledge fields populated`);
+    addLog('✓ Ana is ready! Knowledge Base updated.');
+    msg.textContent = `Training complete — ${d.fieldsTrained} fields updated`;
+    msg.className = 'text-sm text-emerald-600 font-medium px-2';
+    setTimeout(() => { msg.textContent = ''; msg.className = 'text-sm text-slate-500 px-2'; }, 6000);
+
+    // Reload status + viewer
+    await loadTrainingData();
+    switchTrainSection('viewer');
+  } catch (e) {
+    addLog(`✗ Error: ${e.message}`);
+    msg.textContent = 'Training failed: ' + e.message;
+    msg.className = 'text-sm text-red-500 px-2';
+  } finally {
+    btn.disabled = false; btn.textContent = '🧠 Train Ana';
+  }
+}
+
+async function runRefreshKnowledge() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  if (!confirm('Re-run training with all current sources, FAQs, rules, and manual notes?')) return;
+  await runTrainAna();
+}
+
+// ── Test Ana ──────────────────────────────────────────────────────────────────
+
+async function trainAskAna(preset) {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const input = document.getElementById('train-test-input');
+  const q = preset || input?.value?.trim();
+  if (!q) return;
+  if (input && !preset) input.value = '';
+
+  const chat = document.getElementById('train-test-chat');
+  if (chat.querySelector('.text-center')) chat.innerHTML = '';
+
+  chat.innerHTML += `<div class="flex justify-end mb-2">
+    <div class="bg-violet-100 text-violet-900 text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-sm">${escHtml(q)}</div>
+  </div>`;
+
+  const thinking = document.createElement('div');
+  thinking.className = 'flex justify-start items-start gap-2 mb-2';
+  thinking.innerHTML = '<div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div><div class="bg-white border border-slate-200 text-slate-500 text-xs rounded-2xl rounded-tl-sm px-3 py-2 italic shadow-sm">Ana is thinking…</div>';
+  chat.appendChild(thinking);
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/test`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ question: q }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    let badge = '';
+    if (d.unanswered) badge = '<span class="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full align-middle">Could not answer</span>';
+    thinking.outerHTML = `<div class="flex justify-start items-start gap-2 mb-2">
+      <div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div>
+      <div class="bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-3 py-2 max-w-sm shadow-sm">${escHtml(d.response||'')}${badge}</div>
+    </div>`;
+  } catch (e) {
+    thinking.outerHTML = `<div class="text-xs text-red-500 px-2 mb-2">Error: ${e.message}</div>`;
+  }
+  chat.scrollTop = chat.scrollHeight;
 }
 
 // ── Cost Dashboard ────────────────────────────────────────────────────────────
