@@ -245,9 +245,11 @@ function initDb() {
 
   _addColumnIfMissing('clinics',        'ai_voice_es',   'TEXT');
   _addColumnIfMissing('clinics',        'ai_voice_en',   'TEXT');
-  _addColumnIfMissing('knowledge_base', 'website_url',   'TEXT');
-  _addColumnIfMissing('knowledge_base', 'field_sources', 'TEXT');
-  _addColumnIfMissing('knowledge_base', 'manual_notes',  'TEXT');
+  _addColumnIfMissing('knowledge_base',  'website_url',   'TEXT');
+  _addColumnIfMissing('knowledge_base',  'field_sources', 'TEXT');
+  _addColumnIfMissing('knowledge_base',  'manual_notes',  'TEXT');
+  _addColumnIfMissing('training_faqs',   'sort_order',    'INTEGER DEFAULT 0');
+  _addColumnIfMissing('training_sources','sort_order',    'INTEGER DEFAULT 0');
 
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
