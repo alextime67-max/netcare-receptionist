@@ -10,6 +10,15 @@ const db = new Database(path.join(DATA_DIR, 'netcare.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// ── In-memory caches ──────────────────────────────────────────────────────────
+const CLINIC_TTL = 5 * 60 * 1000;
+const KB_TTL     = 5 * 60 * 1000;
+const clinicCache = new Map(); // slug → { data, expiry }
+const kbCache     = new Map(); // clinicId → { data, expiry }
+
+function invalidateClinicCache(slug) { clinicCache.delete(slug); }
+function invalidateKbCache(clinicId) { kbCache.delete(clinicId); }
+
 function initDb() {
   // ── Core tables (no indexes yet — migrations run first) ───────────────────
 
@@ -130,23 +139,45 @@ function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS training_documents (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      clinic_id  INTEGER NOT NULL,
-      type       TEXT NOT NULL,
-      title      TEXT NOT NULL,
-      source     TEXT,
-      content    TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CREATE TABLE IF NOT EXISTS training_sources (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      source_type TEXT    NOT NULL,
+      source_name TEXT,
+      raw_text    TEXT    NOT NULL,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS training_faqs (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      clinic_id  INTEGER NOT NULL,
-      question   TEXT NOT NULL,
-      answer     TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      question    TEXT    NOT NULL,
+      answer      TEXT    NOT NULL,
+      sort_order  INTEGER DEFAULT 0,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS business_rules (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      rule_text   TEXT    NOT NULL,
+      sort_order  INTEGER DEFAULT 0,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS practice_sessions (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id   INTEGER NOT NULL,
+      scenario    TEXT,
+      language    TEXT DEFAULT 'es',
+      transcript  TEXT,
+      quality     TEXT,
+      notes       TEXT,
+      status      TEXT DEFAULT 'active',
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
     );
   `);
@@ -203,9 +234,20 @@ function initDb() {
   _addColumnIfMissing('clinics', 'ivr_enabled', 'INTEGER DEFAULT 0');
   _addColumnIfMissing('clinics', 'ivr_config',  'TEXT');
 
-  // ── Migrations: AI Training Center ────────────────────────────────────────
+  // ── Migrations: appointment location + SMS tracking ──────────────────────
 
-  _addColumnIfMissing('clinics', 'ai_training_notes', 'TEXT');
+  _addColumnIfMissing('appointments', 'location',          'TEXT');
+  _addColumnIfMissing('appointments', 'sms_sent',          'INTEGER DEFAULT 0');
+  _addColumnIfMissing('appointments', 'reminder_24h_sent', 'INTEGER DEFAULT 0');
+  _addColumnIfMissing('appointments', 'reminder_1h_sent',  'INTEGER DEFAULT 0');
+
+  // ── Migrations: AI voice selection + website KB ──────────────────────────
+
+  _addColumnIfMissing('clinics',        'ai_voice_es',   'TEXT');
+  _addColumnIfMissing('clinics',        'ai_voice_en',   'TEXT');
+  _addColumnIfMissing('knowledge_base', 'website_url',   'TEXT');
+  _addColumnIfMissing('knowledge_base', 'field_sources', 'TEXT');
+  _addColumnIfMissing('knowledge_base', 'manual_notes',  'TEXT');
 
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
@@ -214,16 +256,46 @@ function initDb() {
       .run(_nextAccountNumber(), row.id);
   }
 
+  // ── Cost management tables ────────────────────────────────────────────────
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cost_config (
+      id                    INTEGER PRIMARY KEY CHECK(id = 1),
+      admin_phone           TEXT,
+      admin_email           TEXT,
+      twilio_rate_per_min   REAL    DEFAULT 0.0085,
+      ai_rate_per_call      REAL    DEFAULT 0.08,
+      ai_monthly_budget     REAL    DEFAULT 200.0,
+      threshold_ai_low      REAL    DEFAULT 5.0,
+      threshold_ai_critical REAL    DEFAULT 2.0,
+      threshold_twilio_low  REAL    DEFAULT 10.0,
+      alerts_enabled        INTEGER DEFAULT 1,
+      updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS cost_alerts (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      alert_type     TEXT    NOT NULL,
+      message        TEXT    NOT NULL,
+      value          REAL,
+      threshold      REAL,
+      notified_sms   INTEGER DEFAULT 0,
+      notified_email INTEGER DEFAULT 0,
+      created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // ── Indexes (safe now that columns exist) ─────────────────────────────────
 
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_calls_clinic       ON calls(clinic_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_calls_created_at   ON calls(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_calls_call_type    ON calls(call_type);
-    CREATE INDEX IF NOT EXISTS idx_transcripts_call   ON transcripts(call_id);
-    CREATE INDEX IF NOT EXISTS idx_appts_clinic       ON appointments(clinic_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_msgs_clinic        ON doctor_messages(clinic_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_webreq_clinic      ON web_requests(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_clinics_slug        ON clinics(slug);
+    CREATE INDEX IF NOT EXISTS idx_calls_clinic        ON calls(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_calls_created_at    ON calls(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_calls_call_type     ON calls(call_type);
+    CREATE INDEX IF NOT EXISTS idx_transcripts_call    ON transcripts(call_id);
+    CREATE INDEX IF NOT EXISTS idx_appts_clinic        ON appointments(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_msgs_clinic         ON doctor_messages(clinic_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_webreq_clinic       ON web_requests(clinic_id, created_at DESC);
   `);
 
   // ── Seed default clinic from env vars if none exist ───────────────────────
@@ -280,6 +352,29 @@ function initDb() {
       VALUES ('mdcare', 'MDcare', 1, ?, 'admin', 'MDcare2024!', 'active')
     `).run(mdcareIvr);
     console.log('[DB] Seeded MDcare clinic with IVR configuration.');
+  }
+
+  // ── Upgrade MDcare IVR to bilingual two-step flow ────────────────────────
+
+  const mdcareForUpgrade = db.prepare("SELECT id, ivr_config FROM clinics WHERE slug = 'mdcare'").get();
+  if (mdcareForUpgrade?.ivr_config) {
+    let ivrCfg;
+    try { ivrCfg = JSON.parse(mdcareForUpgrade.ivr_config); } catch { ivrCfg = null; }
+    if (ivrCfg && !ivrCfg.languageMenu) {
+      ivrCfg.languageMenu = {
+        greeting:    'Gracias por comunicarse con MDcare Medical Centers.',
+        options: [
+          { digit: '1', lang: 'es', label: 'Spanish' },
+          { digit: '2', lang: 'en', label: 'English' },
+        ],
+        repeatDigit: '9',
+        voice:       'Polly.Lupe-Neural',
+        langCode:    'es-US',
+      };
+      db.prepare("UPDATE clinics SET ivr_config = ? WHERE slug = 'mdcare'")
+        .run(JSON.stringify(ivrCfg));
+      console.log('[DB] Upgraded MDcare IVR config to bilingual two-step flow.');
+    }
   }
 
   // ── Seed MDcare Knowledge Base ────────────────────────────────────────────
@@ -575,7 +670,11 @@ function getClinics() {
 }
 
 function getClinicBySlug(slug) {
-  return db.prepare('SELECT * FROM clinics WHERE slug = ?').get(slug);
+  const hit = clinicCache.get(slug);
+  if (hit && Date.now() < hit.expiry) return hit.data;
+  const row = db.prepare('SELECT * FROM clinics WHERE slug = ?').get(slug);
+  if (row) clinicCache.set(slug, { data: row, expiry: Date.now() + CLINIC_TTL });
+  return row;
 }
 
 function getClinicById(id) {
@@ -624,6 +723,8 @@ function updateClinic(id, data) {
   const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`)
     .run(...Object.values(filtered), id);
+  const row = db.prepare('SELECT slug FROM clinics WHERE id = ?').get(id);
+  if (row) invalidateClinicCache(row.slug);
 }
 
 function deleteClinic(id) {
@@ -683,9 +784,11 @@ function getAllCalls(limit = 100, offset = 0, filter = {}) {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   params.push(limit, offset);
   return db.prepare(`
-    SELECT calls.*, clinics.name AS clinic_name, clinics.slug AS clinic_slug
+    SELECT calls.*, clinics.name AS clinic_name, clinics.slug AS clinic_slug,
+           appt.sms_sent AS appt_sms_sent, appt.location AS appt_location
     FROM calls
     INNER JOIN clinics ON calls.clinic_id = clinics.id
+    LEFT JOIN appointments appt ON appt.call_id = calls.id
     ${where}
     ORDER BY calls.created_at DESC LIMIT ? OFFSET ?
   `).all(...params);
@@ -758,10 +861,39 @@ function getGlobalStats() {
 
 function createAppointment(callId, data, clinicId) {
   return db.prepare(`
-    INSERT INTO appointments (clinic_id, call_id, patient_name, patient_phone, preferred_date, preferred_time, reason)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(clinicId, callId, data.name, data.phone, data.appointmentDate, data.appointmentTime, data.reason)
+    INSERT INTO appointments (clinic_id, call_id, patient_name, patient_phone, preferred_date, preferred_time, reason, location)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(clinicId, callId, data.name, data.phone, data.appointmentDate, data.appointmentTime, data.reason, data.location || null)
     .lastInsertRowid;
+}
+
+// status: 1 = sent, 2 = failed
+function updateAppointmentSmsStatus(apptId, status) {
+  db.prepare('UPDATE appointments SET sms_sent = ? WHERE id = ?').run(status, apptId);
+}
+
+function markReminderSent(apptId, reminderType) {
+  const col = reminderType === '24h' ? 'reminder_24h_sent' : 'reminder_1h_sent';
+  db.prepare(`UPDATE appointments SET ${col} = 1 WHERE id = ?`).run(apptId);
+}
+
+// Returns appointments with confirmed date+time whose reminder hasn't been sent yet.
+// windowStart / windowEnd are ISO datetime strings for the target reminder window.
+function getAppointmentsDueForReminder(reminderType, windowStart, windowEnd) {
+  const col = reminderType === '24h' ? 'reminder_24h_sent' : 'reminder_1h_sent';
+  return db.prepare(`
+    SELECT a.*, c.name AS clinic_name, c.slug AS clinic_slug,
+           c.twilio_sid, c.twilio_token, c.twilio_phone, c.sms_follow_up_enabled,
+           ca.language
+    FROM appointments a
+    INNER JOIN clinics c ON a.clinic_id = c.id
+    LEFT JOIN calls ca ON ca.id = a.call_id
+    WHERE a.preferred_date IS NOT NULL
+      AND a.preferred_time IS NOT NULL
+      AND a.${col} = 0
+      AND a.status IN ('pending', 'confirmed')
+      AND datetime(a.preferred_date || ' ' || a.preferred_time) BETWEEN datetime(?) AND datetime(?)
+  `).all(windowStart, windowEnd);
 }
 
 function getAppointments(limit = 50, clinicId) {
@@ -845,7 +977,8 @@ function getClinicAiConfig(id) {
            ai_business_description, ai_services, ai_faq,
            ai_appointment_instructions, ai_transfer_rules,
            ai_office_hours, ai_after_hours_message, ai_emergency_instructions,
-           ai_industry_template, ai_master_prompt
+           ai_industry_template, ai_master_prompt,
+           ai_voice_es, ai_voice_en
     FROM clinics WHERE id = ?
   `).get(id);
 }
@@ -856,7 +989,8 @@ function updateClinicAiConfig(id, data) {
     'ai_business_description', 'ai_services', 'ai_faq',
     'ai_appointment_instructions', 'ai_transfer_rules',
     'ai_office_hours', 'ai_after_hours_message', 'ai_emergency_instructions',
-    'ai_industry_template', 'ai_master_prompt', 'ai_training_notes',
+    'ai_industry_template', 'ai_master_prompt',
+    'ai_voice_es', 'ai_voice_en',
   ];
   const map = {
     ai_assistant_name:           data.assistantName,
@@ -872,7 +1006,8 @@ function updateClinicAiConfig(id, data) {
     ai_emergency_instructions:   data.emergencyInstructions,
     ai_industry_template:        data.industryTemplate,
     ai_master_prompt:            data.masterPrompt,
-    ai_training_notes:           data.trainingNotes,
+    ai_voice_es:                 data.voiceEs,
+    ai_voice_en:                 data.voiceEn,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])
@@ -880,6 +1015,8 @@ function updateClinicAiConfig(id, data) {
   if (!Object.keys(filtered).length) return;
   const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
+  const row = db.prepare('SELECT slug FROM clinics WHERE id = ?').get(id);
+  if (row) invalidateClinicCache(row.slug);
 }
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
@@ -957,6 +1094,8 @@ function updateClinicTwilio(id, data) {
   if (!Object.keys(filtered).length) return;
   const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
+  const row = db.prepare('SELECT slug FROM clinics WHERE id = ?').get(id);
+  if (row) invalidateClinicCache(row.slug);
 }
 
 function getClinicBilling(id) {
@@ -977,7 +1116,11 @@ const KB_FIELDS = [
 ];
 
 function getKnowledgeBase(clinicId) {
-  return db.prepare('SELECT * FROM knowledge_base WHERE clinic_id = ?').get(clinicId) || null;
+  const hit = kbCache.get(clinicId);
+  if (hit && Date.now() < hit.expiry) return hit.data;
+  const row = db.prepare('SELECT * FROM knowledge_base WHERE clinic_id = ?').get(clinicId) || null;
+  kbCache.set(clinicId, { data: row, expiry: Date.now() + KB_TTL });
+  return row;
 }
 
 function upsertKnowledgeBase(clinicId, data) {
@@ -991,6 +1134,143 @@ function upsertKnowledgeBase(clinicId, data) {
     db.prepare(`INSERT INTO knowledge_base (clinic_id, ${KB_FIELDS.join(', ')}) VALUES (?, ${KB_FIELDS.map(() => '?').join(', ')})`)
       .run(clinicId, ...vals);
   }
+  invalidateKbCache(clinicId);
+}
+
+function saveWebsiteUrl(clinicId, url) {
+  const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  if (existing) {
+    db.prepare('UPDATE knowledge_base SET website_url = ?, updated_at = CURRENT_TIMESTAMP WHERE clinic_id = ?')
+      .run(url || null, clinicId);
+  } else {
+    db.prepare('INSERT INTO knowledge_base (clinic_id, website_url) VALUES (?, ?)').run(clinicId, url || null);
+  }
+  invalidateKbCache(clinicId);
+}
+
+// ── Training Center ───────────────────────────────────────────────────────────
+
+function getTrainingSources(clinicId) {
+  return db.prepare('SELECT id, clinic_id, source_type, source_name, created_at, LENGTH(raw_text) AS char_count FROM training_sources WHERE clinic_id = ? ORDER BY created_at DESC').all(clinicId);
+}
+
+function getTrainingSourceText(clinicId) {
+  return db.prepare('SELECT id, source_type, source_name, raw_text FROM training_sources WHERE clinic_id = ? ORDER BY created_at ASC').all(clinicId);
+}
+
+function addTrainingSource(clinicId, sourceType, sourceName, rawText) {
+  const r = db.prepare(
+    'INSERT INTO training_sources (clinic_id, source_type, source_name, raw_text) VALUES (?, ?, ?, ?)'
+  ).run(clinicId, sourceType, sourceName || null, rawText);
+  return r.lastInsertRowid;
+}
+
+function deleteTrainingSource(id, clinicId) {
+  db.prepare('DELETE FROM training_sources WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
+function getTrainingFaqs(clinicId) {
+  return db.prepare('SELECT * FROM training_faqs WHERE clinic_id = ? ORDER BY sort_order, id').all(clinicId);
+}
+
+function addTrainingFaq(clinicId, question, answer) {
+  const r = db.prepare('INSERT INTO training_faqs (clinic_id, question, answer) VALUES (?, ?, ?)').run(clinicId, question.trim(), answer.trim());
+  return r.lastInsertRowid;
+}
+
+function updateTrainingFaq(id, clinicId, question, answer) {
+  db.prepare('UPDATE training_faqs SET question = ?, answer = ? WHERE id = ? AND clinic_id = ?').run(question.trim(), answer.trim(), id, clinicId);
+}
+
+function deleteTrainingFaq(id, clinicId) {
+  db.prepare('DELETE FROM training_faqs WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
+function getBusinessRules(clinicId) {
+  return db.prepare('SELECT * FROM business_rules WHERE clinic_id = ? ORDER BY sort_order, id').all(clinicId);
+}
+
+function addBusinessRule(clinicId, ruleText) {
+  const r = db.prepare('INSERT INTO business_rules (clinic_id, rule_text) VALUES (?, ?)').run(clinicId, ruleText.trim());
+  return r.lastInsertRowid;
+}
+
+function updateBusinessRule(id, clinicId, ruleText) {
+  db.prepare('UPDATE business_rules SET rule_text = ? WHERE id = ? AND clinic_id = ?').run(ruleText.trim(), id, clinicId);
+}
+
+function deleteBusinessRule(id, clinicId) {
+  db.prepare('DELETE FROM business_rules WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
+function saveManualNotes(clinicId, notes) {
+  const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  if (existing) {
+    db.prepare('UPDATE knowledge_base SET manual_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE clinic_id = ?').run(notes || null, clinicId);
+  } else {
+    db.prepare('INSERT INTO knowledge_base (clinic_id, manual_notes) VALUES (?, ?)').run(clinicId, notes || null);
+  }
+  invalidateKbCache(clinicId);
+}
+
+function getTrainingStatus(clinicId) {
+  const src  = db.prepare('SELECT COUNT(*) as cnt, MAX(created_at) as last_added FROM training_sources WHERE clinic_id = ?').get(clinicId);
+  const faqs = db.prepare('SELECT COUNT(*) as cnt FROM training_faqs WHERE clinic_id = ?').get(clinicId);
+  const rules= db.prepare('SELECT COUNT(*) as cnt FROM business_rules WHERE clinic_id = ?').get(clinicId);
+  const kb   = db.prepare('SELECT updated_at, manual_notes FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  return {
+    sourcesCount:   src.cnt,
+    lastSourceAdded: src.last_added,
+    faqsCount:      faqs.cnt,
+    rulesCount:     rules.cnt,
+    lastTrained:    kb?.updated_at || null,
+    manualNotes:    kb?.manual_notes || '',
+  };
+}
+
+// ── Practice Sessions ─────────────────────────────────────────────────────────
+
+function createPracticeSession(clinicId, scenario, language) {
+  const r = db.prepare(
+    'INSERT INTO practice_sessions (clinic_id, scenario, language) VALUES (?, ?, ?)'
+  ).run(clinicId, scenario || null, language || 'es');
+  return r.lastInsertRowid;
+}
+
+function getPracticeSession(id, clinicId) {
+  return db.prepare('SELECT * FROM practice_sessions WHERE id = ? AND clinic_id = ?').get(id, clinicId);
+}
+
+function updatePracticeTranscript(id, clinicId, transcript) {
+  db.prepare('UPDATE practice_sessions SET transcript = ? WHERE id = ? AND clinic_id = ?')
+    .run(JSON.stringify(transcript), id, clinicId);
+}
+
+function savePracticeResult(id, clinicId, quality, notes) {
+  db.prepare('UPDATE practice_sessions SET quality = ?, notes = ?, status = ? WHERE id = ? AND clinic_id = ?')
+    .run(JSON.stringify(quality), notes || null, 'saved', id, clinicId);
+}
+
+function listPracticeSessions(clinicId, limit) {
+  return db.prepare(
+    'SELECT id, scenario, language, status, notes, created_at FROM practice_sessions WHERE clinic_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(clinicId, limit || 20);
+}
+
+function deletePracticeSession(id, clinicId) {
+  db.prepare('DELETE FROM practice_sessions WHERE id = ? AND clinic_id = ?').run(id, clinicId);
+}
+
+function upsertKbSources(clinicId, sources) {
+  const json = typeof sources === 'string' ? sources : JSON.stringify(sources);
+  const existing = db.prepare('SELECT id FROM knowledge_base WHERE clinic_id = ?').get(clinicId);
+  if (existing) {
+    db.prepare('UPDATE knowledge_base SET field_sources = ?, updated_at = CURRENT_TIMESTAMP WHERE clinic_id = ?')
+      .run(json, clinicId);
+  } else {
+    db.prepare('INSERT INTO knowledge_base (clinic_id, field_sources) VALUES (?, ?)').run(clinicId, json);
+  }
+  invalidateKbCache(clinicId);
 }
 
 function logUnansweredQuestion(clinicId, callId, question) {
@@ -1012,41 +1292,72 @@ function getUnansweredQuestions(clinicId, limit = 50, offset = 0) {
   `).all(...params);
 }
 
-// ── Training Center ───────────────────────────────────────────────────────────
+// ── Cost Management ───────────────────────────────────────────────────────────
 
-function getTrainingDocs(clinicId) {
-  return db.prepare('SELECT * FROM training_documents WHERE clinic_id = ? ORDER BY created_at DESC').all(clinicId);
+const COST_CONFIG_DEFAULTS = {
+  admin_phone: null, admin_email: null,
+  twilio_rate_per_min: 0.0085, ai_rate_per_call: 0.08,
+  ai_monthly_budget: 200.0,
+  threshold_ai_low: 5.0, threshold_ai_critical: 2.0, threshold_twilio_low: 10.0,
+  alerts_enabled: 1,
+};
+
+function getCostConfig() {
+  return db.prepare('SELECT * FROM cost_config WHERE id = 1').get() || { id: null, ...COST_CONFIG_DEFAULTS };
 }
 
-function addTrainingDoc(clinicId, type, title, source, content) {
-  return db.prepare('INSERT INTO training_documents (clinic_id, type, title, source, content) VALUES (?, ?, ?, ?, ?)')
-    .run(clinicId, type, title || source || type, source || null, content).lastInsertRowid;
+function saveCostConfig(data) {
+  const d = { ...COST_CONFIG_DEFAULTS, ...data };
+  db.prepare(`
+    INSERT INTO cost_config
+      (id, admin_phone, admin_email, twilio_rate_per_min, ai_rate_per_call,
+       ai_monthly_budget, threshold_ai_low, threshold_ai_critical,
+       threshold_twilio_low, alerts_enabled, updated_at)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET
+      admin_phone           = excluded.admin_phone,
+      admin_email           = excluded.admin_email,
+      twilio_rate_per_min   = excluded.twilio_rate_per_min,
+      ai_rate_per_call      = excluded.ai_rate_per_call,
+      ai_monthly_budget     = excluded.ai_monthly_budget,
+      threshold_ai_low      = excluded.threshold_ai_low,
+      threshold_ai_critical = excluded.threshold_ai_critical,
+      threshold_twilio_low  = excluded.threshold_twilio_low,
+      alerts_enabled        = excluded.alerts_enabled,
+      updated_at            = CURRENT_TIMESTAMP
+  `).run(
+    d.admin_phone || null, d.admin_email || null,
+    +d.twilio_rate_per_min, +d.ai_rate_per_call,
+    +d.ai_monthly_budget,
+    +d.threshold_ai_low, +d.threshold_ai_critical, +d.threshold_twilio_low,
+    d.alerts_enabled ? 1 : 0,
+  );
 }
 
-function deleteTrainingDoc(id) {
-  db.prepare('DELETE FROM training_documents WHERE id = ?').run(id);
+function logCostAlert(alertType, message, value, threshold) {
+  return db.prepare(
+    'INSERT INTO cost_alerts (alert_type, message, value, threshold) VALUES (?, ?, ?, ?)'
+  ).run(alertType, message, value ?? null, threshold ?? null).lastInsertRowid;
 }
 
-function getTrainingFaqs(clinicId) {
-  return db.prepare('SELECT * FROM training_faqs WHERE clinic_id = ? ORDER BY created_at ASC').all(clinicId);
+function getLastAlertByType(alertType) {
+  return db.prepare(
+    'SELECT * FROM cost_alerts WHERE alert_type = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(alertType) || null;
 }
 
-function addTrainingFaq(clinicId, question, answer) {
-  return db.prepare('INSERT INTO training_faqs (clinic_id, question, answer) VALUES (?, ?, ?)')
-    .run(clinicId, question, answer).lastInsertRowid;
-}
-
-function updateTrainingFaq(id, question, answer) {
-  db.prepare('UPDATE training_faqs SET question = ?, answer = ? WHERE id = ?').run(question, answer, id);
-}
-
-function deleteTrainingFaq(id) {
-  db.prepare('DELETE FROM training_faqs WHERE id = ?').run(id);
+function getCostAlerts(limit = 50) {
+  return db.prepare(
+    'SELECT * FROM cost_alerts ORDER BY created_at DESC LIMIT ?'
+  ).all(limit);
 }
 
 module.exports = {
   db,
   initDb,
+  // cache invalidation
+  invalidateClinicCache,
+  invalidateKbCache,
   // clinics
   createClinic,
   getClinics,
@@ -1070,6 +1381,9 @@ module.exports = {
   getStats,
   // appointments
   createAppointment,
+  updateAppointmentSmsStatus,
+  markReminderSent,
+  getAppointmentsDueForReminder,
   getAppointments,
   updateAppointmentStatus,
   // messages
@@ -1088,14 +1402,36 @@ module.exports = {
   // knowledge base
   getKnowledgeBase,
   upsertKnowledgeBase,
+  upsertKbSources,
+  saveWebsiteUrl,
   logUnansweredQuestion,
   getUnansweredQuestions,
+  // cost management
+  getCostConfig,
+  saveCostConfig,
+  logCostAlert,
+  getLastAlertByType,
+  getCostAlerts,
   // training center
-  getTrainingDocs,
-  addTrainingDoc,
-  deleteTrainingDoc,
+  getTrainingSources,
+  getTrainingSourceText,
+  addTrainingSource,
+  deleteTrainingSource,
   getTrainingFaqs,
   addTrainingFaq,
   updateTrainingFaq,
   deleteTrainingFaq,
+  getBusinessRules,
+  addBusinessRule,
+  updateBusinessRule,
+  deleteBusinessRule,
+  saveManualNotes,
+  getTrainingStatus,
+  // practice sessions
+  createPracticeSession,
+  getPracticeSession,
+  updatePracticeTranscript,
+  savePracticeResult,
+  listPracticeSessions,
+  deletePracticeSession,
 };

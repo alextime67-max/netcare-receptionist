@@ -138,12 +138,31 @@
       </svg>
       Knowledge Base
     </button>
-    <button onclick="switchView('training')" id="nav-training"
+    <button onclick="switchView('train')" id="nav-train"
       class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
       <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.346A3.51 3.51 0 0114 18.5H10a3.51 3.51 0 01-2.47-1.025l-.347-.346z"/>
       </svg>
-      AI Training Center
+      Train Ana
+    </button>
+
+    <div class="mt-2 pt-2 border-t border-slate-700/40">
+      <p class="px-3 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Cost Management</p>
+    </div>
+    <button onclick="switchView('costs')" id="nav-costs"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      Cost Dashboard
+      <span id="nav-costs-alerts" class="ml-auto hidden w-2 h-2 rounded-full bg-red-400"></span>
+    </button>
+    <button onclick="switchView('cost-config')" id="nav-cost-config"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      Alert Settings
     </button>
   </nav>
 
@@ -192,6 +211,9 @@
       </button>
     </div>
   </header>
+
+  <!-- Alert banner -->
+  <div id="alert-banner" class="hidden flex-shrink-0"></div>
 
   <!-- Scrollable body -->
   <div id="main-body" class="flex-1 overflow-y-auto">
@@ -325,11 +347,12 @@
                 <th class="px-4 py-3 text-left">Type</th>
                 <th class="px-4 py-3 text-left">Dur.</th>
                 <th class="px-4 py-3 text-left">Status</th>
+                <th class="px-4 py-3 text-left">SMS</th>
                 <th class="px-4 py-3 text-left"></th>
               </tr>
             </thead>
             <tbody id="call-log-tbody">
-              <tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">Loading call log…</td></tr>
+              <tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">Loading call log…</td></tr>
             </tbody>
           </table>
         </div>
@@ -403,71 +426,183 @@
         <span id="kb-save-status" class="text-xs text-slate-400"></span>
       </div>
 
+      <!-- Business Knowledge Engine -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-800">Business Knowledge Engine</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Import knowledge from multiple sources. Priority order: <span class="font-medium text-emerald-700">Manual Notes</span> &gt; <span class="font-medium text-purple-700">File (PDF/DOCX/TXT)</span> &gt; <span class="font-medium text-blue-700">Website</span>. Higher-priority sources are never overwritten.</p>
+        </div>
+
+        <!-- Source tabs -->
+        <div class="flex gap-1 border border-slate-200 rounded-lg p-1 bg-slate-50 w-fit">
+          <button id="kb-tab-website" onclick="switchKbTab('website')"
+            class="px-3 py-1.5 text-xs font-medium rounded-md bg-white shadow-sm text-slate-700 transition-all">
+            Website
+          </button>
+          <button id="kb-tab-file" onclick="switchKbTab('file')"
+            class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:text-slate-700 transition-all">
+            Upload File
+          </button>
+        </div>
+
+        <!-- Website source panel -->
+        <div id="kb-source-website">
+          <div class="flex gap-2 flex-wrap">
+            <input id="kb-website-url" type="url" placeholder="https://yourwebsite.com"
+              class="flex-1 min-w-48 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button onclick="importFromWebsite()" id="kb-import-btn"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap">
+              Import from Website
+            </button>
+            <button onclick="saveWebsiteUrlAction()" id="kb-save-url-btn"
+              class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200 whitespace-nowrap">
+              Save URL
+            </button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">Lowest priority. Won't overwrite fields already set by uploaded files or manual edits.</p>
+        </div>
+
+        <!-- File upload source panel -->
+        <div id="kb-source-file" class="hidden">
+          <div class="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center space-y-3 hover:border-indigo-300 transition-colors">
+            <p class="text-sm font-medium text-slate-700">Upload a PDF, DOCX, or TXT file</p>
+            <p class="text-xs text-slate-400">Max 10 MB. Ana's AI will extract and structure business knowledge from the file content.</p>
+            <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt" class="hidden" onchange="importFromFile(this)">
+            <button onclick="document.getElementById('kb-file-input').click()"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+              Choose File
+            </button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5">Medium priority. Won't overwrite fields already set by manual edits.</p>
+        </div>
+
+        <div id="kb-import-status" class="hidden text-xs px-3 py-2 rounded-lg"></div>
+
+        <!-- Preview panel (shared between website and file) -->
+        <div id="kb-import-preview" class="hidden border border-indigo-200 rounded-xl bg-indigo-50 p-4 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <p class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Extracted Information — Review &amp; Edit Before Applying</p>
+            <span id="kb-import-source-badge" class="text-xs px-2 py-0.5 rounded-full bg-indigo-200 text-indigo-800 font-medium"></span>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3" id="kb-import-fields"></div>
+          <div class="flex gap-2 pt-1 flex-wrap items-center">
+            <button onclick="applyImportedKb()"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+              Apply to Knowledge Base
+            </button>
+            <button onclick="cancelImport()"
+              class="px-4 py-2 bg-white text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors border border-slate-200">
+              Cancel
+            </button>
+          </div>
+          <p class="text-xs text-slate-400">Applies to fields only where this source has equal or higher priority. Click "Save Knowledge Base" to persist.</p>
+        </div>
+      </div>
+
       <!-- KB Fields Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4" id="kb-fields-grid">
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Services Offered</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Services Offered</label>
+            <span id="src-kb-services" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-services" rows="4" placeholder="List the services your clinic provides..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Doctors &amp; Staff</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Doctors &amp; Staff</label>
+            <span id="src-kb-doctors" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-doctors" rows="4" placeholder="List doctors, their specialties, languages..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Locations &amp; Addresses</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Locations &amp; Addresses</label>
+            <span id="src-kb-locations" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-locations" rows="4" placeholder="Address, phone, parking info per location..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Office Hours</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Office Hours</label>
+            <span id="src-kb-office-hours" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-office-hours" rows="4" placeholder="Mon–Fri 8am–5pm, Sat 9am–1pm..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Insurance Accepted</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Insurance Accepted</label>
+            <span id="src-kb-insurance" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-insurance" rows="4" placeholder="List accepted insurance plans..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Appointment Policy</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Appointment Policy</label>
+            <span id="src-kb-appointment-policy" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-appointment-policy" rows="4" placeholder="How to book, wait times, same-day availability..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Cancellation Policy</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Cancellation Policy</label>
+            <span id="src-kb-cancellation-policy" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-cancellation-policy" rows="4" placeholder="24-hour notice required, no-show fee..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">New Patient Requirements</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">New Patient Requirements</label>
+            <span id="src-kb-new-patient-requirements" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-new-patient-requirements" rows="4" placeholder="What new patients need to bring or do..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Documents Needed</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Documents Needed</label>
+            <span id="src-kb-documents-needed" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-documents-needed" rows="4" placeholder="ID, insurance card, referral, medical records..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">FAQs</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">FAQs</label>
+            <span id="src-kb-faqs" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-faqs" rows="4" placeholder="Common questions and approved answers..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Transfer Rules</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Transfer Rules</label>
+            <span id="src-kb-transfer-rules" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-transfer-rules" rows="4" placeholder="When to transfer: billing questions → ext 105..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <label class="text-sm font-semibold text-slate-700">Emergency Instructions</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Emergency Instructions</label>
+            <span id="src-kb-emergency-instructions" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-emergency-instructions" rows="4" placeholder="If patient reports emergency → call 911..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-2 lg:col-span-2">
-          <label class="text-sm font-semibold text-slate-700">Do NOT Answer <span class="text-xs font-normal text-slate-400">(topics the AI must deflect)</span></label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-sm font-semibold text-slate-700">Do NOT Answer <span class="text-xs font-normal text-slate-400">(topics the AI must deflect)</span></label>
+            <span id="src-kb-do-not-answer" class="text-xs px-2 py-0.5 rounded-full hidden shrink-0"></span>
+          </div>
           <textarea id="kb-do-not-answer" rows="3" placeholder="Specific diagnoses, medication dosages, legal questions..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
@@ -500,193 +635,529 @@
 
     </div><!-- /view-kb -->
 
-    <!-- ── TRAINING CENTER VIEW ────────────────────────────────────────── -->
-    <div id="view-training" class="hidden p-6 space-y-4">
+    <!-- ── AI TRAINING CENTER VIEW ──────────────────────────────────────────── -->
+    <div id="view-train" class="hidden p-6 space-y-6">
 
-      <!-- Clinic selector row -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap gap-3 items-center">
-        <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-        </svg>
-        <label class="text-sm font-semibold text-slate-700">Clinic:</label>
-        <select id="tc-clinic" onchange="loadTrainingCenter()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700">
+      <!-- Header -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-4 flex flex-wrap gap-4 items-center">
+        <div class="flex-1 min-w-0">
+          <h2 class="text-base font-bold text-slate-800">AI Training Center</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Teach Ana everything about a business. Super Admin only — business clients cannot access this.</p>
+        </div>
+        <select id="train-clinic" onchange="loadTrainingData()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 text-slate-700">
           <option value="">— select a clinic —</option>
         </select>
-        <span id="tc-stats" class="ml-auto text-xs text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-200"></span>
+        <span id="train-status-badge" class="hidden px-3 py-1 rounded-full text-xs font-medium"></span>
       </div>
 
-      <!-- Main panel with sub-tabs -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <!-- Action bar -->
+      <div class="flex gap-3 flex-wrap items-center">
+        <button onclick="runTrainAna()" id="train-run-btn"
+          class="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white text-sm font-semibold rounded-xl hover:bg-violet-700 transition-colors shadow-sm">
+          🧠 Train Ana
+        </button>
+        <button onclick="runRefreshKnowledge()"
+          class="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+          🔄 Refresh Knowledge
+        </button>
+        <button onclick="switchTrainSection('test')"
+          class="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+          🧪 Test Ana
+        </button>
+        <button onclick="switchTrainSection('practice')"
+          class="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-colors border border-slate-200">
+          🎤 Practice
+        </button>
+        <span id="train-action-msg" class="text-sm text-slate-500 px-2"></span>
+      </div>
 
-        <!-- Sub-tab bar -->
-        <div class="flex border-b border-slate-200 bg-slate-50/50 overflow-x-auto">
-          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-indigo-600 border-b-2 border-indigo-500 whitespace-nowrap" onclick="switchTcTab('sources',this)">📥 Import Sources</button>
-          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('faqs',this)">❓ FAQ Manager</button>
-          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('train',this)">🧠 Train Ana</button>
-          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('test',this)">🔬 Test Ana</button>
-          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('practice',this)">💬 Practice Conversation</button>
-        </div>
+      <!-- Training log -->
+      <div id="train-log" class="hidden bg-slate-900 text-emerald-400 rounded-xl p-4 text-xs font-mono space-y-0.5 max-h-36 overflow-y-auto"></div>
 
-        <!-- ── SOURCES TAB ── -->
-        <div id="tc-tab-sources" class="p-6 space-y-6">
+      <!-- Section tabs -->
+      <div class="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit flex-wrap">
+        <button id="ttab-sources" onclick="switchTrainSection('sources')" class="train-stab px-4 py-2 text-xs font-medium rounded-lg bg-white shadow-sm text-slate-700">📥 Sources</button>
+        <button id="ttab-faqs"    onclick="switchTrainSection('faqs')"    class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">❓ FAQs</button>
+        <button id="ttab-rules"   onclick="switchTrainSection('rules')"   class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📋 Rules</button>
+        <button id="ttab-notes"   onclick="switchTrainSection('notes')"   class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📝 Manual Notes</button>
+        <button id="ttab-viewer"  onclick="switchTrainSection('viewer')"  class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">📚 Knowledge</button>
+        <button id="ttab-test"    onclick="switchTrainSection('test')"    class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🧪 Test Ana</button>
+        <button id="ttab-practice" onclick="switchTrainSection('practice')" class="train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700">🎤 Practice</button>
+      </div>
 
-          <!-- Import Website -->
-          <div class="border border-blue-100 bg-blue-50/30 rounded-xl p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <span class="text-lg">🌐</span>
-              <h3 class="text-sm font-semibold text-slate-800">Import Website</h3>
-            </div>
-            <p class="text-xs text-slate-500">Enter a URL — the page text will be imported as training data for Ana.</p>
-            <div class="flex gap-2">
-              <input type="url" id="tc-url-input" placeholder="https://yourclinic.com/about" class="form-input flex-1 text-sm">
-              <button onclick="importWebsite()" id="tc-url-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap transition-colors">Import</button>
-            </div>
-            <div id="tc-url-status" class="hidden text-xs rounded-lg p-2.5 border"></div>
+      <!-- ── SECTION: Sources ─────────────────────────────────── -->
+      <div id="tsec-sources" class="space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-5">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-800">Knowledge Sources</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Add website URLs and files. Ana will extract and learn from all of them during training.</p>
           </div>
 
-          <!-- Upload File -->
-          <div class="border border-green-100 bg-green-50/30 rounded-xl p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <span class="text-lg">📄</span>
-              <h3 class="text-sm font-semibold text-slate-800">Upload Document</h3>
-            </div>
-            <p class="text-xs text-slate-500">Upload a <strong>.txt</strong>, <strong>.pdf</strong>, or <strong>.docx</strong> file. Text is extracted in your browser and sent to Ana's training.</p>
-            <div class="flex gap-2 items-center flex-wrap">
-              <label for="tc-file-input" class="cursor-pointer px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg border border-slate-300 transition-colors">
-                Choose File
-              </label>
-              <input type="file" id="tc-file-input" accept=".txt,.pdf,.docx" class="hidden" onchange="handleFileSelect(event)">
-              <span id="tc-file-name" class="text-xs text-slate-400 italic">No file selected</span>
-              <button onclick="uploadFile()" id="tc-file-btn" disabled
-                class="ml-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                Add to Training
+          <!-- Uploaded sources list -->
+          <div id="train-src-list" class="space-y-2">
+            <p class="text-xs text-slate-400 italic">No sources yet.</p>
+          </div>
+
+          <!-- Add website -->
+          <div class="border-t border-slate-100 pt-4 space-y-3">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Import from Website</p>
+            <div class="flex gap-2 flex-wrap">
+              <input id="train-web-url" type="url" placeholder="https://businesswebsite.com"
+                class="flex-1 min-w-52 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400">
+              <button onclick="trainAddWebsite()" id="train-web-btn"
+                class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
+                🌐 Import Website
               </button>
             </div>
-            <div id="tc-file-preview" class="hidden text-xs font-mono text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-24 overflow-y-auto"></div>
-            <div id="tc-file-status" class="hidden text-xs rounded-lg p-2.5 border"></div>
           </div>
 
-          <!-- Manual Notes -->
-          <div class="border border-purple-100 bg-purple-50/30 rounded-xl p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <span class="text-lg">📝</span>
-              <h3 class="text-sm font-semibold text-slate-800">Manual Notes</h3>
-            </div>
-            <p class="text-xs text-slate-500">Paste or type any information you want Ana to know — special procedures, pricing, custom policies, anything.</p>
-            <input type="text" id="tc-notes-title" placeholder="Title (e.g. Special Pricing, Holiday Hours)" class="form-input text-sm w-full">
-            <textarea id="tc-notes-content" rows="4" placeholder="Enter training content here..." class="form-input text-sm w-full resize-y"></textarea>
-            <button onclick="saveManualNotes()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors">Add Notes</button>
-            <div id="tc-notes-status" class="hidden text-xs rounded-lg p-2.5 border"></div>
-          </div>
-
-          <!-- Training Documents List -->
-          <div class="border border-slate-200 rounded-xl overflow-hidden">
-            <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <h3 class="text-sm font-semibold text-slate-700">Training Documents <span id="tc-docs-count" class="text-xs font-normal text-slate-400"></span></h3>
-              <button onclick="loadTrainingCenter()" class="text-xs text-blue-600 hover:underline">Refresh</button>
-            </div>
-            <div id="tc-docs-list" class="divide-y divide-slate-100 min-h-[60px]">
-              <div class="p-4 text-xs text-slate-400 italic">Select a clinic above to view training documents.</div>
+          <!-- Upload files -->
+          <div class="border-t border-slate-100 pt-4 space-y-3">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Upload Documents</p>
+            <div class="flex gap-2 flex-wrap">
+              <input type="file" id="train-file-pdf"  accept=".pdf"  class="hidden" onchange="trainAddFile(this)">
+              <input type="file" id="train-file-docx" accept=".docx" class="hidden" onchange="trainAddFile(this)">
+              <input type="file" id="train-file-txt"  accept=".txt"  class="hidden" onchange="trainAddFile(this)">
+              <button onclick="document.getElementById('train-file-pdf').click()"
+                class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200">
+                📄 Upload PDF
+              </button>
+              <button onclick="document.getElementById('train-file-docx').click()"
+                class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200">
+                📄 Upload DOCX
+              </button>
+              <button onclick="document.getElementById('train-file-txt').click()"
+                class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors border border-slate-200">
+                📄 Upload TXT
+              </button>
             </div>
           </div>
+          <div id="train-src-status" class="hidden text-xs px-3 py-2 rounded-lg"></div>
+        </div>
+      </div>
 
-        </div><!-- /tc-tab-sources -->
-
-        <!-- ── FAQ MANAGER TAB ── -->
-        <div id="tc-tab-faqs" class="hidden p-6 space-y-4">
+      <!-- ── SECTION: FAQs ────────────────────────────────────── -->
+      <div id="tsec-faqs" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
           <div class="flex items-center justify-between">
             <div>
               <h3 class="text-sm font-semibold text-slate-800">FAQ Manager</h3>
-              <p class="text-xs text-slate-400 mt-0.5">Build Ana's question &amp; answer library. After adding FAQs, click <strong>Train Ana</strong> to apply them.</p>
+              <p class="text-xs text-slate-400 mt-0.5">Create Q&amp;A pairs. Ana will use these to answer callers accurately.</p>
             </div>
-            <button onclick="showAddFaqForm()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">+ Add FAQ</button>
-          </div>
-
-          <!-- Add FAQ form -->
-          <div id="tc-add-faq-form" class="hidden border border-blue-200 bg-blue-50/40 rounded-xl p-4 space-y-3">
-            <p class="text-xs font-semibold text-blue-700 uppercase tracking-wide">New Question &amp; Answer</p>
-            <input type="text" id="tc-faq-q" placeholder="Question — e.g. Do you accept Medicare?" class="form-input text-sm w-full">
-            <textarea id="tc-faq-a" rows="3" placeholder="Answer — e.g. Yes, we accept Medicare and most major insurance plans." class="form-input text-sm w-full resize-y"></textarea>
-            <div class="flex gap-2 items-center">
-              <button onclick="addFaqEntry()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">Save FAQ</button>
-              <button onclick="hideAddFaqForm()" class="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-              <div id="tc-faq-status" class="hidden text-xs rounded-lg p-2 border ml-2"></div>
-            </div>
-          </div>
-
-          <!-- FAQs list -->
-          <div id="tc-faqs-list" class="space-y-2">
-            <div class="text-xs text-slate-400 italic p-2">Select a clinic above to view FAQs.</div>
-          </div>
-        </div><!-- /tc-tab-faqs -->
-
-        <!-- ── TRAIN ANA TAB ── -->
-        <div id="tc-tab-train" class="hidden p-10 text-center space-y-6">
-          <div class="text-6xl">🧠</div>
-          <div>
-            <h3 class="text-2xl font-bold text-slate-800">Train Ana</h3>
-            <p class="text-sm text-slate-500 mt-2 max-w-lg mx-auto">Compiles all imported documents, notes, and FAQs into Ana's active knowledge base. Ana will use this information on every future call.</p>
-          </div>
-          <div id="tc-train-summary" class="inline-flex gap-6 bg-slate-50 rounded-2xl px-8 py-4 border border-slate-200 text-sm text-slate-600 flex-wrap justify-center"></div>
-          <div>
-            <button onclick="trainAna()" id="tc-train-btn"
-              class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow text-sm">
-              🚀 Train Ana Now
+            <button onclick="trainShowFaqForm()"
+              class="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors">
+              + Add FAQ
             </button>
           </div>
-          <div id="tc-train-result" class="hidden text-sm rounded-xl p-4 border max-w-md mx-auto text-left"></div>
-        </div><!-- /tc-tab-train -->
 
-        <!-- ── TEST ANA TAB ── -->
-        <div id="tc-tab-test" class="hidden p-6 space-y-4">
-          <div>
-            <h3 class="text-sm font-semibold text-slate-800">Test Ana</h3>
-            <p class="text-xs text-slate-400 mt-0.5">Ask Ana a question to verify she can answer using the current knowledge base. Run <strong>Train Ana</strong> first to apply the latest training.</p>
+          <!-- Add/Edit FAQ form -->
+          <div id="train-faq-form" class="hidden border border-violet-200 rounded-xl bg-violet-50 p-4 space-y-3">
+            <input type="hidden" id="train-faq-editing-id">
+            <p id="train-faq-form-title" class="text-xs font-semibold text-violet-700 uppercase tracking-wide">New FAQ</p>
+            <div>
+              <label class="text-xs font-medium text-slate-600">Question</label>
+              <input id="train-faq-q" type="text" placeholder="Do you accept Medicare?"
+                class="w-full mt-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400">
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-600">Answer</label>
+              <textarea id="train-faq-a" rows="3" placeholder="Yes, we accept Medicare Part A and B..."
+                class="w-full mt-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"></textarea>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="trainSaveFaq()"
+                class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors">Save FAQ</button>
+              <button onclick="trainHideFaqForm()"
+                class="px-4 py-2 bg-white text-slate-600 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">Cancel</button>
+            </div>
           </div>
+
+          <div id="train-faq-list" class="space-y-2">
+            <p class="text-xs text-slate-400 italic">No FAQs yet. Click "+ Add FAQ" to create one.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Business Rules ──────────────────────────── -->
+      <div id="tsec-rules" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Business Rules</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Rules Ana must always follow. Example: "Never provide lab results." "Always verify patient's full name."</p>
+            </div>
+            <button onclick="trainShowRuleForm()"
+              class="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors">
+              + Add Rule
+            </button>
+          </div>
+
+          <!-- Add/Edit Rule form -->
+          <div id="train-rule-form" class="hidden border border-violet-200 rounded-xl bg-violet-50 p-4 space-y-3">
+            <input type="hidden" id="train-rule-editing-id">
+            <p id="train-rule-form-title" class="text-xs font-semibold text-violet-700 uppercase tracking-wide">New Rule</p>
+            <div class="flex gap-2">
+              <input id="train-rule-text" type="text" placeholder="Never provide lab results to patients."
+                class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400">
+              <button onclick="trainSaveRule()"
+                class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors whitespace-nowrap">Save Rule</button>
+              <button onclick="trainHideRuleForm()"
+                class="px-4 py-2 bg-white text-slate-600 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">Cancel</button>
+            </div>
+          </div>
+
+          <div id="train-rule-list" class="space-y-2">
+            <p class="text-xs text-slate-400 italic">No rules yet. Click "+ Add Rule" to create one.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Manual Notes ────────────────────────────── -->
+      <div id="tsec-notes" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-800">Manual Notes <span class="text-emerald-600 text-xs font-normal ml-1">(Highest Priority)</span></h3>
+            <p class="text-xs text-slate-400 mt-0.5">Write operational notes for Ana. These always override information from websites and documents during training.</p>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700">
+            <strong>Examples:</strong> "The doctor is on vacation next week." &middot; "Do not schedule appointments after 4 PM." &middot; "Walk-ins only on Saturdays."
+          </div>
+          <textarea id="train-manual-notes" rows="8"
+            placeholder="Write notes here. These have the highest priority and will override information from websites and files..."
+            class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y"></textarea>
+          <div class="flex gap-2 items-center">
+            <button onclick="trainSaveManualNotes()"
+              class="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors">
+              Save Manual Notes
+            </button>
+            <span id="train-notes-status" class="text-xs text-slate-400"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Knowledge Viewer ────────────────────────── -->
+      <div id="tsec-viewer" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Knowledge Viewer</h3>
+              <p class="text-xs text-slate-400 mt-0.5">What Ana currently knows. Click "Train Ana" after adding sources to update.</p>
+            </div>
+            <button onclick="trainLoadViewer()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+          </div>
+          <div id="train-viewer-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <p class="text-xs text-slate-400 italic col-span-full">Select a clinic and click Refresh to view what Ana knows.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Test Ana ─────────────────────────────────── -->
+      <div id="tsec-test" class="hidden space-y-4">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-slate-800">Test Ana</h3>
+          <p class="text-xs text-slate-400">Ask Ana questions exactly as a patient would on a phone call. Ana answers using the current trained Knowledge Base.</p>
+
+          <!-- Quick questions -->
+          <div class="flex flex-wrap gap-2">
+            <button onclick="trainAskAna('What insurance do you accept?')"      class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What insurance do you accept?</button>
+            <button onclick="trainAskAna('What are your office hours?')"        class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What are your office hours?</button>
+            <button onclick="trainAskAna('Where are you located?')"             class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Where are you located?</button>
+            <button onclick="trainAskAna('How do I schedule an appointment?')"  class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">How do I schedule an appointment?</button>
+            <button onclick="trainAskAna('What documents should I bring?')"     class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">What documents should I bring?</button>
+            <button onclick="trainAskAna('Do you have any doctors available?')" class="text-xs px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-violet-50 hover:text-violet-700 transition-colors text-slate-700">Do you have any doctors available?</button>
+          </div>
+
+          <!-- Chat input -->
           <div class="flex gap-2">
-            <input type="text" id="tc-test-q" placeholder="e.g. Do you accept Medicare? What are your hours?" class="form-input flex-1 text-sm"
-              onkeydown="if(event.key==='Enter') testAnaQuestion()">
-            <button onclick="testAnaQuestion()" id="tc-test-btn"
-              class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap transition-colors">
+            <input id="train-test-input" type="text" placeholder="Ask Ana a question as a patient would..."
+              class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+              onkeydown="if(event.key==='Enter') trainAskAna()">
+            <button onclick="trainAskAna()"
+              class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors">
               Ask Ana
             </button>
           </div>
-          <div id="tc-test-chat" class="space-y-3 max-h-96 overflow-y-auto"></div>
-        </div><!-- /tc-tab-test -->
 
-        <!-- ── PRACTICE CONVERSATION TAB ── -->
-        <div id="tc-tab-practice" class="hidden p-6 space-y-4">
-          <div class="flex items-center justify-between">
+          <!-- Chat output -->
+          <div id="train-test-chat" class="space-y-3 max-h-96 overflow-y-auto rounded-xl bg-slate-50 p-4 min-h-24">
+            <p class="text-xs text-slate-400 italic text-center">Chat will appear here after you ask Ana a question.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Practice Conversation ──────────────────────── -->
+      <div id="tsec-practice" class="hidden space-y-4">
+
+        <!-- Config row -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div class="flex flex-wrap gap-4 items-end">
+            <div class="flex-1 min-w-48">
+              <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">Scenario</label>
+              <select id="practice-scenario" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 text-slate-700">
+                <option value="new_patient_appointment">1. New patient wants an appointment</option>
+                <option value="reschedule_existing">2. Existing patient wants to reschedule</option>
+                <option value="ask_insurance">3. Caller asks about insurance</option>
+                <option value="ask_office_hours">4. Caller asks for office hours</option>
+                <option value="ask_location">5. Caller asks for location</option>
+                <option value="cancel_appointment">6. Caller wants to cancel appointment</option>
+                <option value="elderly_spanish_slow">7. Elderly Spanish-speaking caller (speaks slowly)</option>
+                <option value="angry_caller">8. Angry caller</option>
+                <option value="unknown_question">9. Caller asks a question Ana does not know</option>
+                <option value="emergency_urgent">10. Emergency or urgent medical question</option>
+                <option value="ask_pricing">11. Caller asks for pricing</option>
+                <option value="wants_human">12. Caller wants to speak with a human</option>
+              </select>
+            </div>
             <div>
-              <h3 class="text-sm font-semibold text-slate-800">Practice Conversation</h3>
-              <p class="text-xs text-slate-400 mt-0.5">Simulate a full patient phone call with Ana end-to-end.</p>
+              <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">Language</label>
+              <select id="practice-language" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 text-slate-700">
+                <option value="es">Español (Spanish)</option>
+                <option value="en">English</option>
+              </select>
             </div>
-            <button onclick="resetPracticeConv()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors">New Conversation</button>
-          </div>
-          <div class="chat-area" id="practice-chat">
-            <div class="chat-empty" id="practice-empty">
-              <div><div class="text-2xl mb-2">📞</div><div>Click <strong>Start Call</strong> to begin a practice conversation with Ana</div></div>
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <button id="practice-start-btn" onclick="startPracticeConv()"
-              class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg whitespace-nowrap transition-colors">
-              Start Call
+            <button onclick="practiceStart()" id="practice-start-btn"
+              class="px-5 py-2 bg-violet-600 text-white text-sm font-semibold rounded-xl hover:bg-violet-700 transition-colors shadow-sm whitespace-nowrap">
+              ▶ Start Practice
             </button>
-            <input type="text" id="practice-input" placeholder="Type what the patient says…"
-              class="form-input flex-1" disabled
-              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendPracticeMsg();}">
-            <button onclick="sendPracticeMsg()" id="practice-send-btn"
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40" disabled>
-              Send
+            <button onclick="practiceReset()" id="practice-reset-btn" class="hidden px-5 py-2 bg-slate-100 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-200 transition-colors border border-slate-200 whitespace-nowrap">
+              🔄 Reset
             </button>
           </div>
-          <div id="practice-error" class="hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
-        </div><!-- /tc-tab-practice -->
+        </div>
 
-      </div><!-- /main panel -->
+        <!-- Active session -->
+        <div id="practice-session-area" class="hidden space-y-4">
 
-    </div><!-- /view-training -->
+          <!-- Scenario badge -->
+          <div class="flex items-center gap-3 px-4 py-2 bg-violet-50 border border-violet-200 rounded-xl text-sm text-violet-700 font-medium">
+            <span>🎭</span>
+            <span id="practice-scenario-label">Scenario: —</span>
+            <span class="ml-auto text-xs font-normal text-violet-500" id="practice-lang-badge"></span>
+          </div>
+
+          <!-- Conversation -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-slate-800">Conversation</h3>
+              <div class="flex items-center gap-2">
+                <span id="practice-status-indicator" class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Active</span>
+                <button onclick="practiceSpeakLast()" id="practice-speak-btn" title="Preview voice (browser TTS)"
+                  class="text-xs px-3 py-1 bg-slate-100 rounded-lg hover:bg-slate-200 text-slate-600 transition-colors">🔊 Speak</button>
+              </div>
+            </div>
+
+            <!-- Chat transcript -->
+            <div id="practice-chat" class="space-y-3 max-h-80 overflow-y-auto rounded-xl bg-slate-50 p-4 min-h-32">
+              <p class="text-xs text-slate-400 italic text-center">Practice conversation will appear here.</p>
+            </div>
+
+            <!-- Input area -->
+            <div class="flex gap-2 pt-1">
+              <input id="practice-input" type="text" placeholder="Type what the caller says…"
+                class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); practiceSend(); }">
+              <button onclick="practiceSend()" id="practice-send-btn"
+                class="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors whitespace-nowrap">
+                Send
+              </button>
+            </div>
+
+            <!-- Quick caller phrases -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-xs text-slate-400 self-center mr-1">Quick:</span>
+              <button onclick="practiceQuick('Hola, buenos días')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Hola, buenos días</button>
+              <button onclick="practiceQuick('Hello, good morning')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Hello, good morning</button>
+              <button onclick="practiceQuick('Necesito una cita')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">Necesito una cita</button>
+              <button onclick="practiceQuick('I need an appointment')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">I need an appointment</button>
+              <button onclick="practiceQuick('¿Aceptan Medicare?')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">¿Aceptan Medicare?</button>
+              <button onclick="practiceQuick('What are your hours?')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">What are your hours?</button>
+              <button onclick="practiceQuick('I want to speak to a real person')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-violet-700 rounded text-slate-600 transition-colors">I want a real person</button>
+              <button onclick="practiceQuick('This is an emergency')" class="text-xs px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-xs transition-colors">This is an emergency</button>
+            </div>
+          </div>
+
+          <!-- Quality Evaluation -->
+          <div id="practice-quality-panel" class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Quality Evaluation</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Rate this practice session after you're done.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="practice-quality-checks">
+              <!-- Rendered by JS -->
+            </div>
+
+            <div>
+              <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">Notes</label>
+              <textarea id="practice-notes" rows="3" placeholder="Write any observations, issues, or improvements needed…"
+                class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-y"></textarea>
+            </div>
+
+            <div class="flex gap-3 items-center">
+              <button onclick="practiceSaveResult()" id="practice-save-btn"
+                class="px-5 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
+                💾 Save Test Result
+              </button>
+              <span id="practice-save-status" class="text-xs text-slate-400"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Past sessions -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-slate-800">Saved Practice Sessions</h3>
+            <button onclick="practiceLoadHistory()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+          </div>
+          <div id="practice-history-list">
+            <p class="text-xs text-slate-400 italic">No saved sessions yet.</p>
+          </div>
+        </div>
+
+      </div><!-- /tsec-practice -->
+
+    </div><!-- /view-train -->
+
+    <!-- ── COST DASHBOARD VIEW ──────────────────────────────────────────── -->
+    <div id="view-costs" class="hidden p-6 space-y-6">
+
+      <!-- KPI cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="cost-kpi-grid">
+        <div class="col-span-2 lg:col-span-4 text-sm text-slate-400 text-center py-4">Loading…</div>
+      </div>
+
+      <!-- Active alerts -->
+      <div id="cost-alerts-panel" class="hidden bg-white rounded-xl border border-red-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-red-100 flex items-center justify-between">
+          <h2 class="font-semibold text-red-700 text-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Active Alerts
+          </h2>
+          <button onclick="checkAlerts()" class="text-xs text-red-600 hover:underline">Check Now</button>
+        </div>
+        <div id="cost-alerts-list" class="p-4 space-y-2"></div>
+      </div>
+
+      <!-- Per-clinic table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="font-semibold text-slate-800 text-sm">Per-Client Cost Breakdown — This Month</h2>
+          <button onclick="loadCostDashboard()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm min-w-[900px]">
+            <thead class="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase tracking-wide">
+              <tr>
+                <th class="px-4 py-3 text-left">Client</th>
+                <th class="px-4 py-3 text-left">Status</th>
+                <th class="px-4 py-3 text-right">Calls</th>
+                <th class="px-4 py-3 text-right">Minutes</th>
+                <th class="px-4 py-3 text-right">Twilio Cost</th>
+                <th class="px-4 py-3 text-right">AI Cost</th>
+                <th class="px-4 py-3 text-right">Total Cost</th>
+                <th class="px-4 py-3 text-right">Plan Price</th>
+                <th class="px-4 py-3 text-right">Est. Profit</th>
+              </tr>
+            </thead>
+            <tbody id="cost-clinic-tbody">
+              <tr><td colspan="9" class="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Alert history -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100">
+          <h2 class="font-semibold text-slate-800 text-sm">Alert History</h2>
+        </div>
+        <div id="cost-alert-history" class="p-4">
+          <p class="text-xs text-slate-400">Loading…</p>
+        </div>
+      </div>
+
+    </div><!-- /view-costs -->
+
+    <!-- ── COST CONFIG VIEW ───────────────────────────────────────────────── -->
+    <div id="view-cost-config" class="hidden p-6 max-w-2xl">
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100">
+
+        <!-- Admin contact -->
+        <div class="px-6 py-5 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm">Administrator Contact</h3>
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label class="form-label">Admin Phone <span class="normal-case font-normal text-slate-400">(receives SMS alerts — E.164 format, e.g. +13055550000)</span></label>
+              <input type="text" id="cfg-admin-phone" placeholder="+13055550000" class="form-input font-mono">
+            </div>
+            <div>
+              <label class="form-label">Admin Email <span class="normal-case font-normal text-slate-400">(receives email alerts)</span></label>
+              <input type="email" id="cfg-admin-email" placeholder="admin@yourcompany.com" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- Cost rates -->
+        <div class="px-6 py-5 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm">Cost Rate Estimates</h3>
+          <p class="text-xs text-slate-400">Used to estimate your monthly costs from call data. Adjust to match your actual Twilio and AI rates.</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="form-label">Twilio Rate ($ / minute)</label>
+              <input type="number" id="cfg-twilio-rate" step="0.0001" min="0" placeholder="0.0085" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">AI Rate ($ / completed call)</label>
+              <input type="number" id="cfg-ai-rate" step="0.01" min="0" placeholder="0.08" class="form-input">
+            </div>
+            <div class="col-span-2">
+              <label class="form-label">Monthly AI Budget ($)</label>
+              <input type="number" id="cfg-ai-budget" step="1" min="0" placeholder="200" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- Alert thresholds -->
+        <div class="px-6 py-5 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm">Alert Thresholds</h3>
+          <p class="text-xs text-slate-400">Notifications fire when remaining AI budget or Twilio balance falls below these values.</p>
+          <div class="grid grid-cols-1 gap-4">
+            <div class="flex items-center gap-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <div class="flex-1">
+                <label class="form-label text-amber-700">AI Budget Warning — alert when remaining budget drops below ($)</label>
+                <input type="number" id="cfg-ai-low" step="0.5" min="0" placeholder="5" class="form-input">
+              </div>
+            </div>
+            <div class="flex items-center gap-4 p-3 bg-red-50 border border-red-100 rounded-lg">
+              <div class="flex-1">
+                <label class="form-label text-red-700">AI Budget Critical — alert when remaining budget drops below ($)</label>
+                <input type="number" id="cfg-ai-critical" step="0.5" min="0" placeholder="2" class="form-input">
+              </div>
+            </div>
+            <div class="flex items-center gap-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <div class="flex-1">
+                <label class="form-label text-amber-700">Twilio Balance Warning — alert when Twilio account balance drops below ($)</label>
+                <input type="number" id="cfg-twilio-low" step="1" min="0" placeholder="10" class="form-input">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerts toggle + save -->
+        <div class="px-6 py-5 flex items-center justify-between gap-4">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="cfg-alerts-enabled" class="w-4 h-4 rounded text-blue-600">
+            <span class="text-sm font-medium text-slate-700">Enable SMS &amp; email alerts</span>
+          </label>
+          <div class="flex items-center gap-3">
+            <span id="cfg-save-msg" class="text-sm hidden"></span>
+            <button onclick="saveCostConfig()" class="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">Save Settings</button>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /view-cost-config -->
 
   </div><!-- /main-body -->
 </div><!-- /main -->
@@ -933,6 +1404,47 @@
           </div>
         </div>
 
+        <!-- IVR Location Menu -->
+        <div class="border-t border-slate-100 pt-4">
+          <div class="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">IVR Location Menu</p>
+              <p class="text-xs text-slate-400 mt-1">When enabled, callers hear a numbered menu to select a location before the AI starts. Add each location with its keypad digit below.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
+              <input type="checkbox" id="f-ivr-enabled" class="sr-only peer" onchange="toggleIvrSection()">
+              <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            </label>
+          </div>
+          <div id="ivr-settings" class="hidden space-y-3">
+            <div>
+              <label class="form-label">Display Name <span class="normal-case font-normal text-slate-400">— used in greeting and AI responses</span></label>
+              <input type="text" id="f-ivr-display-name" placeholder="e.g. MDcare Medical Centers" class="form-input">
+            </div>
+            <div class="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+              <div>
+                <p class="text-xs font-semibold text-slate-600">Bilingual Language Menu</p>
+                <p class="text-xs text-slate-400">Add a Spanish / English selection step before the location menu</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                <input type="checkbox" id="f-ivr-lang-menu" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+              </label>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs font-semibold text-slate-600">Location Options</p>
+                <button type="button" onclick="addIvrOption()"
+                  class="text-xs text-blue-600 hover:text-blue-800 font-semibold border border-blue-200 rounded px-2 py-0.5 transition-colors">
+                  + Add Location
+                </button>
+              </div>
+              <div id="ivr-options-list" class="space-y-2"></div>
+              <p class="text-xs text-slate-400 mt-1">Press 9 to repeat is added automatically.</p>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- ── TAB: Billing & Plan ── -->
@@ -1051,6 +1563,24 @@
           <div class="col-span-2">
             <label class="form-label">Spanish Greeting <span class="normal-case font-normal text-slate-400">— override when caller switches to Spanish</span></label>
             <textarea id="ai-greeting-es" rows="2" placeholder="¡Gracias por llamar a [Clínica]! ¿En qué le puedo ayudar hoy?" class="form-input resize-none"></textarea>
+          </div>
+          <div>
+            <label class="form-label">Voice (Spanish)</label>
+            <select id="f-ai-voice-es" class="form-input bg-white">
+              <option value="">— Default (Lupe Neural) —</option>
+              <option value="Polly.Lupe-Neural">Lupe-Neural (es-US Female)</option>
+              <option value="Polly.Mia-Neural">Mia-Neural (es-MX Female)</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Voice (English)</label>
+            <select id="f-ai-voice-en" class="form-input bg-white">
+              <option value="">— Default (Joanna) —</option>
+              <option value="Polly.Joanna">Joanna (en-US Female)</option>
+              <option value="Polly.Kendra-Neural">Kendra-Neural (en-US Female)</option>
+              <option value="Polly.Matthew-Neural">Matthew-Neural (en-US Male)</option>
+              <option value="Polly.Stephen-Neural">Stephen-Neural (en-US Male)</option>
+            </select>
           </div>
         </div>
       </div>
@@ -1278,14 +1808,16 @@ function typeBadge(t) {
 
 function switchView(view) {
   currentView = view;
-  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb', 'training'];
+  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb', 'train', 'costs', 'cost-config'];
   const titles = {
-    dashboard: ['Dashboard',           'NetCare Phone platform overview'],
-    clients:   ['Clients',             'Manage all clinic accounts'],
-    calls:     ['Call Log',            'All inbound calls across every clinic'],
-    analytics: ['Analytics',           'Call volume, intent breakdown, and language trends'],
-    kb:        ['Knowledge Base',      'AI knowledge base and test simulator'],
-    training:  ['AI Training Center',  'Import data, train Ana, and test her knowledge'],
+    dashboard:   ['Dashboard',      'NetCare Phone platform overview'],
+    clients:     ['Clients',        'Manage all clinic accounts'],
+    calls:       ['Call Log',       'All inbound calls across every clinic'],
+    analytics:   ['Analytics',      'Call volume, intent breakdown, and language trends'],
+    kb:          ['Knowledge Base', 'AI knowledge base and test simulator'],
+    train:       ['Train Ana', 'AI Training Center — teach Ana everything about a business'],
+    costs:       ['Cost Dashboard', 'Monthly costs, revenue, and profit per client'],
+    'cost-config': ['Alert Settings', 'Admin contact, cost rates, and alert thresholds'],
   };
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -1298,11 +1830,13 @@ function switchView(view) {
   });
   document.getElementById('view-title').textContent = (titles[view] || titles.dashboard)[0];
   document.getElementById('view-sub').textContent   = (titles[view] || titles.dashboard)[1];
-  if (view === 'calls')     loadCallLog();
-  if (view === 'analytics') loadAnalytics();
-  if (view === 'dashboard') loadHealth();
-  if (view === 'kb')        loadKb();
-  if (view === 'training')  { populateTrainingClinicFilter(); }
+  if (view === 'calls')       loadCallLog();
+  if (view === 'analytics')   loadAnalytics();
+  if (view === 'dashboard')   loadHealth();
+  if (view === 'kb')          loadKb();
+  if (view === 'train')       { loadTrainingData(); }
+  if (view === 'costs')       loadCostDashboard();
+  if (view === 'cost-config') loadCostConfig();
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -1351,7 +1885,7 @@ async function loadClients() {
     populateCallClinicFilter();
     populateAnalyticsClinicFilter();
     populateKbClinicFilter();
-    populateTrainingClinicFilter();
+    populateTrainClinicFilter();
   } catch(e) {
     document.getElementById('clients-tbody').innerHTML =
       `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400 text-sm">Error: ${e.message}</td></tr>`;
@@ -1492,6 +2026,8 @@ function openAddModal() {
   document.getElementById('clinic-form').reset();
   document.getElementById('f-admin-user').value = 'admin';
   document.getElementById('f-status').value = 'active';
+  renderIvrOptions([]);
+  toggleIvrSection();
   document.getElementById('f-business-type').value = 'Medical';
   document.getElementById('f-monthly-plan').value = 'Starter';
   document.getElementById('f-monthly-price').value = '99';
@@ -1529,6 +2065,14 @@ async function openEditModal(id) {
     document.getElementById('f-twilio-validate').value = c.twilio_validate ? '1' : '0';
     document.getElementById('f-transfer-phone').value  = c.transfer_phone || '';
     document.getElementById('f-sms-follow-up').checked = !!c.sms_follow_up_enabled;
+    // IVR
+    document.getElementById('f-ivr-enabled').checked = !!c.ivr_enabled;
+    let ivrCfg = null;
+    try { ivrCfg = c.ivr_config ? JSON.parse(c.ivr_config) : null; } catch {}
+    document.getElementById('f-ivr-display-name').value = ivrCfg?.clinicDisplayName || '';
+    document.getElementById('f-ivr-lang-menu').checked  = !!(ivrCfg?.languageMenu);
+    renderIvrOptions(ivrCfg?.options || []);
+    toggleIvrSection();
     document.getElementById('f-clinic-email').value  = c.clinic_email || '';
     document.getElementById('f-email-from').value    = c.email_from || '';
     document.getElementById('f-gmail-user').value    = c.gmail_user || '';
@@ -1611,6 +2155,8 @@ async function saveClinic(e) {
     twilioValidate:      document.getElementById('f-twilio-validate').value === '1',
     transferPhone:       document.getElementById('f-transfer-phone').value.trim(),
     smsFollowUpEnabled:  document.getElementById('f-sms-follow-up').checked,
+    ivrEnabled:     document.getElementById('f-ivr-enabled').checked,
+    ivrConfig:      buildIvrConfig(),
     clinicEmail:    document.getElementById('f-clinic-email').value.trim(),
     emailFrom:      document.getElementById('f-email-from').value.trim(),
     gmailUser:      document.getElementById('f-gmail-user').value.trim(),
@@ -1806,6 +2352,8 @@ async function loadAiConfig(clinicId) {
     document.getElementById('ai-emergency').value      = c.ai_emergency_instructions   || '';
     document.getElementById('ai-industry-template').value = c.ai_industry_template     || '';
     document.getElementById('ai-master-prompt').value  = c.ai_master_prompt            || '';
+    document.getElementById('f-ai-voice-es').value     = c.ai_voice_es                 || '';
+    document.getElementById('f-ai-voice-en').value     = c.ai_voice_en                 || '';
     onTemplateChange();
     // Rebuild FAQ list
     const list = document.getElementById('faq-list');
@@ -1849,6 +2397,8 @@ async function saveAiConfig() {
     faq:                     JSON.stringify(faqs),
     industryTemplate:        document.getElementById('ai-industry-template').value,
     masterPrompt:            document.getElementById('ai-master-prompt').value.trim(),
+    voiceEs:                 document.getElementById('f-ai-voice-es').value || null,
+    voiceEn:                 document.getElementById('f-ai-voice-en').value || null,
   };
 
   try {
@@ -2059,7 +2609,7 @@ async function fetchCallLog() {
   const tbody      = document.getElementById('call-log-tbody');
   const countEl   = document.getElementById('call-log-count');
   const pagination = document.getElementById('call-log-pagination');
-  tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">Loading…</td></tr>';
 
   const params = new URLSearchParams({ limit: CALL_LOG_LIMIT, offset: callLogOffset });
   const clinic = document.getElementById('call-filter-clinic').value;
@@ -2077,7 +2627,7 @@ async function fetchCallLog() {
     countEl.textContent = callLogTotal.toLocaleString() + ' calls total';
 
     if (!data.calls.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 text-sm">No calls found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">No calls found</td></tr>';
       pagination.classList.add('hidden');
       return;
     }
@@ -2094,6 +2644,11 @@ async function fetchCallLog() {
       const ts   = new Date(call.created_at).toLocaleString();
       const dur  = call.duration ? (call.duration + 's') : '—';
       const type = { appointment:'Appt', message:'Msg', unknown:'—', transfer:'Transfer' }[call.call_type] || call.call_type || '—';
+      const smsBadge = call.call_type !== 'appointment'
+        ? '<span class="text-slate-300 text-xs">—</span>'
+        : call.appt_sms_sent === 1 ? '<span class="badge bg-emerald-50 text-emerald-700">Sent</span>'
+        : call.appt_sms_sent === 2 ? '<span class="badge bg-red-50 text-red-700">Failed</span>'
+        : '<span class="text-slate-300 text-xs">—</span>';
       return '<tr class="border-t border-slate-100 hover:bg-slate-50 text-sm">' +
         '<td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">' + ts + '</td>' +
         '<td class="px-4 py-3 font-medium">' + (call.clinic_name || '—') + '</td>' +
@@ -2102,6 +2657,7 @@ async function fetchCallLog() {
         '<td class="px-4 py-3 text-xs">' + type + '</td>' +
         '<td class="px-4 py-3 text-xs">' + dur + '</td>' +
         '<td class="px-4 py-3">' + statusBadge(call.status) + '</td>' +
+        '<td class="px-4 py-3">' + smsBadge + '</td>' +
         '<td class="px-4 py-3"><button onclick="viewCallDetail(' + call.id + ')" class="text-xs text-blue-600 hover:underline">Transcript</button></td>' +
         '</tr>';
     }).join('');
@@ -2113,7 +2669,7 @@ async function fetchCallLog() {
     document.getElementById('call-log-next').disabled = callLogOffset + CALL_LOG_LIMIT >= callLogTotal;
     pagination.classList.toggle('hidden', totalPages <= 1);
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-400 text-sm">' + e.message + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-red-400 text-sm">' + e.message + '</td></tr>';
   }
 }
 
@@ -2148,6 +2704,15 @@ async function viewCallDetail(callId) {
         '<div class="space-y-2 max-h-72 overflow-y-auto">' + rows + '</div></div>';
     }
 
+    const recordingHtml = data.recording_url
+      ? '<div class="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200">' +
+          '<p class="text-xs font-semibold text-amber-700 uppercase mb-2">Voicemail Recording</p>' +
+          '<audio controls class="w-full h-10" src="/superadmin/api/calls/' + callId + '/recording">' +
+            'Your browser does not support the audio element.' +
+          '</audio>' +
+        '</div>'
+      : '';
+
     body.innerHTML =
       '<div class="grid grid-cols-2 gap-3 text-sm">' +
         '<div><span class="text-xs text-slate-400">Clinic</span><div class="font-medium">' + (data.clinic_name || data.clinic_id) + '</div></div>' +
@@ -2158,7 +2723,7 @@ async function viewCallDetail(callId) {
         '<div><span class="text-xs text-slate-400">Duration</span><div>' + (data.duration ? data.duration + 's' : '—') + '</div></div>' +
         '<div><span class="text-xs text-slate-400">Language</span><div>' + (data.language === 'es' ? 'Spanish' : 'English') + '</div></div>' +
         '<div><span class="text-xs text-slate-400">Status</span><div>' + (data.status || '—') + '</div></div>' +
-      '</div>' + transcriptHtml;
+      '</div>' + recordingHtml + transcriptHtml;
 
     modal.classList.remove('hidden');
   } catch(e) { alert('Could not load call: ' + e.message); }
@@ -2170,6 +2735,73 @@ function closeCallDetail() {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── IVR UI helpers ────────────────────────────────────────────────────────────
+
+function toggleIvrSection() {
+  const enabled = document.getElementById('f-ivr-enabled').checked;
+  document.getElementById('ivr-settings').classList.toggle('hidden', !enabled);
+}
+
+function renderIvrOptions(options) {
+  const list = document.getElementById('ivr-options-list');
+  list.innerHTML = '';
+  (options || []).forEach(opt => addIvrOptionRow(opt.digit || '', opt.label || ''));
+}
+
+function addIvrOption() {
+  const list  = document.getElementById('ivr-options-list');
+  const next  = list.children.length + 1;
+  addIvrOptionRow(String(next <= 8 ? next : ''), '');
+}
+
+function addIvrOptionRow(digit, label) {
+  const list = document.getElementById('ivr-options-list');
+  const row  = document.createElement('div');
+  row.className = 'flex gap-2 items-center ivr-option-row';
+  row.innerHTML =
+    '<span class="text-xs text-slate-400 w-12 flex-shrink-0 text-center">#</span>' +
+    '<input type="text" value="' + escHtml(digit) + '" maxlength="1" placeholder="1"' +
+    '  class="form-input w-14 font-mono text-center text-sm ivr-digit flex-shrink-0" style="min-width:3rem">' +
+    '<input type="text" value="' + escHtml(label) + '" placeholder="Location name"' +
+    '  class="form-input flex-1 text-sm ivr-label">' +
+    '<button type="button" onclick="this.closest(\'.ivr-option-row\').remove()"' +
+    '  class="text-slate-300 hover:text-red-500 text-xl leading-none flex-shrink-0 px-1">&times;</button>';
+  list.appendChild(row);
+}
+
+function buildIvrConfig() {
+  const enabled = document.getElementById('f-ivr-enabled').checked;
+  if (!enabled) return null;
+
+  const displayName = document.getElementById('f-ivr-display-name').value.trim();
+  const langMenu    = document.getElementById('f-ivr-lang-menu').checked;
+  const rows        = document.querySelectorAll('#ivr-options-list .ivr-option-row');
+  const options     = Array.from(rows)
+    .map(r => ({ digit: r.querySelector('.ivr-digit').value.trim(), label: r.querySelector('.ivr-label').value.trim() }))
+    .filter(o => o.digit && o.label);
+
+  const cfg = {
+    clinicDisplayName: displayName,
+    greeting:          `Thank you for calling ${displayName || 'us'}.`,
+    options,
+    repeatDigit:       '9',
+    voice:             'Polly.Joanna',
+    language:          'en-US',
+  };
+
+  if (langMenu) {
+    cfg.languageMenu = {
+      greeting:    `Gracias por comunicarse con ${displayName || 'nosotros'}.`,
+      options:     [{ digit: '1', lang: 'es', label: 'Spanish' }, { digit: '2', lang: 'en', label: 'English' }],
+      repeatDigit: '9',
+      voice:       'Polly.Lupe-Neural',
+      langCode:    'es-US',
+    };
+  }
+
+  return JSON.stringify(cfg);
 }
 
 // ── Populate clinic filter dropdown ──────────────────────────────────────────
@@ -2653,11 +3285,28 @@ async function loadKb() {
   if (!clinicId) return;
   try {
     const kb = await (await fetch(`/superadmin/api/kb/${clinicId}`)).json();
+    let sources = {};
+    try { sources = kb.field_sources ? (typeof kb.field_sources === 'string' ? JSON.parse(kb.field_sources) : kb.field_sources) : {}; } catch { sources = {}; }
     KB_FIELDS.forEach(f => {
-      const el = document.getElementById(`kb-${f.replace(/_/g,'-')}`);
-      if (el) el.value = kb[f] || '';
+      const elId = `kb-${f.replace(/_/g,'-')}`;
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.value = kb[f] || '';
+      const src = sources[f];
+      if (src?.type) {
+        el.dataset.sourceType = src.type;
+        el.dataset.sourceName = src.name || '';
+        updateSourceBadge(elId, src.type, src.name || '');
+      } else {
+        delete el.dataset.sourceType;
+        delete el.dataset.sourceName;
+        updateSourceBadge(elId, '', '');
+      }
     });
+    if (kb.website_url) document.getElementById('kb-website-url').value = kb.website_url;
     document.getElementById('kb-save-status').textContent = '';
+    document.getElementById('kb-import-preview').classList.add('hidden');
+    document.getElementById('kb-import-status').classList.add('hidden');
     await loadUnanswered();
   } catch (e) {
     alert('Error loading knowledge base: ' + e.message);
@@ -2667,10 +3316,14 @@ async function loadKb() {
 async function saveKb() {
   const clinicId = document.getElementById('kb-clinic')?.value;
   if (!clinicId) return alert('Please select a clinic first.');
-  const body = {};
+  const body = { fieldSources: {} };
   KB_FIELDS.forEach(f => {
     const el = document.getElementById(`kb-${f.replace(/_/g,'-')}`);
-    if (el) body[f] = el.value.trim();
+    if (!el) return;
+    body[f] = el.value.trim();
+    if (el.dataset.sourceType) {
+      body.fieldSources[f] = { type: el.dataset.sourceType, name: el.dataset.sourceName || '' };
+    }
   });
   try {
     const r = await fetch(`/superadmin/api/kb/${clinicId}`, {
@@ -2745,518 +3398,1164 @@ async function loadUnanswered() {
   }
 }
 
-// ── Training Center ───────────────────────────────────────────────────────────
+// ── Business Knowledge Engine ─────────────────────────────────────────────────
 
-let tcFileContent  = null;
-let tcFileName     = null;
-let tcPracticeMessages = [];
-let tcPracticeRunning  = false;
+const KB_IMPORT_FIELDS = [
+  { key: 'services',                 label: 'Services Offered',          kbId: 'kb-services' },
+  { key: 'doctors',                  label: 'Doctors & Providers',        kbId: 'kb-doctors' },
+  { key: 'locations',                label: 'Locations & Contact Info',   kbId: 'kb-locations' },
+  { key: 'office_hours',             label: 'Office Hours',               kbId: 'kb-office-hours' },
+  { key: 'insurance',                label: 'Insurance Accepted',         kbId: 'kb-insurance' },
+  { key: 'appointment_policy',       label: 'Appointment Policy',         kbId: 'kb-appointment-policy' },
+  { key: 'cancellation_policy',      label: 'Cancellation Policy',        kbId: 'kb-cancellation-policy' },
+  { key: 'new_patient_requirements', label: 'New Patient Requirements',   kbId: 'kb-new-patient-requirements' },
+  { key: 'documents_needed',         label: 'Documents Needed',           kbId: 'kb-documents-needed' },
+  { key: 'faqs',                     label: 'FAQs',                       kbId: 'kb-faqs' },
+  { key: 'transfer_rules',           label: 'Transfer Rules',             kbId: 'kb-transfer-rules' },
+  { key: 'emergency_instructions',   label: 'Emergency Instructions',     kbId: 'kb-emergency-instructions' },
+];
 
-function populateTrainingClinicFilter() {
-  const sel = document.getElementById('tc-clinic');
-  if (!sel || !allClients) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— select a clinic —</option>' +
-    allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('');
+const SOURCE_PRIORITY = { manual: 3, pdf: 2, docx: 2, txt: 2, website: 1 };
+function getSourcePriority(type) { return SOURCE_PRIORITY[type] || 0; }
+
+function updateSourceBadge(kbId, type, name) {
+  const el = document.getElementById(`src-${kbId}`);
+  if (!el) return;
+  if (!type) { el.className = 'text-xs px-2 py-0.5 rounded-full hidden shrink-0'; return; }
+  const colors = { manual: 'bg-emerald-100 text-emerald-700', pdf: 'bg-purple-100 text-purple-700', docx: 'bg-purple-100 text-purple-700', txt: 'bg-purple-100 text-purple-700', website: 'bg-blue-100 text-blue-700' };
+  const labels = { manual: 'Manual', pdf: `PDF`, docx: `DOCX`, txt: `TXT`, website: 'Website' };
+  el.className = `text-xs px-2 py-0.5 rounded-full shrink-0 ${colors[type] || 'bg-slate-100 text-slate-600'}`;
+  el.textContent = labels[type] || type;
+  el.title = name ? `Source: ${type.toUpperCase()} — ${name}` : `Source: ${type}`;
 }
 
-function switchTcTab(tab, btn) {
-  ['sources','faqs','train','test','practice'].forEach(t => {
-    const el = document.getElementById(`tc-tab-${t}`);
-    if (el) el.classList.toggle('hidden', t !== tab);
+let _importedData = {};
+let _currentImportSource = { type: 'website', name: '' };
+
+// Track manual edits — any direct textarea input marks that field as "Manual Notes"
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('kb-fields-grid')?.addEventListener('input', e => {
+    const ta = e.target;
+    if (!ta.matches || !ta.matches('textarea[id^="kb-"]')) return;
+    ta.dataset.sourceType = 'manual';
+    ta.dataset.sourceName = '';
+    updateSourceBadge(ta.id, 'manual', '');
   });
-  document.querySelectorAll('.tc-tab-btn').forEach(b => {
-    b.classList.remove('text-indigo-600','border-indigo-500');
-    b.classList.add('text-slate-500','border-transparent');
+});
+
+function switchKbTab(tab) {
+  const isWebsite = tab === 'website';
+  document.getElementById('kb-source-website').classList.toggle('hidden', !isWebsite);
+  document.getElementById('kb-source-file').classList.toggle('hidden', isWebsite);
+  const active   = 'px-3 py-1.5 text-xs font-medium rounded-md bg-white shadow-sm text-slate-700 transition-all';
+  const inactive = 'px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:text-slate-700 transition-all';
+  document.getElementById('kb-tab-website').className = isWebsite  ? active : inactive;
+  document.getElementById('kb-tab-file').className    = !isWebsite ? active : inactive;
+}
+
+function renderImportPreview(sourceType, sourceName) {
+  const status  = document.getElementById('kb-import-status');
+  const preview = document.getElementById('kb-import-preview');
+  const bizName = (_importedData.business_name || '').trim();
+  const incomingPriority = getSourcePriority(sourceType);
+
+  const populated = KB_IMPORT_FIELDS.filter(f => {
+    const v = _importedData[f.key];
+    return v && String(v).trim().length > 0;
   });
-  if (btn) {
-    btn.classList.remove('text-slate-500','border-transparent');
-    btn.classList.add('text-indigo-600','border-indigo-500');
-  }
-  if (tab === 'train') updateTrainSummary();
-}
-
-async function loadTrainingCenter() {
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  const statsEl  = document.getElementById('tc-stats');
-  if (!clinicId) {
-    if (statsEl) statsEl.textContent = '';
-    renderTrainingDocs([]);
-    renderTrainingFaqs([]);
+  if (!populated.length) {
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-700';
+    status.textContent = 'No structured business information could be extracted. Try a more content-rich page or file.';
     return;
   }
-  try {
-    const data = await (await fetch(`/superadmin/api/training/${clinicId}`)).json();
-    renderTrainingDocs(data.docs || []);
-    renderTrainingFaqs(data.faqs || []);
-    if (statsEl) statsEl.textContent = `${(data.docs||[]).length} docs · ${(data.faqs||[]).length} FAQs`;
-    updateTrainSummary(data.docs || [], data.faqs || []);
-  } catch (e) {
-    if (statsEl) statsEl.textContent = 'Error loading';
-  }
-}
 
-function updateTrainSummary(docs, faqs) {
-  const el = document.getElementById('tc-train-summary');
-  if (!el) return;
-  if (!docs && !faqs) {
-    const clinicId = document.getElementById('tc-clinic')?.value;
-    if (!clinicId) { el.innerHTML = '<span class="text-slate-400">Select a clinic to see training summary.</span>'; return; }
-  }
-  const d = docs || [], f = faqs || [];
-  const websites = d.filter(x => x.type === 'website').length;
-  const files    = d.filter(x => x.type === 'file').length;
-  const notes    = d.filter(x => x.type === 'notes').length;
-  el.innerHTML =
-    `<div class="text-center"><div class="text-xl font-bold text-blue-600">${websites}</div><div class="text-xs text-slate-500">Websites</div></div>` +
-    `<div class="text-center"><div class="text-xl font-bold text-green-600">${files}</div><div class="text-xs text-slate-500">Files</div></div>` +
-    `<div class="text-center"><div class="text-xl font-bold text-purple-600">${notes}</div><div class="text-xs text-slate-500">Notes</div></div>` +
-    `<div class="text-center"><div class="text-xl font-bold text-amber-600">${f.length}</div><div class="text-xs text-slate-500">FAQs</div></div>`;
-}
+  const badgeEl = document.getElementById('kb-import-source-badge');
+  if (badgeEl) badgeEl.textContent = sourceType === 'website' ? 'Source: Website' : `Source: ${sourceType.toUpperCase()} — ${sourceName}`;
 
-function renderTrainingDocs(docs) {
-  const el = document.getElementById('tc-docs-list');
-  const cnt = document.getElementById('tc-docs-count');
-  if (cnt) cnt.textContent = docs.length ? `(${docs.length})` : '';
-  if (!el) return;
-  if (!docs.length) {
-    el.innerHTML = '<div class="p-4 text-xs text-slate-400 italic">No training documents yet. Import a website, upload a file, or add manual notes above.</div>';
-    return;
-  }
-  const typeIcon = { website:'🌐', file:'📄', notes:'📝' };
-  const typeBg   = { website:'bg-blue-50 text-blue-700 border-blue-200', file:'bg-green-50 text-green-700 border-green-200', notes:'bg-purple-50 text-purple-700 border-purple-200' };
-  el.innerHTML = docs.map(d => `
-    <div class="flex items-start gap-3 px-4 py-3 hover:bg-slate-50">
-      <span class="text-lg mt-0.5">${typeIcon[d.type] || '📋'}</span>
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <span class="font-medium text-sm text-slate-800 truncate">${escHtml(d.title)}</span>
-          <span class="text-xs px-2 py-0.5 rounded-full border font-medium ${typeBg[d.type] || 'bg-slate-50 text-slate-500 border-slate-200'}">${d.type}</span>
-        </div>
-        ${d.source ? `<div class="text-xs text-slate-400 truncate mt-0.5">${escHtml(d.source)}</div>` : ''}
-        <div class="text-xs text-slate-400 mt-0.5">${d.content.length.toLocaleString()} chars · ${new Date(d.created_at).toLocaleDateString()}</div>
+  let conflictCount = 0;
+  const fieldsEl = document.getElementById('kb-import-fields');
+  const bizHeader = bizName
+    ? `<div class="col-span-full bg-indigo-100 border border-indigo-200 rounded-lg px-3 py-2 text-xs">
+         <span class="font-semibold text-indigo-800">Business identified:</span>
+         <span class="text-indigo-700 ml-1">${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+       </div>` : '';
+  fieldsEl.innerHTML = bizHeader + populated.map(f => {
+    const content = String(_importedData[f.key] || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const rows = Math.min(10, Math.max(3, Math.ceil(content.length / 80)));
+    const dstEl = document.getElementById(f.kbId);
+    const curPriority = getSourcePriority(dstEl?.dataset?.sourceType);
+    const blocked = curPriority > incomingPriority && (dstEl?.value?.trim() || '').length > 0;
+    if (blocked) conflictCount++;
+    const blockNote = blocked
+      ? `<span class="text-amber-600 font-medium text-xs ml-1">— skipped (${dstEl.dataset.sourceType} has priority)</span>` : '';
+    return `<div class="space-y-1 ${blocked ? 'opacity-50' : ''}">
+      <div class="flex items-center flex-wrap gap-1">
+        <label class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">${f.label}</label>${blockNote}
       </div>
-      <button onclick="deleteTcDoc(${d.id})" class="flex-shrink-0 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">${iconTrash()}</button>
-    </div>`).join('');
+      <textarea id="imp-${f.key}" rows="${rows}" ${blocked ? 'disabled' : ''}
+        class="w-full text-xs border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y bg-white disabled:bg-slate-50 disabled:text-slate-400">${content}</textarea>
+    </div>`;
+  }).join('');
+
+  const bizLabel = bizName ? ` for <strong>${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong>` : '';
+  const skipNote = conflictCount > 0 ? ` <span class="font-medium text-amber-600">${conflictCount} field(s) will be skipped — higher-priority source already set.</span>` : '';
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+  status.innerHTML = `Extracted ${populated.length} section(s)${bizLabel}.${skipNote} Review below, then click "Apply to Knowledge Base".`;
+  preview.classList.remove('hidden');
 }
 
-async function deleteTcDoc(docId) {
-  if (!confirm('Delete this training document?')) return;
-  const clinicId = document.getElementById('tc-clinic')?.value;
+async function importFromWebsite() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) return alert('Select a clinic first.');
+  const url = document.getElementById('kb-website-url')?.value?.trim();
+  if (!url) return alert('Enter a website URL first.');
+
+  const btn = document.getElementById('kb-import-btn');
+  const status = document.getElementById('kb-import-status');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+  document.getElementById('kb-import-preview').classList.add('hidden');
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  status.textContent = 'Fetching website and extracting information with AI…';
+  status.classList.remove('hidden');
+
   try {
-    await fetch(`/superadmin/api/training/${clinicId}/docs/${docId}`, { method: 'DELETE' });
-    await loadTrainingCenter();
-  } catch (e) { alert('Delete failed: ' + e.message); }
-}
-
-function renderTrainingFaqs(faqs) {
-  const el = document.getElementById('tc-faqs-list');
-  if (!el) return;
-  if (!faqs.length) {
-    el.innerHTML = '<div class="text-xs text-slate-400 italic p-2">No FAQs yet. Click <strong>+ Add FAQ</strong> to create question-and-answer pairs for Ana.</div>';
-    return;
-  }
-  el.innerHTML = faqs.map(f => `
-    <div class="border border-slate-200 rounded-xl p-4 space-y-2 hover:border-slate-300 transition-colors">
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-semibold text-slate-800">Q: ${escHtml(f.question)}</div>
-          <div class="text-sm text-slate-600 mt-1">A: ${escHtml(f.answer)}</div>
-        </div>
-        <button onclick="deleteTcFaq(${f.id})" class="flex-shrink-0 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">${iconTrash()}</button>
-      </div>
-    </div>`).join('');
-}
-
-async function deleteTcFaq(faqId) {
-  if (!confirm('Delete this FAQ?')) return;
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  try {
-    await fetch(`/superadmin/api/training/${clinicId}/faqs/${faqId}`, { method: 'DELETE' });
-    await loadTrainingCenter();
-  } catch (e) { alert('Delete failed: ' + e.message); }
-}
-
-function showAddFaqForm() {
-  document.getElementById('tc-add-faq-form').classList.remove('hidden');
-  document.getElementById('tc-faq-q').focus();
-}
-function hideAddFaqForm() {
-  document.getElementById('tc-add-faq-form').classList.add('hidden');
-  document.getElementById('tc-faq-q').value = '';
-  document.getElementById('tc-faq-a').value = '';
-  document.getElementById('tc-faq-status').classList.add('hidden');
-}
-
-async function addFaqEntry() {
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  if (!clinicId) return alert('Please select a clinic first.');
-  const q = document.getElementById('tc-faq-q').value.trim();
-  const a = document.getElementById('tc-faq-a').value.trim();
-  if (!q || !a) return alert('Both question and answer are required.');
-  const statusEl = document.getElementById('tc-faq-status');
-  try {
-    const r = await fetch(`/superadmin/api/training/${clinicId}/faqs`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ question: q, answer: a }),
-    });
-    if (!r.ok) throw new Error((await r.json()).error);
-    hideAddFaqForm();
-    await loadTrainingCenter();
-  } catch (e) {
-    statusEl.textContent = '✗ ' + e.message;
-    statusEl.className = 'text-xs rounded-lg p-2 border bg-red-50 text-red-700 border-red-200';
-    statusEl.classList.remove('hidden');
-  }
-}
-
-// ── Import Website ────────────────────────────────────────────────────────────
-
-async function importWebsite() {
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  if (!clinicId) return alert('Please select a clinic first.');
-  const url     = document.getElementById('tc-url-input').value.trim();
-  if (!url)     return alert('Please enter a URL.');
-  const btn     = document.getElementById('tc-url-btn');
-  const statusEl = document.getElementById('tc-url-status');
-  btn.disabled  = true; btn.textContent = 'Importing…';
-  statusEl.className = 'text-xs rounded-lg p-2.5 border bg-slate-50 text-slate-600 border-slate-200';
-  statusEl.textContent = 'Fetching page content…';
-  statusEl.classList.remove('hidden');
-  try {
-    const r    = await fetch(`/superadmin/api/training/${clinicId}/fetch-url`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+    const r = await fetch(`/superadmin/api/kb/${clinicId}/import-website`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error);
-    statusEl.textContent = `Fetched ${data.length.toLocaleString()} chars — saving…`;
-    const hostname = new URL(url).hostname;
-    const r2 = await fetch(`/superadmin/api/training/${clinicId}/docs`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ type: 'website', title: hostname, source: url, content: data.content }),
-    });
-    if (!r2.ok) throw new Error((await r2.json()).error);
-    statusEl.textContent = `✓ Imported ${data.length.toLocaleString()} chars from ${hostname}`;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
-    document.getElementById('tc-url-input').value = '';
-    await loadTrainingCenter();
+    if (!r.ok) throw new Error(data.error || 'Import failed');
+    _currentImportSource = { type: 'website', name: url };
+    _importedData = data.extracted || {};
+    renderImportPreview('website', url);
   } catch (e) {
-    statusEl.textContent = '✗ ' + e.message;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    status.textContent = 'Error: ' + e.message;
   } finally {
-    btn.disabled = false; btn.textContent = 'Import';
+    btn.disabled = false;
+    btn.textContent = 'Import from Website';
   }
 }
 
-// ── File Upload ───────────────────────────────────────────────────────────────
-
-function handleFileSelect(event) {
-  const file = event.target.files[0];
+async function importFromFile(input) {
+  const file = input?.files?.[0];
   if (!file) return;
-  tcFileName    = file.name;
-  tcFileContent = null;
-  document.getElementById('tc-file-name').textContent = file.name;
-  document.getElementById('tc-file-btn').disabled = true;
-  document.getElementById('tc-file-preview').classList.add('hidden');
-  document.getElementById('tc-file-status').classList.add('hidden');
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) { input.value = ''; return alert('Select a clinic first.'); }
 
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (ext === 'txt') {
-    const reader = new FileReader();
-    reader.onload = e => {
-      tcFileContent = e.target.result;
-      const preview = document.getElementById('tc-file-preview');
-      preview.textContent = tcFileContent.slice(0, 300) + (tcFileContent.length > 300 ? '…' : '');
-      preview.classList.remove('hidden');
-      document.getElementById('tc-file-btn').disabled = false;
-    };
-    reader.readAsText(file);
-  } else if (ext === 'pdf') {
-    extractPdfText(file);
-  } else if (ext === 'docx') {
-    extractDocxText(file);
-  } else {
-    document.getElementById('tc-file-name').textContent = file.name + ' (unsupported format)';
-  }
-}
+  const status = document.getElementById('kb-import-status');
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  status.textContent = `Reading "${file.name}" and extracting information with AI…`;
+  status.classList.remove('hidden');
+  document.getElementById('kb-import-preview').classList.add('hidden');
 
-async function extractPdfText(file) {
-  const statusEl = document.getElementById('tc-file-status');
-  statusEl.textContent = 'Extracting PDF text…';
-  statusEl.className = 'text-xs rounded-lg p-2.5 border bg-slate-50 text-slate-600 border-slate-200';
-  statusEl.classList.remove('hidden');
   try {
-    if (!window.pdfjsLib) {
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-    const arrBuf = await file.arrayBuffer();
-    const pdf    = await pdfjsLib.getDocument({ data: arrBuf }).promise;
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page    = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(s => s.str).join(' ') + '\n';
-    }
-    tcFileContent = text.trim();
-    const preview = document.getElementById('tc-file-preview');
-    preview.textContent = tcFileContent.slice(0, 300) + (tcFileContent.length > 300 ? '…' : '');
-    preview.classList.remove('hidden');
-    document.getElementById('tc-file-btn').disabled = false;
-    statusEl.textContent = `✓ Extracted ${tcFileContent.length.toLocaleString()} chars from ${pdf.numPages} pages`;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
-  } catch (e) {
-    statusEl.textContent = '✗ PDF extraction failed: ' + e.message;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
-  }
-}
-
-async function extractDocxText(file) {
-  const statusEl = document.getElementById('tc-file-status');
-  statusEl.textContent = 'Extracting DOCX text…';
-  statusEl.className = 'text-xs rounded-lg p-2.5 border bg-slate-50 text-slate-600 border-slate-200';
-  statusEl.classList.remove('hidden');
-  try {
-    if (!window.mammoth) {
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
-    }
-    const arrBuf = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer: arrBuf });
-    tcFileContent = result.value.trim();
-    const preview = document.getElementById('tc-file-preview');
-    preview.textContent = tcFileContent.slice(0, 300) + (tcFileContent.length > 300 ? '…' : '');
-    preview.classList.remove('hidden');
-    document.getElementById('tc-file-btn').disabled = false;
-    statusEl.textContent = `✓ Extracted ${tcFileContent.length.toLocaleString()} chars`;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
-  } catch (e) {
-    statusEl.textContent = '✗ DOCX extraction failed: ' + e.message;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
-  }
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
-async function uploadFile() {
-  if (!tcFileContent) return;
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  if (!clinicId) return alert('Please select a clinic first.');
-  const btn      = document.getElementById('tc-file-btn');
-  const statusEl = document.getElementById('tc-file-status');
-  btn.disabled   = true; btn.textContent = 'Saving…';
-  try {
-    const r = await fetch(`/superadmin/api/training/${clinicId}/docs`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ type: 'file', title: tcFileName, source: tcFileName, content: tcFileContent }),
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetch(`/superadmin/api/kb/${clinicId}/import-file`, {
+      method: 'POST', body: formData,
     });
-    if (!r.ok) throw new Error((await r.json()).error);
-    statusEl.textContent = `✓ ${tcFileName} added to training`;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
-    statusEl.classList.remove('hidden');
-    tcFileContent = null; tcFileName = null;
-    document.getElementById('tc-file-input').value = '';
-    document.getElementById('tc-file-name').textContent = 'No file selected';
-    document.getElementById('tc-file-preview').classList.add('hidden');
-    document.getElementById('tc-file-btn').disabled = true;
-    await loadTrainingCenter();
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Import failed');
+    _currentImportSource = { type: data.sourceType, name: data.sourceName };
+    _importedData = data.extracted || {};
+    renderImportPreview(data.sourceType, data.sourceName);
   } catch (e) {
-    statusEl.textContent = '✗ ' + e.message;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
-    statusEl.classList.remove('hidden');
-    btn.disabled = false; btn.textContent = 'Add to Training';
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    input.value = '';
   }
+}
+
+function applyImportedKb() {
+  let applied = 0, skipped = 0;
+  const incomingPriority = getSourcePriority(_currentImportSource.type);
+  KB_IMPORT_FIELDS.forEach(f => {
+    const srcEl = document.getElementById(`imp-${f.key}`);
+    const dstEl = document.getElementById(f.kbId);
+    if (!srcEl || !dstEl || srcEl.disabled) return;
+    const newContent = srcEl.value.trim();
+    if (!newContent) return;
+    const curPriority = getSourcePriority(dstEl.dataset?.sourceType);
+    if (curPriority > incomingPriority && (dstEl.value?.trim() || '').length > 0) { skipped++; return; }
+    dstEl.value = newContent;
+    dstEl.dataset.sourceType = _currentImportSource.type;
+    dstEl.dataset.sourceName = _currentImportSource.name;
+    updateSourceBadge(f.kbId, _currentImportSource.type, _currentImportSource.name);
+    applied++;
+  });
+  document.getElementById('kb-import-preview').classList.add('hidden');
+  const status = document.getElementById('kb-import-status');
+  status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+  let msg = `Applied ${applied} field(s) to Knowledge Base.`;
+  if (skipped > 0) msg += ` ${skipped} field(s) skipped (higher-priority source protected).`;
+  msg += ' Click "Save Knowledge Base" to persist.';
+  status.textContent = msg;
+  status.classList.remove('hidden');
+}
+
+function cancelImport() {
+  document.getElementById('kb-import-preview').classList.add('hidden');
+  document.getElementById('kb-import-status').classList.add('hidden');
+}
+
+async function saveWebsiteUrlAction() {
+  const clinicId = document.getElementById('kb-clinic')?.value;
+  if (!clinicId) return alert('Select a clinic first.');
+  const url = document.getElementById('kb-website-url')?.value?.trim();
+  const btn = document.getElementById('kb-save-url-btn');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/superadmin/api/kb/${clinicId}/save-website-url`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url || null }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    const status = document.getElementById('kb-import-status');
+    status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+    status.textContent = url ? `Website URL saved: ${url}` : 'Website URL cleared.';
+    status.classList.remove('hidden');
+    setTimeout(() => status.classList.add('hidden'), 3000);
+  } catch (e) {
+    alert('Save URL failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── AI Training Center ────────────────────────────────────────────────────────
+
+let _trainClinicId = null;
+let _trainFaqs     = [];
+let _trainRules    = [];
+let _trainSources  = [];
+
+function populateTrainClinicFilter() {
+  const sel = document.getElementById('train-clinic');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— select a clinic —</option>' +
+    allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected':''}>${escHtml(c.name)}</option>`).join('');
+}
+
+async function loadTrainingData() {
+  _trainClinicId = document.getElementById('train-clinic')?.value || null;
+  if (!_trainClinicId) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/status`);
+    if (!r.ok) return;
+    const d = await r.json();
+    _trainFaqs    = d.faqs    || [];
+    _trainRules   = d.rules   || [];
+    _trainSources = d.sources || [];
+    const notes = d.manualNotes || '';
+    const el = document.getElementById('train-manual-notes');
+    if (el) el.value = notes;
+    renderTrainSources();
+    renderTrainFaqs();
+    renderTrainRules();
+    renderTrainStatusBadge(d);
+    trainLoadViewer();
+    practiceLoadHistory();
+  } catch (e) { console.error('loadTrainingData', e); }
+}
+
+function renderTrainStatusBadge(d) {
+  const badge = document.getElementById('train-status-badge');
+  if (!badge) return;
+  if (d.lastTrained) {
+    badge.textContent = `Ana trained ${new Date(d.lastTrained).toLocaleDateString()} · ${d.sourcesCount} source(s) · ${d.faqsCount} FAQ(s) · ${d.rulesCount} rule(s)`;
+    badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700';
+  } else {
+    badge.textContent = `Not trained yet · ${d.sourcesCount} source(s) · ${d.faqsCount} FAQ(s) · ${d.rulesCount} rule(s)`;
+    badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700';
+  }
+  badge.classList.remove('hidden');
+}
+
+function switchTrainSection(sec) {
+  ['sources','faqs','rules','notes','viewer','test','practice'].forEach(s => {
+    document.getElementById(`tsec-${s}`)?.classList.toggle('hidden', s !== sec);
+    const tab = document.getElementById(`ttab-${s}`);
+    if (tab) {
+      tab.className = s === sec
+        ? 'train-stab px-4 py-2 text-xs font-medium rounded-lg bg-white shadow-sm text-violet-700'
+        : 'train-stab px-4 py-2 text-xs font-medium rounded-lg text-slate-500 hover:text-slate-700';
+    }
+  });
+  if (sec === 'viewer') trainLoadViewer();
+}
+
+// ── Sources ───────────────────────────────────────────────────────────────────
+
+function renderTrainSources() {
+  const el = document.getElementById('train-src-list');
+  if (!el) return;
+  if (!_trainSources.length) {
+    el.innerHTML = '<p class="text-xs text-slate-400 italic">No sources added yet.</p>';
+    return;
+  }
+  const icons = { website:'🌐', pdf:'📄', docx:'📄', txt:'📝' };
+  el.innerHTML = _trainSources.map(s => `
+    <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+      <span class="text-lg shrink-0">${icons[s.source_type] || '📄'}</span>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-slate-700 truncate">${escHtml(s.source_name || s.source_type)}</p>
+        <p class="text-xs text-slate-400">${s.source_type.toUpperCase()} · Added ${new Date(s.created_at).toLocaleDateString()} · ${(s.char_count||0).toLocaleString()} chars</p>
+      </div>
+      <button onclick="trainDeleteSource(${s.id})" title="Remove source"
+        class="shrink-0 text-slate-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50 text-lg leading-none">✕</button>
+    </div>
+  `).join('');
+}
+
+async function trainAddWebsite() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const url = document.getElementById('train-web-url')?.value?.trim();
+  if (!url) return alert('Enter a website URL first.');
+  const btn = document.getElementById('train-web-btn');
+  const st  = document.getElementById('train-src-status');
+  btn.disabled = true; btn.textContent = '🌐 Importing…';
+  st.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  st.textContent = 'Fetching and extracting text from website…';
+  st.classList.remove('hidden');
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/website`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    _trainSources = d.sources;
+    renderTrainSources();
+    document.getElementById('train-web-url').value = '';
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+    st.textContent = `Website imported: ${d.charCount.toLocaleString()} characters extracted. Click "Train Ana" to update Ana's knowledge.`;
+  } catch (e) {
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    st.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🌐 Import Website';
+  }
+}
+
+async function trainAddFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  if (!_trainClinicId) { input.value = ''; return alert('Select a clinic first.'); }
+  const st = document.getElementById('train-src-status');
+  st.className = 'text-xs px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  st.textContent = `Reading "${escHtml(file.name)}"…`;
+  st.classList.remove('hidden');
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/file`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    _trainSources = d.sources;
+    renderTrainSources();
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
+    st.textContent = `"${escHtml(file.name)}" uploaded: ${d.charCount.toLocaleString()} characters extracted. Click "Train Ana" to update Ana's knowledge.`;
+  } catch (e) {
+    st.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    st.textContent = 'Error: ' + e.message;
+  } finally { input.value = ''; }
+}
+
+async function trainDeleteSource(id) {
+  if (!_trainClinicId || !confirm('Remove this knowledge source?')) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/source/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainSources = d.sources;
+    renderTrainSources();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── FAQs ──────────────────────────────────────────────────────────────────────
+
+function renderTrainFaqs() {
+  const el = document.getElementById('train-faq-list');
+  if (!el) return;
+  if (!_trainFaqs.length) {
+    el.innerHTML = '<p class="text-xs text-slate-400 italic">No FAQs yet. Click "+ Add FAQ" to create one.</p>';
+    return;
+  }
+  el.innerHTML = _trainFaqs.map(f => `
+    <div class="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-1.5">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 space-y-1 min-w-0">
+          <p class="text-sm font-semibold text-slate-800">Q: ${escHtml(f.question)}</p>
+          <p class="text-sm text-slate-600 whitespace-pre-wrap">A: ${escHtml(f.answer)}</p>
+        </div>
+        <div class="flex gap-1 shrink-0">
+          <button onclick="trainEditFaq(${f.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100 text-slate-600 transition-colors">Edit</button>
+          <button onclick="trainDeleteFaq(${f.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 transition-colors">✕</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function trainShowFaqForm(id) {
+  const form  = document.getElementById('train-faq-form');
+  const title = document.getElementById('train-faq-form-title');
+  const idEl  = document.getElementById('train-faq-editing-id');
+  if (id) {
+    const faq = _trainFaqs.find(f => f.id === id);
+    if (!faq) return;
+    document.getElementById('train-faq-q').value = faq.question;
+    document.getElementById('train-faq-a').value = faq.answer;
+    idEl.value = id;
+    title.textContent = 'Edit FAQ';
+  } else {
+    document.getElementById('train-faq-q').value = '';
+    document.getElementById('train-faq-a').value = '';
+    idEl.value = '';
+    title.textContent = 'New FAQ';
+  }
+  form.classList.remove('hidden');
+  document.getElementById('train-faq-q').focus();
+}
+
+function trainHideFaqForm() {
+  document.getElementById('train-faq-form').classList.add('hidden');
+}
+
+function trainEditFaq(id) { trainShowFaqForm(id); }
+
+async function trainSaveFaq() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const q   = document.getElementById('train-faq-q')?.value?.trim();
+  const a   = document.getElementById('train-faq-a')?.value?.trim();
+  const eid = document.getElementById('train-faq-editing-id')?.value;
+  if (!q || !a) return alert('Both question and answer are required.');
+  try {
+    const url    = eid ? `/superadmin/api/train/${_trainClinicId}/faqs/${eid}` : `/superadmin/api/train/${_trainClinicId}/faqs`;
+    const method = eid ? 'PUT' : 'POST';
+    const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({ question: q, answer: a }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainFaqs = d.faqs;
+    renderTrainFaqs();
+    trainHideFaqForm();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function trainDeleteFaq(id) {
+  if (!_trainClinicId || !confirm('Delete this FAQ?')) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/faqs/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainFaqs = d.faqs;
+    renderTrainFaqs();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── Business Rules ────────────────────────────────────────────────────────────
+
+function renderTrainRules() {
+  const el = document.getElementById('train-rule-list');
+  if (!el) return;
+  if (!_trainRules.length) {
+    el.innerHTML = '<p class="text-xs text-slate-400 italic">No rules yet. Click "+ Add Rule" to create one.</p>';
+    return;
+  }
+  el.innerHTML = _trainRules.map((r, i) => `
+    <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+      <span class="text-xs font-mono text-slate-400 shrink-0 w-5 text-right">${i+1}.</span>
+      <p class="flex-1 text-sm text-slate-700">${escHtml(r.rule_text)}</p>
+      <div class="flex gap-1 shrink-0">
+        <button onclick="trainEditRule(${r.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-slate-100 text-slate-600 transition-colors">Edit</button>
+        <button onclick="trainDeleteRule(${r.id})" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 transition-colors">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function trainShowRuleForm(id) {
+  const form  = document.getElementById('train-rule-form');
+  const title = document.getElementById('train-rule-form-title');
+  const idEl  = document.getElementById('train-rule-editing-id');
+  if (id) {
+    const rule = _trainRules.find(r => r.id === id);
+    if (!rule) return;
+    document.getElementById('train-rule-text').value = rule.rule_text;
+    idEl.value = id;
+    title.textContent = 'Edit Rule';
+  } else {
+    document.getElementById('train-rule-text').value = '';
+    idEl.value = '';
+    title.textContent = 'New Rule';
+  }
+  form.classList.remove('hidden');
+  document.getElementById('train-rule-text').focus();
+}
+
+function trainHideRuleForm() {
+  document.getElementById('train-rule-form').classList.add('hidden');
+}
+
+function trainEditRule(id) { trainShowRuleForm(id); }
+
+async function trainSaveRule() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const text = document.getElementById('train-rule-text')?.value?.trim();
+  const eid  = document.getElementById('train-rule-editing-id')?.value;
+  if (!text) return alert('Please enter a rule.');
+  try {
+    const url    = eid ? `/superadmin/api/train/${_trainClinicId}/rules/${eid}` : `/superadmin/api/train/${_trainClinicId}/rules`;
+    const method = eid ? 'PUT' : 'POST';
+    const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({ rule_text: text }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainRules = d.rules;
+    renderTrainRules();
+    trainHideRuleForm();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function trainDeleteRule(id) {
+  if (!_trainClinicId || !confirm('Delete this rule?')) return;
+  try {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/rules/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _trainRules = d.rules;
+    renderTrainRules();
+  } catch (e) { alert('Error: ' + e.message); }
 }
 
 // ── Manual Notes ──────────────────────────────────────────────────────────────
 
-async function saveManualNotes() {
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  if (!clinicId) return alert('Please select a clinic first.');
-  const title   = document.getElementById('tc-notes-title').value.trim();
-  const content = document.getElementById('tc-notes-content').value.trim();
-  if (!content) return alert('Please enter some notes content.');
-  const statusEl = document.getElementById('tc-notes-status');
+async function trainSaveManualNotes() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const notes = document.getElementById('train-manual-notes')?.value?.trim() || null;
+  const st = document.getElementById('train-notes-status');
   try {
-    const r = await fetch(`/superadmin/api/training/${clinicId}/docs`, {
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/manual`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ type: 'notes', title: title || 'Manual Notes', source: null, content }),
+      body: JSON.stringify({ notes }),
     });
-    if (!r.ok) throw new Error((await r.json()).error);
-    statusEl.textContent = '✓ Notes saved to training';
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
-    statusEl.classList.remove('hidden');
-    document.getElementById('tc-notes-title').value   = '';
-    document.getElementById('tc-notes-content').value = '';
-    setTimeout(() => statusEl.classList.add('hidden'), 3000);
-    await loadTrainingCenter();
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    st.textContent = 'Saved ✓';
+    st.className = 'text-xs text-emerald-600 font-medium';
+    setTimeout(() => { st.textContent = ''; st.className = 'text-xs text-slate-400'; }, 3000);
   } catch (e) {
-    statusEl.textContent = '✗ ' + e.message;
-    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
-    statusEl.classList.remove('hidden');
+    st.textContent = 'Error: ' + e.message;
+    st.className = 'text-xs text-red-500';
+  }
+}
+
+// ── Knowledge Viewer ──────────────────────────────────────────────────────────
+
+async function trainLoadViewer() {
+  const el = document.getElementById('train-viewer-grid');
+  if (!el || !_trainClinicId) return;
+  try {
+    const kb = await (await fetch(`/superadmin/api/kb/${_trainClinicId}`)).json();
+    const labels = {
+      services:'Services', doctors:'Doctors & Staff', locations:'Locations',
+      office_hours:'Office Hours', insurance:'Insurance', appointment_policy:'Appointment Policy',
+      cancellation_policy:'Cancellation Policy', new_patient_requirements:'New Patient Requirements',
+      documents_needed:'Documents Needed', faqs:'FAQs', transfer_rules:'Transfer Rules',
+      emergency_instructions:'Emergency Instructions', do_not_answer:'Do NOT Answer',
+    };
+    let sources = {};
+    try { sources = kb.field_sources ? JSON.parse(kb.field_sources) : {}; } catch {}
+    const srcColors = { manual:'bg-emerald-100 text-emerald-700', pdf:'bg-purple-100 text-purple-700', docx:'bg-purple-100 text-purple-700', txt:'bg-purple-100 text-purple-700', website:'bg-blue-100 text-blue-700', trained:'bg-violet-100 text-violet-700' };
+    const populated = Object.entries(labels).filter(([k]) => kb[k]?.trim());
+    if (!populated.length) {
+      el.innerHTML = '<p class="text-xs text-slate-400 italic col-span-full">No knowledge yet. Add sources and click "Train Ana" to populate.</p>';
+      return;
+    }
+    el.innerHTML = populated.map(([k, label]) => {
+      const src = sources[k];
+      const badge = src?.type ? `<span class="text-xs px-2 py-0.5 rounded-full font-medium ${srcColors[src.type]||'bg-slate-100 text-slate-500'}">${src.type}</span>` : '';
+      const preview = escHtml((kb[k]||'').slice(0,400)) + ((kb[k]||'').length>400 ? '…' : '');
+      return `<div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="text-xs font-semibold text-slate-600 uppercase tracking-wide">${label}</span>${badge}
+        </div>
+        <p class="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">${preview}</p>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<p class="text-xs text-red-400 col-span-full">Error: ${e.message}</p>`;
   }
 }
 
 // ── Train Ana ─────────────────────────────────────────────────────────────────
 
-async function trainAna() {
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  if (!clinicId) return alert('Please select a clinic first.');
-  const btn      = document.getElementById('tc-train-btn');
-  const resultEl = document.getElementById('tc-train-result');
-  btn.disabled   = true; btn.textContent = '⏳ Training Ana…';
-  resultEl.classList.add('hidden');
+async function runTrainAna() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const btn = document.getElementById('train-run-btn');
+  const msg = document.getElementById('train-action-msg');
+  const log = document.getElementById('train-log');
+
+  btn.disabled = true; btn.textContent = '🧠 Training…';
+  log.classList.remove('hidden'); log.innerHTML = '';
+  msg.textContent = '';
+
+  const addLog = t => {
+    const d = document.createElement('div');
+    d.textContent = `> ${t}`;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const clinic = allClients.find(c => c.id == _trainClinicId);
+  addLog('Starting Ana training…');
+  addLog(`Clinic: ${clinic?.name || _trainClinicId}`);
+  addLog(`Sources: ${_trainSources.length} | FAQs: ${_trainFaqs.length} | Rules: ${_trainRules.length}`);
+  addLog('Sending to AI for consolidation (15–30 seconds)…');
+
   try {
-    const r    = await fetch(`/superadmin/api/training/${clinicId}/train`, { method: 'POST' });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error);
-    resultEl.innerHTML =
-      `<div class="font-semibold text-emerald-700 mb-2">✅ Ana has been trained!</div>
-       <div class="text-slate-600 space-y-1 text-sm">
-         <div>📚 Documents compiled: <strong>${data.docsCompiled}</strong></div>
-         <div>❓ FAQs merged into AI config: <strong>${data.faqsMerged}</strong></div>
-         <div class="text-xs text-slate-400 mt-2">Ana will use this knowledge on all future calls and in the Practice Conversation simulator.</div>
-       </div>`;
-    resultEl.className = 'text-sm rounded-xl p-4 border bg-emerald-50 border-emerald-200';
-    resultEl.classList.remove('hidden');
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/train`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Training failed');
+
+    addLog(`✓ Business: ${d.businessName}`);
+    addLog(`✓ ${d.fieldsTrained} knowledge fields populated`);
+    addLog('✓ Ana is ready! Knowledge Base updated.');
+    msg.textContent = `Training complete — ${d.fieldsTrained} fields updated`;
+    msg.className = 'text-sm text-emerald-600 font-medium px-2';
+    setTimeout(() => { msg.textContent = ''; msg.className = 'text-sm text-slate-500 px-2'; }, 6000);
+
+    // Reload status + viewer
+    await loadTrainingData();
+    switchTrainSection('viewer');
   } catch (e) {
-    resultEl.textContent = '✗ Training failed: ' + e.message;
-    resultEl.className = 'text-sm rounded-xl p-4 border bg-red-50 text-red-700 border-red-200';
-    resultEl.classList.remove('hidden');
+    addLog(`✗ Error: ${e.message}`);
+    msg.textContent = 'Training failed: ' + e.message;
+    msg.className = 'text-sm text-red-500 px-2';
   } finally {
-    btn.disabled = false; btn.textContent = '🚀 Train Ana Now';
+    btn.disabled = false; btn.textContent = '🧠 Train Ana';
   }
+}
+
+async function runRefreshKnowledge() {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  if (!confirm('Re-run training with all current sources, FAQs, rules, and manual notes?')) return;
+  await runTrainAna();
 }
 
 // ── Test Ana ──────────────────────────────────────────────────────────────────
 
-async function testAnaQuestion() {
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  const question = document.getElementById('tc-test-q')?.value?.trim();
-  if (!clinicId) return alert('Please select a clinic first.');
-  if (!question) return;
-  const chat    = document.getElementById('tc-test-chat');
-  const btn     = document.getElementById('tc-test-btn');
-  chat.innerHTML += `<div class="flex justify-end"><div class="bg-blue-100 text-blue-900 text-sm rounded-2xl rounded-tr-sm px-4 py-2 max-w-sm">${escHtml(question)}</div></div>`;
-  document.getElementById('tc-test-q').value = '';
-  btn.disabled = true;
+async function trainAskAna(preset) {
+  if (!_trainClinicId) return alert('Select a clinic first.');
+  const input = document.getElementById('train-test-input');
+  const q = preset || input?.value?.trim();
+  if (!q) return;
+  if (input && !preset) input.value = '';
+
+  const chat = document.getElementById('train-test-chat');
+  if (chat.querySelector('.text-center')) chat.innerHTML = '';
+
+  chat.innerHTML += `<div class="flex justify-end mb-2">
+    <div class="bg-violet-100 text-violet-900 text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-sm">${escHtml(q)}</div>
+  </div>`;
+
   const thinking = document.createElement('div');
-  thinking.className = 'flex justify-start';
-  thinking.innerHTML = '<div class="bg-slate-100 text-slate-400 text-xs rounded-2xl rounded-tl-sm px-4 py-2 italic">Ana is thinking…</div>';
+  thinking.className = 'flex justify-start items-start gap-2 mb-2';
+  thinking.innerHTML = '<div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div><div class="bg-white border border-slate-200 text-slate-500 text-xs rounded-2xl rounded-tl-sm px-3 py-2 italic shadow-sm">Ana is thinking…</div>';
   chat.appendChild(thinking);
   chat.scrollTop = chat.scrollHeight;
+
   try {
-    const r    = await fetch('/superadmin/api/kb/test', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ clinicId: +clinicId, question }),
+    const r = await fetch(`/superadmin/api/train/${_trainClinicId}/test`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ question: q }),
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error);
-    let badges = '';
-    if (data.unanswered)        badges += ' <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Unanswered</span>';
-    if (data.emergencyDetected) badges += ' <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Emergency</span>';
-    thinking.outerHTML = `<div class="flex justify-start items-end gap-2">
-      <div class="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-sm flex-shrink-0">🤖</div>
-      <div class="bg-slate-100 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-4 py-2 max-w-sm">${escHtml(data.response)}${badges}</div>
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    let badge = '';
+    if (d.unanswered) badge = '<span class="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full align-middle">Could not answer</span>';
+    thinking.outerHTML = `<div class="flex justify-start items-start gap-2 mb-2">
+      <div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div>
+      <div class="bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-3 py-2 max-w-sm shadow-sm">${escHtml(d.response||'')}${badge}</div>
     </div>`;
   } catch (e) {
-    thinking.outerHTML = `<div class="text-xs text-red-500 px-2 py-1">Error: ${escHtml(e.message)}</div>`;
+    thinking.outerHTML = `<div class="text-xs text-red-500 px-2 mb-2">Error: ${e.message}</div>`;
   }
-  btn.disabled = false;
   chat.scrollTop = chat.scrollHeight;
 }
 
 // ── Practice Conversation ─────────────────────────────────────────────────────
 
-function resetPracticeConv() {
-  tcPracticeMessages = [];
-  tcPracticeRunning  = false;
-  const area = document.getElementById('practice-chat');
-  area.innerHTML = `<div class="chat-empty" id="practice-empty"><div><div class="text-2xl mb-2">📞</div><div>Click <strong>Start Call</strong> to begin a practice conversation with Ana</div></div></div>`;
-  document.getElementById('practice-input').value    = '';
-  document.getElementById('practice-input').disabled = true;
-  document.getElementById('practice-send-btn').disabled  = true;
-  const startBtn = document.getElementById('practice-start-btn');
-  startBtn.disabled = false; startBtn.textContent = 'Start Call'; startBtn.onclick = startPracticeConv;
-  document.getElementById('practice-error').classList.add('hidden');
+const PRACTICE_SCENARIOS = {
+  new_patient_appointment: '1. New patient wants an appointment',
+  reschedule_existing:     '2. Existing patient wants to reschedule',
+  ask_insurance:           '3. Caller asks about insurance',
+  ask_office_hours:        '4. Caller asks for office hours',
+  ask_location:            '5. Caller asks for location',
+  cancel_appointment:      '6. Caller wants to cancel appointment',
+  elderly_spanish_slow:    '7. Elderly Spanish-speaking caller (slow)',
+  angry_caller:            '8. Angry caller',
+  unknown_question:        '9. Caller asks unknown question',
+  emergency_urgent:        '10. Emergency or urgent question',
+  ask_pricing:             '11. Caller asks for pricing',
+  wants_human:             '12. Caller wants a human',
+};
+
+const QUALITY_ITEMS = [
+  { key: 'greeted_correctly',      label: 'Did Ana greet correctly?' },
+  { key: 'detected_intent',        label: 'Did Ana detect caller intent?' },
+  { key: 'asked_necessary_only',   label: 'Did Ana ask only necessary questions?' },
+  { key: 'used_kb_correctly',      label: 'Did Ana use the business knowledge correctly?' },
+  { key: 'no_invented_info',       label: 'Did Ana avoid inventing information?' },
+  { key: 'escalated_correctly',    label: 'Did Ana escalate correctly when needed?' },
+  { key: 'sounded_natural',        label: 'Did Ana sound natural?' },
+  { key: 'correct_language',       label: 'Did Ana keep the correct language?' },
+];
+
+let _practiceSessionId = null;
+let _practiceTranscript = [];
+let _practiceLastSpeak  = '';
+
+function practiceRenderQualityChecks() {
+  const el = document.getElementById('practice-quality-checks');
+  if (!el) return;
+  el.innerHTML = QUALITY_ITEMS.map(item => `
+    <label class="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-violet-300 transition-colors">
+      <select id="pq-${item.key}" class="text-sm border border-slate-200 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white">
+        <option value="">—</option>
+        <option value="yes">✓ Yes</option>
+        <option value="no">✗ No</option>
+        <option value="na">N/A</option>
+      </select>
+      <span class="text-sm text-slate-700">${item.label}</span>
+    </label>
+  `).join('');
 }
 
-async function startPracticeConv() {
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  if (!clinicId) { alert('Please select a clinic first.'); return; }
-  const startBtn = document.getElementById('practice-start-btn');
-  const errEl    = document.getElementById('practice-error');
-  startBtn.disabled = true; startBtn.textContent = 'Starting…';
-  errEl.classList.add('hidden');
-  const area = document.getElementById('practice-chat');
-  area.innerHTML = '';
-  tcPracticeMessages = [];
+async function practiceStart() {
+  if (!_trainClinicId) return alert('Select a clinic first from the top of the Train Ana section.');
+  const scenario = document.getElementById('practice-scenario')?.value || 'new_patient_appointment';
+  const language = document.getElementById('practice-language')?.value || 'es';
+  const btn = document.getElementById('practice-start-btn');
+  btn.disabled = true; btn.textContent = '⏳ Starting…';
   try {
-    const r    = await fetch(`/superadmin/api/clinics/${clinicId}/ai/test`, {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/start`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ messages: [], userMessage: '__start__' }),
+      body: JSON.stringify({ scenario, language }),
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error);
-    tcPracticeMessages = data.updatedMessages || [{ role: 'assistant', content: data.speak }];
-    appendBubble('ai', data.speak, data);
-    tcPracticeRunning = true;
-    document.getElementById('practice-input').disabled  = false;
-    document.getElementById('practice-send-btn').disabled = false;
-    document.getElementById('practice-input').focus();
-    startBtn.disabled = false; startBtn.textContent = 'Restart';
-    startBtn.onclick = () => resetPracticeConv();
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    _practiceSessionId  = d.sessionId;
+    _practiceTranscript = [{ role: 'assistant', content: d.greeting }];
+    _practiceLastSpeak  = d.greeting;
+
+    // Update UI
+    document.getElementById('practice-scenario-label').textContent = 'Scenario: ' + (PRACTICE_SCENARIOS[scenario] || scenario);
+    document.getElementById('practice-lang-badge').textContent = language === 'es' ? '🇲🇽 Spanish' : '🇺🇸 English';
+    document.getElementById('practice-session-area').classList.remove('hidden');
+    document.getElementById('practice-reset-btn').classList.remove('hidden');
+    document.getElementById('practice-start-btn').textContent = '▶ New Practice';
+    btn.disabled = false;
+
+    // Render chat with initial greeting
+    const chat = document.getElementById('practice-chat');
+    chat.innerHTML = '';
+    practicePushBubble('assistant', d.greeting);
+
+    // Render quality checks
+    practiceRenderQualityChecks();
+    document.getElementById('practice-notes').value = '';
+    document.getElementById('practice-save-status').textContent = '';
+
+    // Load history
+    practiceLoadHistory();
   } catch (e) {
-    errEl.textContent = '⚠ ' + e.message; errEl.classList.remove('hidden');
-    startBtn.disabled = false; startBtn.textContent = 'Start Call'; startBtn.onclick = startPracticeConv;
+    alert('Error starting practice: ' + e.message);
+    btn.disabled = false; btn.textContent = '▶ Start Practice';
   }
 }
 
-async function sendPracticeMsg() {
-  if (!tcPracticeRunning) return;
-  const clinicId = document.getElementById('tc-clinic')?.value;
-  const input    = document.getElementById('practice-input');
-  const text     = input.value.trim();
-  if (!text) return;
-  const errEl    = document.getElementById('practice-error');
-  input.value = ''; input.disabled = true;
-  document.getElementById('practice-send-btn').disabled = true;
-  errEl.classList.add('hidden');
-  appendBubble('user', text, null);
+async function practiceSend() {
+  if (!_practiceSessionId || !_trainClinicId) return;
+  const input = document.getElementById('practice-input');
+  const msg   = input?.value?.trim();
+  if (!msg) return;
+  input.value = '';
+
+  // Show caller bubble immediately
+  practicePushBubble('user', msg);
+
+  const sendBtn = document.getElementById('practice-send-btn');
+  sendBtn.disabled = true; sendBtn.textContent = '…';
+
+  // Show typing indicator
+  const chat = document.getElementById('practice-chat');
+  const typing = document.createElement('div');
+  typing.className = 'flex justify-start items-center gap-2';
+  typing.id = 'practice-typing';
+  typing.innerHTML = '<div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0">🤖</div><div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-3 py-2 text-slate-400 text-xs italic shadow-sm">Ana is thinking…</div>';
+  chat.appendChild(typing);
+  chat.scrollTop = chat.scrollHeight;
+
   try {
-    const r    = await fetch(`/superadmin/api/clinics/${clinicId}/ai/test`, {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/message/${_practiceSessionId}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ messages: tcPracticeMessages, userMessage: text }),
+      body: JSON.stringify({ message: msg }),
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error);
-    tcPracticeMessages = data.updatedMessages || tcPracticeMessages;
-    appendBubble('ai', data.speak, data);
-    const area = document.getElementById('practice-chat');
-    area.scrollTop = area.scrollHeight;
-    if (data.complete) {
-      tcPracticeRunning = false;
-      input.disabled = true;
-      document.getElementById('practice-send-btn').disabled = true;
-      const startBtn = document.getElementById('practice-start-btn');
-      startBtn.textContent = 'New Call'; startBtn.disabled = false;
-      startBtn.onclick = () => resetPracticeConv();
-    } else {
-      input.disabled = false;
-      document.getElementById('practice-send-btn').disabled = false;
-      input.focus();
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+
+    _practiceTranscript = d.transcript;
+    _practiceLastSpeak  = d.speak;
+
+    // Remove typing indicator and add Ana's bubble
+    document.getElementById('practice-typing')?.remove();
+    practicePushBubble('assistant', d.speak, { intent: d.intent, lang: d.language, emergency: d.emergencyDetected, complete: d.complete });
+
+    if (d.complete) {
+      document.getElementById('practice-status-indicator').textContent = 'Complete';
+      document.getElementById('practice-status-indicator').className = 'text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 font-medium';
     }
   } catch (e) {
-    errEl.textContent = '⚠ ' + e.message; errEl.classList.remove('hidden');
-    input.disabled = false;
-    document.getElementById('practice-send-btn').disabled = false;
+    document.getElementById('practice-typing')?.remove();
+    const errDiv = document.createElement('div');
+    errDiv.className = 'text-xs text-red-500 px-2';
+    errDiv.textContent = 'Error: ' + e.message;
+    chat.appendChild(errDiv);
+  } finally {
+    sendBtn.disabled = false; sendBtn.textContent = 'Send';
+    chat.scrollTop = chat.scrollHeight;
+  }
+}
+
+function practiceQuick(text) {
+  const input = document.getElementById('practice-input');
+  if (input) { input.value = text; input.focus(); }
+}
+
+function practicePushBubble(role, content, meta) {
+  const chat = document.getElementById('practice-chat');
+  if (!chat) return;
+  if (chat.querySelector('.text-center')) chat.innerHTML = '';
+
+  const isAna = role === 'assistant';
+  const emergency = meta?.emergency;
+  const complete  = meta?.complete;
+
+  let badges = '';
+  if (meta?.intent && meta.intent !== 'collecting')
+    badges += `<span class="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-1">${meta.intent}</span>`;
+  if (emergency)
+    badges += `<span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600 ml-1">🚨 Emergency</span>`;
+  if (complete)
+    badges += `<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 ml-1">✓ Complete</span>`;
+
+  const bubble = document.createElement('div');
+  bubble.className = isAna ? 'flex justify-start items-start gap-2' : 'flex justify-end';
+  bubble.innerHTML = isAna
+    ? `<div class="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-sm shrink-0 mt-0.5">🤖</div>
+       <div class="max-w-sm">
+         <div class="bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm">${escHtml(content)}${badges}</div>
+       </div>`
+    : `<div class="bg-violet-600 text-white text-sm rounded-2xl rounded-tr-sm px-3 py-2 max-w-sm">${escHtml(content)}</div>`;
+
+  chat.appendChild(bubble);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function practiceSpeakLast() {
+  if (!_practiceLastSpeak) return;
+  if (!('speechSynthesis' in window)) return alert('Voice preview is not available in this browser. Try Chrome or Edge.');
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(_practiceLastSpeak);
+  const lang = document.getElementById('practice-language')?.value || 'es';
+  utt.lang = lang === 'es' ? 'es-US' : 'en-US';
+  utt.rate = 0.95;
+  window.speechSynthesis.speak(utt);
+}
+
+function practiceReset() {
+  _practiceSessionId  = null;
+  _practiceTranscript = [];
+  _practiceLastSpeak  = '';
+  document.getElementById('practice-session-area').classList.add('hidden');
+  document.getElementById('practice-reset-btn').classList.add('hidden');
+  document.getElementById('practice-start-btn').textContent = '▶ Start Practice';
+  document.getElementById('practice-status-indicator').textContent = 'Active';
+  document.getElementById('practice-status-indicator').className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium';
+  document.getElementById('practice-chat').innerHTML = '<p class="text-xs text-slate-400 italic text-center">Practice conversation will appear here.</p>';
+}
+
+async function practiceSaveResult() {
+  if (!_practiceSessionId || !_trainClinicId) return alert('No active session to save.');
+  const quality = {};
+  QUALITY_ITEMS.forEach(item => {
+    const el = document.getElementById(`pq-${item.key}`);
+    if (el) quality[item.key] = el.value || null;
+  });
+  const notes = document.getElementById('practice-notes')?.value?.trim() || null;
+  const st = document.getElementById('practice-save-status');
+  try {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/sessions/${_practiceSessionId}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ quality, notes }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    st.textContent = 'Saved ✓';
+    st.className = 'text-xs text-emerald-600 font-medium';
+    setTimeout(() => { st.textContent = ''; st.className = 'text-xs text-slate-400'; }, 4000);
+    practiceLoadHistory();
+  } catch (e) {
+    st.textContent = 'Error: ' + e.message;
+    st.className = 'text-xs text-red-500';
+  }
+}
+
+async function practiceLoadHistory() {
+  if (!_trainClinicId) return;
+  const el = document.getElementById('practice-history-list');
+  if (!el) return;
+  try {
+    const r = await fetch(`/superadmin/api/practice/${_trainClinicId}/sessions`);
+    if (!r.ok) return;
+    const sessions = await r.json();
+    if (!sessions.length) {
+      el.innerHTML = '<p class="text-xs text-slate-400 italic">No saved sessions yet.</p>';
+      return;
+    }
+    el.innerHTML = sessions.map(s => {
+      const saved = s.status === 'saved';
+      return `<div class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl ${saved ? 'bg-emerald-50' : 'bg-slate-50'}">
+        <span class="text-lg shrink-0">🎤</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-slate-700 truncate">${escHtml(PRACTICE_SCENARIOS[s.scenario] || s.scenario || 'Practice')}</p>
+          <p class="text-xs text-slate-400">${s.language === 'es' ? 'Spanish' : 'English'} · ${new Date(s.created_at).toLocaleDateString()} ${new Date(s.created_at).toLocaleTimeString()} · ${saved ? '<span class="text-emerald-600 font-medium">Saved</span>' : 'Not saved'}</p>
+          ${s.notes ? `<p class="text-xs text-slate-500 italic truncate mt-0.5">"${escHtml(s.notes)}"</p>` : ''}
+        </div>
+        <button onclick="practiceDeleteSession(${s.id})" title="Delete session" class="shrink-0 text-slate-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50 text-lg leading-none">✕</button>
+      </div>`;
+    }).join('');
+  } catch (e) { console.error('practiceLoadHistory', e); }
+}
+
+async function practiceDeleteSession(id) {
+  if (!_trainClinicId || !confirm('Delete this practice session?')) return;
+  try {
+    await fetch(`/superadmin/api/practice/${_trainClinicId}/sessions/${id}`, { method: 'DELETE' });
+    practiceLoadHistory();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── Cost Dashboard ────────────────────────────────────────────────────────────
+
+function fmt$(n) { return '$' + Number(n || 0).toFixed(2); }
+
+function costKpi(label, value, valClass, bgClass, icon) {
+  return `<div class="stat-card bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+    <div class="flex items-start justify-between mb-3">
+      <div class="w-9 h-9 ${bgClass} rounded-lg flex items-center justify-center">${icon}</div>
+    </div>
+    <div class="text-2xl font-bold ${valClass}">${value}</div>
+    <div class="text-xs text-slate-400 mt-1 font-medium uppercase tracking-wide">${label}</div>
+  </div>`;
+}
+
+async function loadCostDashboard() {
+  try {
+    const [dash, clinics] = await Promise.all([
+      fetch('/superadmin/api/costs/dashboard').then(r => r.json()),
+      fetch('/superadmin/api/costs/clinics').then(r => r.json()),
+    ]);
+
+    // KPI grid
+    document.getElementById('cost-kpi-grid').innerHTML = [
+      costKpi('Calls Today',       dash.callsToday,                   'text-slate-800',   'bg-slate-100',   iconPhone()),
+      costKpi('Calls This Month',  (dash.callsThisMonth||0).toLocaleString(), 'text-indigo-700','bg-indigo-50', iconPhone()),
+      costKpi('AI Cost (Month)',   fmt$(dash.aiCostMonth),            'text-violet-700',  'bg-violet-50',   iconDollar()),
+      costKpi('Twilio Cost (Month)',fmt$(dash.twilioCostMonth),       'text-blue-700',    'bg-blue-50',     iconPhone()),
+      costKpi('Total Cost (Month)',fmt$(dash.totalCost),              'text-red-700',     'bg-red-50',      iconDollar()),
+      costKpi('Monthly Revenue',  fmt$(dash.monthlyRevenue),          'text-emerald-700', 'bg-emerald-50',  iconDollar()),
+      costKpi('Est. Profit',      fmt$(dash.profit),
+        dash.profit >= 0 ? 'text-emerald-700' : 'text-red-700',
+        dash.profit >= 0 ? 'bg-emerald-50'    : 'bg-red-50',     iconDollar()),
+      costKpi('AI Budget Left',   fmt$(dash.aiRemaining),
+        dash.aiRemaining > 5  ? 'text-emerald-700' :
+        dash.aiRemaining > 2  ? 'text-amber-700'   : 'text-red-700',
+        dash.aiRemaining > 5  ? 'bg-emerald-50'    :
+        dash.aiRemaining > 2  ? 'bg-amber-50'      : 'bg-red-50',  iconDollar()),
+    ].join('');
+
+    // Per-clinic table
+    const tbody = document.getElementById('cost-clinic-tbody');
+    if (!clinics.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400">No clients.</td></tr>';
+    } else {
+      tbody.innerHTML = clinics.map(c => {
+        const profitClass = c.profit >= 0 ? 'text-emerald-700 font-semibold' : 'text-red-600 font-semibold';
+        const statusBadge = { active:'<span class="badge bg-emerald-50 text-emerald-700">Active</span>',
+          suspended:'<span class="badge bg-amber-50 text-amber-700">Suspended</span>',
+          cancelled:'<span class="badge bg-slate-100 text-slate-500">Cancelled</span>' }[c.status] || c.status;
+        return `<tr class="border-t border-slate-100 hover:bg-slate-50 text-sm">
+          <td class="px-4 py-3 font-medium">${c.name}</td>
+          <td class="px-4 py-3">${statusBadge}</td>
+          <td class="px-4 py-3 text-right">${c.totalCalls}</td>
+          <td class="px-4 py-3 text-right">${c.totalMinutes}</td>
+          <td class="px-4 py-3 text-right text-slate-600">${fmt$(c.twilioCost)}</td>
+          <td class="px-4 py-3 text-right text-slate-600">${fmt$(c.aiCost)}</td>
+          <td class="px-4 py-3 text-right font-medium">${fmt$(c.totalCost)}</td>
+          <td class="px-4 py-3 text-right">${fmt$(c.monthlyPrice)}</td>
+          <td class="px-4 py-3 text-right ${profitClass}">${fmt$(c.profit)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Active alerts
+    await renderActiveAlerts();
+
+    // Alert history
+    await loadAlertHistory();
+
+  } catch(e) {
+    document.getElementById('cost-kpi-grid').innerHTML =
+      `<div class="col-span-4 text-sm text-red-400 text-center py-4">Error: ${e.message}</div>`;
+  }
+}
+
+async function renderActiveAlerts() {
+  try {
+    const alerts = await fetch('/superadmin/api/costs/alerts/active').then(r => r.json());
+    const panel  = document.getElementById('cost-alerts-panel');
+    const list   = document.getElementById('cost-alerts-list');
+    const dot    = document.getElementById('nav-costs-alerts');
+
+    if (!alerts.length) {
+      panel.classList.add('hidden');
+      dot.classList.add('hidden');
+      // Clear global banner
+      const banner = document.getElementById('alert-banner');
+      banner.innerHTML = '';
+      banner.classList.add('hidden');
+      return;
+    }
+
+    // Sidebar dot
+    dot.classList.remove('hidden');
+
+    // Alert panel inside cost view
+    panel.classList.remove('hidden');
+    list.innerHTML = alerts.map(a => {
+      const isCrit = a.severity === 'critical';
+      return `<div class="flex items-start gap-3 p-3 rounded-lg ${isCrit ? 'bg-red-50 border border-red-100' : 'bg-amber-50 border border-amber-100'}">
+        <svg class="w-4 h-4 mt-0.5 flex-shrink-0 ${isCrit ? 'text-red-500' : 'text-amber-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <p class="text-sm ${isCrit ? 'text-red-700' : 'text-amber-700'}">${a.message}</p>
+      </div>`;
+    }).join('');
+
+    // Global banner at top of page
+    const banner = document.getElementById('alert-banner');
+    banner.classList.remove('hidden');
+    banner.innerHTML = alerts.map(a => {
+      const isCrit = a.severity === 'critical';
+      return `<div class="px-6 py-2 text-sm font-medium ${isCrit ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'} flex items-center gap-2">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        ${a.message}
+        <button onclick="switchView('costs')" class="ml-auto text-xs underline opacity-80 hover:opacity-100">View Details</button>
+      </div>`;
+    }).join('');
+  } catch {}
+}
+
+async function checkAlerts() {
+  try {
+    await fetch('/superadmin/api/costs/alerts/check', { method: 'POST' });
+    await renderActiveAlerts();
+    await loadAlertHistory();
+  } catch(e) { alert('Error checking alerts: ' + e.message); }
+}
+
+async function loadAlertHistory() {
+  const el = document.getElementById('cost-alert-history');
+  if (!el) return;
+  try {
+    const rows = await fetch('/superadmin/api/costs/alerts/history').then(r => r.json());
+    if (!rows.length) {
+      el.innerHTML = '<p class="text-xs text-slate-400 italic">No alerts logged yet.</p>';
+      return;
+    }
+    el.innerHTML = `<table class="w-full text-xs">
+      <thead><tr class="border-b border-slate-100 text-slate-500 uppercase tracking-wide">
+        <th class="text-left py-2 pr-4">Date</th>
+        <th class="text-left py-2 pr-4">Type</th>
+        <th class="text-left py-2">Message</th>
+        <th class="text-right py-2">Value</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr class="border-t border-slate-50 hover:bg-slate-50">
+        <td class="py-2 pr-4 text-slate-400 whitespace-nowrap">${new Date(r.created_at).toLocaleString()}</td>
+        <td class="py-2 pr-4"><span class="font-mono text-slate-600">${r.alert_type}</span></td>
+        <td class="py-2 text-slate-700">${r.message}</td>
+        <td class="py-2 text-right font-medium">${r.value != null ? fmt$(r.value) : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch(e) {
+    el.innerHTML = `<p class="text-xs text-red-400">Error: ${e.message}</p>`;
+  }
+}
+
+// ── Cost Config ───────────────────────────────────────────────────────────────
+
+async function loadCostConfig() {
+  try {
+    const c = await fetch('/superadmin/api/costs/config').then(r => r.json());
+    document.getElementById('cfg-admin-phone').value   = c.admin_phone    || '';
+    document.getElementById('cfg-admin-email').value   = c.admin_email    || '';
+    document.getElementById('cfg-twilio-rate').value   = c.twilio_rate_per_min  ?? 0.0085;
+    document.getElementById('cfg-ai-rate').value       = c.ai_rate_per_call     ?? 0.08;
+    document.getElementById('cfg-ai-budget').value     = c.ai_monthly_budget    ?? 200;
+    document.getElementById('cfg-ai-low').value        = c.threshold_ai_low     ?? 5;
+    document.getElementById('cfg-ai-critical').value   = c.threshold_ai_critical ?? 2;
+    document.getElementById('cfg-twilio-low').value    = c.threshold_twilio_low  ?? 10;
+    document.getElementById('cfg-alerts-enabled').checked = !!c.alerts_enabled;
+  } catch(e) { console.error('loadCostConfig:', e); }
+}
+
+async function saveCostConfig() {
+  const btn = document.querySelector('[onclick="saveCostConfig()"]');
+  const msg = document.getElementById('cfg-save-msg');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const body = {
+      admin_phone:           document.getElementById('cfg-admin-phone').value.trim() || null,
+      admin_email:           document.getElementById('cfg-admin-email').value.trim() || null,
+      twilio_rate_per_min:   parseFloat(document.getElementById('cfg-twilio-rate').value)   || 0.0085,
+      ai_rate_per_call:      parseFloat(document.getElementById('cfg-ai-rate').value)        || 0.08,
+      ai_monthly_budget:     parseFloat(document.getElementById('cfg-ai-budget').value)      || 200,
+      threshold_ai_low:      parseFloat(document.getElementById('cfg-ai-low').value)         || 5,
+      threshold_ai_critical: parseFloat(document.getElementById('cfg-ai-critical').value)    || 2,
+      threshold_twilio_low:  parseFloat(document.getElementById('cfg-twilio-low').value)     || 10,
+      alerts_enabled:        document.getElementById('cfg-alerts-enabled').checked ? 1 : 0,
+    };
+    const r = await fetch('/superadmin/api/costs/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
+    msg.textContent = '✓ Saved';
+    msg.className   = 'text-sm text-emerald-600';
+    setTimeout(() => { msg.className = 'text-sm hidden'; }, 3000);
+  } catch(e) {
+    msg.textContent = '✗ ' + e.message;
+    msg.className   = 'text-sm text-red-600';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Settings';
   }
 }
 
@@ -3266,6 +4565,7 @@ switchView('dashboard');
 refreshAll();
 setInterval(refreshAll, 60_000);
 setTimeout(loadHealth, 500);
+setTimeout(renderActiveAlerts, 1000);
 </script>
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- PROMPT PREVIEW MODAL                                                        -->

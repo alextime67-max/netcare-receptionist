@@ -6,6 +6,12 @@ const fs        = require('fs');
 
 const twilio = require('twilio');
 
+const Anthropic = require('@anthropic-ai/sdk');
+const _anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const multer  = require('multer');
+const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
 const {
   getClinics, getClinicBySlug, getClinicById,
   createClinic, updateClinic, deleteClinic,
@@ -13,13 +19,21 @@ const {
   getClinicAiConfig, updateClinicAiConfig,
   getAllCalls, getCallCount, getCallWithTranscript,
   getCallVolumeByDay, getCallAnalyticsSummary,
-  getKnowledgeBase, upsertKnowledgeBase, getUnansweredQuestions,
-  getTrainingDocs, addTrainingDoc, deleteTrainingDoc,
+  getKnowledgeBase, upsertKnowledgeBase, upsertKbSources, saveWebsiteUrl, getUnansweredQuestions,
+  getCostConfig, saveCostConfig, getCostAlerts,
+  getTrainingSources, getTrainingSourceText, addTrainingSource, deleteTrainingSource,
   getTrainingFaqs, addTrainingFaq, updateTrainingFaq, deleteTrainingFaq,
+  getBusinessRules, addBusinessRule, updateBusinessRule, deleteBusinessRule,
+  saveManualNotes, getTrainingStatus,
+  createPracticeSession, getPracticeSession, updatePracticeTranscript,
+  savePracticeResult, listPracticeSessions, deletePracticeSession,
   db,
 } = require('../database/db');
 
-const { runTestMessage, runKbTest, getInitialGreeting, buildSystemPrompt, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
+const { getDashboardStats, getPerClinicCosts } = require('../services/costs');
+const { checkAndSendAlerts, getActiveAlerts }  = require('../services/alerts');
+
+const { runTestMessage, runKbTest, getInitialGreeting, buildSystemPrompt, buildKbPromptSection, INDUSTRY_TEMPLATES, getActiveSessions } = require('../services/ai');
 
 const SA_USER = process.env.SUPERADMIN_USER || 'superadmin';
 const SA_PASS = process.env.SUPERADMIN_PASS || 'SuperAdmin2024!';
@@ -222,6 +236,36 @@ router.get('/api/calls/:id', (req, res) => {
     if (!detail) return res.status(404).json({ error: 'Not found' });
     res.json(detail);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Voicemail recording proxy (fetches from Twilio with clinic credentials) ────
+
+router.get('/api/calls/:id/recording', async (req, res) => {
+  try {
+    const detail = getCallWithTranscript(+req.params.id);
+    if (!detail?.recording_url) return res.status(404).json({ error: 'No recording for this call' });
+
+    const clinic = getClinicById(detail.clinic_id);
+    if (!clinic?.twilio_sid || !clinic?.twilio_token)
+      return res.status(400).json({ error: 'Twilio credentials not configured for this clinic' });
+
+    // Ensure URL ends with .mp3 for audio streaming
+    const mp3Url = detail.recording_url.replace(/\.json$/, '').replace(/\/?$/, '.mp3');
+
+    const auth     = Buffer.from(`${clinic.twilio_sid}:${clinic.twilio_token}`).toString('base64');
+    const upstream = await fetch(mp3Url, { headers: { Authorization: `Basic ${auth}` } });
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: `Recording fetch failed: ${upstream.statusText}` });
+    }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Content-Disposition', `inline; filename="voicemail-${detail.id}.mp3"`);
+    upstream.body.pipe(res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Twilio credential test ────────────────────────────────────────────────────
@@ -509,6 +553,9 @@ router.put('/api/kb/:clinicId', (req, res) => {
     const clinic = getClinicById(+req.params.clinicId);
     if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
     upsertKnowledgeBase(+req.params.clinicId, req.body);
+    if (req.body.fieldSources && Object.keys(req.body.fieldSources).length > 0) {
+      upsertKbSources(+req.params.clinicId, req.body.fieldSources);
+    }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -534,128 +581,690 @@ router.post('/api/kb/test', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Training Center ───────────────────────────────────────────────────────────
+// ── Business Knowledge Engine ─────────────────────────────────────────────────
 
-router.get('/api/training/:clinicId', (req, res) => {
+const SSRF_BLOCKED = [
+  /^localhost$/i, /^127\./, /^10\./, /^192\.168\./,
+  /^172\.(1[6-9]|2\d|3[01])\./, /^::1$/, /^0\.0\.0\.0$/, /^169\.254\./,
+];
+
+function validatePublicUrl(rawUrl) {
+  let parsed;
+  try { parsed = new URL(rawUrl); } catch { return 'Invalid URL format'; }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return 'URL must use http or https';
+  const host = parsed.hostname;
+  if (SSRF_BLOCKED.some(r => r.test(host))) return 'Private or internal addresses are not allowed';
+  return null;
+}
+
+const KB_EXTRACTION_PROMPT = `You are an expert at understanding businesses and building structured knowledge bases for AI phone receptionists.
+
+Your task: Read the content below, DEEPLY UNDERSTAND this business, then write CONVERSATIONAL, FACTUAL content for each Knowledge Base section that an AI phone receptionist named Ana will use to answer callers naturally and accurately.
+
+CRITICAL RULES:
+- Only state facts EXPLICITLY found in this content. NEVER invent, assume, or fill gaps with generic text.
+- Write naturally as if briefing a human receptionist — not copying raw text
+- For phone numbers, addresses, and hours: be exact and complete
+- For services and providers: be specific (specialties, languages spoken, certifications)
+- Leave a field as "" if no relevant information was found — do not guess
+- FAQs must follow the format: Q: [question]\\nA: [answer]
+
+Return a JSON object with EXACTLY these keys (all must be present, use "" for missing fields):
+{
+  "business_name": "Official business name",
+  "services": "All services, specialties, treatments, procedures, and programs offered. Include pricing if mentioned.",
+  "doctors": "Each provider's full name, title (MD, DO, NP, PA, etc.), specialty, languages spoken, certifications. One provider per line.",
+  "locations": "Each physical location with: full street address, city/state/zip, phone number, fax, email, parking, transit, accessibility. One location per paragraph.",
+  "office_hours": "Complete operating hours for every day and every location. Be exact with times. Note holiday closures or after-hours procedures.",
+  "insurance": "All insurance plans, networks, and coverage types accepted. Include Medicare, Medicaid, self-pay options. Note any restrictions.",
+  "appointment_policy": "How to book (phone, online, walk-in), appointment types (new patient, follow-up, telehealth, same-day), preparation instructions.",
+  "cancellation_policy": "Rules for cancelling or rescheduling, advance notice required, fees for late cancellations or no-shows.",
+  "new_patient_requirements": "What new patients must do before their first visit: pre-registration, referral requirements, intake forms, insurance verification.",
+  "documents_needed": "Complete list of documents patients must bring: photo ID, insurance cards, referral letters, medical records, medication lists.",
+  "faqs": "The most important questions callers ask, with clear helpful answers. Format: Q: [question]\\nA: [answer]\\n\\nQ: [question]\\nA: [answer]",
+  "transfer_rules": "Specific situations when Ana should transfer to a live person: urgent clinical questions, billing disputes, specific staff requests. Include department phone numbers if available.",
+  "emergency_instructions": "After-hours emergency procedures, on-call nurse lines, when patients must call 911, nearest emergency room info."
+}
+
+Return ONLY valid JSON. No markdown fences. No text outside the JSON object.`;
+
+async function runKbExtraction(text) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured');
+  const aiResp = await _anthropicClient.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 3000,
+    messages: [{ role: 'user', content: `${KB_EXTRACTION_PROMPT}\n\nContent:\n${text}` }],
+  });
+  const raw = aiResp.content[0].text.trim()
+    .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+  const parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? raw);
+  return parsed;
+}
+
+router.post('/api/kb/:clinicId/import-file', _upload.single('file'), async (req, res) => {
   try {
     const clinic = getClinicById(+req.params.clinicId);
     if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    res.json({
-      docs: getTrainingDocs(+req.params.clinicId),
-      faqs: getTrainingFaqs(+req.params.clinicId),
-    });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-router.post('/api/training/:clinicId/docs', (req, res) => {
-  const { type, title, source, content } = req.body;
-  if (!type || !content) return res.status(400).json({ error: 'type and content are required' });
-  try {
-    const clinic = getClinicById(+req.params.clinicId);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    const id = addTrainingDoc(+req.params.clinicId, type, title, source, content);
-    res.json({ ok: true, id });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+    const fileName = req.file.originalname;
+    const ext = fileName.split('.').pop().toLowerCase();
+    let text = '';
 
-router.delete('/api/training/:clinicId/docs/:docId', (req, res) => {
-  try {
-    deleteTrainingDoc(+req.params.docId);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/api/training/:clinicId/faqs', (req, res) => {
-  const { question, answer } = req.body;
-  if (!question || !answer) return res.status(400).json({ error: 'question and answer required' });
-  try {
-    const id = addTrainingFaq(+req.params.clinicId, question, answer);
-    res.json({ ok: true, id });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.put('/api/training/:clinicId/faqs/:faqId', (req, res) => {
-  const { question, answer } = req.body;
-  if (!question || !answer) return res.status(400).json({ error: 'question and answer required' });
-  try {
-    updateTrainingFaq(+req.params.faqId, question, answer);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/api/training/:clinicId/faqs/:faqId', (req, res) => {
-  try {
-    deleteTrainingFaq(+req.params.faqId);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/api/training/:clinicId/train', (req, res) => {
-  try {
-    const clinicId = +req.params.clinicId;
-    const clinic   = getClinicById(clinicId);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-
-    const docs = getTrainingDocs(clinicId);
-    const faqs = getTrainingFaqs(clinicId);
-
-    const sections = [];
-    const websites = docs.filter(d => d.type === 'website');
-    const files    = docs.filter(d => d.type === 'file');
-    const notes    = docs.filter(d => d.type === 'notes');
-
-    if (websites.length)
-      sections.push(`IMPORTED WEBSITES:\n${websites.map(d => `[${d.title}]\n${d.content}`).join('\n\n')}`);
-    if (files.length)
-      sections.push(`UPLOADED DOCUMENTS:\n${files.map(d => `[${d.title}]\n${d.content}`).join('\n\n')}`);
-    if (notes.length)
-      sections.push(`MANUAL NOTES:\n${notes.map(d => `[${d.title}]\n${d.content}`).join('\n\n')}`);
-
-    const trainingNotes = sections.join('\n\n---\n\n');
-    updateClinicAiConfig(clinicId, { trainingNotes });
-
-    if (faqs.length) {
-      let existing = [];
-      try { existing = JSON.parse(clinic.ai_faq || '[]'); } catch {}
-      const incoming = faqs.map(f => ({ q: f.question, a: f.answer }));
-      const merged   = [
-        ...existing.filter(ef => !incoming.some(tf => tf.q.toLowerCase() === ef.q.toLowerCase())),
-        ...incoming,
-      ];
-      updateClinicAiConfig(clinicId, { faq: JSON.stringify(merged) });
+    if (ext === 'txt') {
+      text = req.file.buffer.toString('utf8');
+    } else if (ext === 'pdf') {
+      const pdfParse = require('pdf-parse');
+      const result = await pdfParse(req.file.buffer);
+      text = result.text;
+    } else if (ext === 'docx') {
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      text = result.value;
+    } else {
+      return res.status(400).json({ error: 'Only PDF, DOCX, and TXT files are supported' });
     }
 
-    res.json({ ok: true, docsCompiled: docs.length, faqsMerged: faqs.length });
+    text = text.replace(/\s+/g, ' ').trim().slice(0, 12000);
+    if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this file' });
+
+    const extracted = await runKbExtraction(text);
+    res.json({ ok: true, extracted, sourceType: ext, sourceName: fileName });
+  } catch (e) {
+    console.error('[KB File Import]', e.message);
+    if (e.message.includes('JSON')) return res.status(500).json({ error: 'AI could not structure file content. Try a different file.' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/api/kb/:clinicId/import-website', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'url is required' });
+    const urlErr = validatePublicUrl(url);
+    if (urlErr) return res.status(400).json({ error: urlErr });
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not configured' });
+    }
+
+    // Fetch website with timeout + size limit
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    let rawHtml = '';
+    try {
+      const resp = await fetch(url, { signal: controller.signal, redirect: 'follow' });
+      if (!resp.ok) return res.status(400).json({ error: `Site returned HTTP ${resp.status}` });
+      const reader = resp.body.getReader();
+      let bytesRead = 0;
+      const MAX_BYTES = 500 * 1024;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesRead += value.length;
+        rawHtml += Buffer.from(value).toString('utf8');
+        if (bytesRead >= MAX_BYTES) { reader.cancel(); break; }
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Strip dangerous and nav HTML, then all tags
+    let text = rawHtml
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+      .replace(/<header[\s\S]*?<\/header>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ')
+      .replace(/\s+/g, ' ').trim()
+      .slice(0, 8000);
+
+    if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this URL' });
+
+    let extracted;
+    try {
+      extracted = await runKbExtraction(text);
+    } catch {
+      return res.status(500).json({ error: 'AI could not structure website content. Try a more content-rich page.' });
+    }
+
+    res.json({ ok: true, extracted });
+  } catch (e) {
+    if (e.name === 'AbortError') return res.status(408).json({ error: 'Website request timed out (10s)' });
+    console.error('[KB Import]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/api/kb/:clinicId/save-website-url', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const { url } = req.body;
+    if (url) {
+      const urlErr = validatePublicUrl(url);
+      if (urlErr) return res.status(400).json({ error: urlErr });
+    }
+    saveWebsiteUrl(+req.params.clinicId, url || null);
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/api/training/:clinicId/fetch-url', async (req, res) => {
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: 'url required' });
+// ── AI Training Center ────────────────────────────────────────────────────────
+
+const TRAIN_ANA_PROMPT = `You are building a complete, consolidated Knowledge Base for an AI phone receptionist named Ana.
+
+You have received multiple information sources. Your task:
+1. SYNTHESIZE all information into clean, structured knowledge
+2. REMOVE duplicates — keep the most complete and specific version
+3. PRIORITY ORDER: Manual Notes (highest) → FAQs/Business Rules → Documents/Website (lowest)
+4. NEVER invent or assume information not found in the provided sources
+5. Write conversationally — as if briefing an experienced human receptionist
+6. If a field has no relevant information from any source, use "" (empty string)
+7. Business Rules should inform the "transfer_rules" and "do_not_answer" fields
+8. FAQs should be included in the "faqs" field formatted as Q: / A: pairs
+
+Return a JSON object with EXACTLY these keys (all required, use "" for missing):
+{
+  "business_name": "Official business name",
+  "services": "All services, specialties, treatments offered — written conversationally",
+  "doctors": "Each provider: name, title, specialty, languages, certifications. One per line.",
+  "locations": "Each location: full address, phone, email, parking, transit. One per paragraph.",
+  "office_hours": "Complete hours every day for every location. Note holiday hours.",
+  "insurance": "All insurance plans accepted including Medicare, Medicaid, self-pay. Note restrictions.",
+  "appointment_policy": "How to book, appointment types, preparation, same-day availability.",
+  "cancellation_policy": "Notice required, late cancellation fees, no-show policy.",
+  "new_patient_requirements": "What new patients must do before first visit.",
+  "documents_needed": "Documents to bring: ID, insurance card, referrals, records, medication list.",
+  "faqs": "Q: [question]\\nA: [answer]\\n\\nQ: [question]\\nA: [answer]",
+  "transfer_rules": "When Ana transfers to a live person. Include department numbers if available.",
+  "emergency_instructions": "After-hours emergency procedures, 911 guidance, on-call nurse info.",
+  "do_not_answer": "Topics Ana must never answer — from business rules and restrictions."
+}
+
+Return ONLY valid JSON. No markdown. No text outside the JSON object.`;
+
+router.get('/api/train/:clinicId/status', (req, res) => {
   try {
-    const parsed = new URL(url);
-    const mod    = parsed.protocol === 'https:' ? require('https') : require('http');
-    const raw    = await new Promise((resolve, reject) => {
-      const req2 = mod.get(url, { timeout: 12000, headers: { 'User-Agent': 'NetCare-Admin/2.0' } }, (resp) => {
-        let data = '';
-        resp.on('data', chunk => { data += chunk; if (data.length > 250000) req2.destroy(); });
-        resp.on('end', () => resolve(data));
-      });
-      req2.on('error', reject);
-      req2.on('timeout', () => { req2.destroy(); reject(new Error('Request timed out')); });
-    });
-    const text = raw
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const status  = getTrainingStatus(+req.params.clinicId);
+    const sources = getTrainingSources(+req.params.clinicId);
+    const faqs    = getTrainingFaqs(+req.params.clinicId);
+    const rules   = getBusinessRules(+req.params.clinicId);
+    res.json({ ...status, sources, faqs, rules });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/train/:clinicId/website', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'url is required' });
+    const urlErr = validatePublicUrl(url);
+    if (urlErr) return res.status(400).json({ error: urlErr });
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    let rawHtml = '';
+    try {
+      const resp = await fetch(url, { signal: controller.signal, redirect: 'follow' });
+      if (!resp.ok) return res.status(400).json({ error: `Site returned HTTP ${resp.status}` });
+      const reader = resp.body.getReader();
+      let bytesRead = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesRead += value.length;
+        rawHtml += Buffer.from(value).toString('utf8');
+        if (bytesRead >= 500 * 1024) { reader.cancel(); break; }
+      }
+    } finally { clearTimeout(timer); }
+
+    let text = rawHtml
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
       .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+      .replace(/<header[\s\S]*?<\/header>/gi, ' ')
       .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 15000);
-    res.json({ ok: true, content: text, length: text.length });
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ')
+      .replace(/\s+/g, ' ').trim().slice(0, 12000);
+
+    if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this URL' });
+
+    const id = addTrainingSource(+req.params.clinicId, 'website', url, text);
+    const sources = getTrainingSources(+req.params.clinicId);
+    res.json({ ok: true, id, sources, charCount: text.length });
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    if (e.name === 'AbortError') return res.status(408).json({ error: 'Website request timed out (10s)' });
+    console.error('[Train Website]', e.message);
+    res.status(500).json({ error: e.message });
   }
+});
+
+router.post('/api/train/:clinicId/file', _upload.single('file'), async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const fileName = req.file.originalname;
+    const ext = fileName.split('.').pop().toLowerCase();
+    let text = '';
+
+    if (ext === 'txt') {
+      text = req.file.buffer.toString('utf8');
+    } else if (ext === 'pdf') {
+      const pdfParse = require('pdf-parse');
+      const result = await pdfParse(req.file.buffer);
+      text = result.text;
+    } else if (ext === 'docx') {
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      text = result.value;
+    } else {
+      return res.status(400).json({ error: 'Only PDF, DOCX, and TXT files are supported' });
+    }
+
+    text = text.replace(/\s+/g, ' ').trim().slice(0, 12000);
+    if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this file' });
+
+    const id = addTrainingSource(+req.params.clinicId, ext, fileName, text);
+    const sources = getTrainingSources(+req.params.clinicId);
+    res.json({ ok: true, id, sources, charCount: text.length });
+  } catch (e) {
+    console.error('[Train File]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/api/train/:clinicId/source/:sourceId', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    deleteTrainingSource(+req.params.sourceId, +req.params.clinicId);
+    const sources = getTrainingSources(+req.params.clinicId);
+    res.json({ ok: true, sources });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/train/:clinicId/faqs', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    res.json(getTrainingFaqs(+req.params.clinicId));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/train/:clinicId/faqs', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const { question, answer } = req.body;
+    if (!question?.trim() || !answer?.trim()) return res.status(400).json({ error: 'question and answer are required' });
+    addTrainingFaq(+req.params.clinicId, question, answer);
+    res.json({ ok: true, faqs: getTrainingFaqs(+req.params.clinicId) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/train/:clinicId/faqs/:faqId', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const { question, answer } = req.body;
+    if (!question?.trim() || !answer?.trim()) return res.status(400).json({ error: 'question and answer are required' });
+    updateTrainingFaq(+req.params.faqId, +req.params.clinicId, question, answer);
+    res.json({ ok: true, faqs: getTrainingFaqs(+req.params.clinicId) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/train/:clinicId/faqs/:faqId', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    deleteTrainingFaq(+req.params.faqId, +req.params.clinicId);
+    res.json({ ok: true, faqs: getTrainingFaqs(+req.params.clinicId) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/train/:clinicId/rules', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    res.json(getBusinessRules(+req.params.clinicId));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/train/:clinicId/rules', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const { rule_text } = req.body;
+    if (!rule_text?.trim()) return res.status(400).json({ error: 'rule_text is required' });
+    addBusinessRule(+req.params.clinicId, rule_text);
+    res.json({ ok: true, rules: getBusinessRules(+req.params.clinicId) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/train/:clinicId/rules/:ruleId', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const { rule_text } = req.body;
+    if (!rule_text?.trim()) return res.status(400).json({ error: 'rule_text is required' });
+    updateBusinessRule(+req.params.ruleId, +req.params.clinicId, rule_text);
+    res.json({ ok: true, rules: getBusinessRules(+req.params.clinicId) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/train/:clinicId/rules/:ruleId', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    deleteBusinessRule(+req.params.ruleId, +req.params.clinicId);
+    res.json({ ok: true, rules: getBusinessRules(+req.params.clinicId) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/train/:clinicId/manual', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    saveManualNotes(+req.params.clinicId, req.body.notes || null);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/train/:clinicId/train', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const sources = getTrainingSourceText(+req.params.clinicId);
+    const faqs    = getTrainingFaqs(+req.params.clinicId);
+    const rules   = getBusinessRules(+req.params.clinicId);
+    const kb      = getKnowledgeBase(+req.params.clinicId);
+    const manualNotes = kb?.manual_notes || '';
+
+    if (!sources.length && !faqs.length && !rules.length && !manualNotes) {
+      return res.status(400).json({ error: 'No training data found. Add at least one source, FAQ, rule, or manual notes before training.' });
+    }
+
+    let context = '';
+
+    if (manualNotes) {
+      context += `\n\n=== MANUAL NOTES (HIGHEST PRIORITY — ALWAYS OVERRIDE) ===\n${manualNotes}`;
+    }
+
+    if (faqs.length > 0) {
+      context += `\n\n=== FREQUENTLY ASKED QUESTIONS (HIGH PRIORITY) ===\n`;
+      context += faqs.map(f => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n');
+    }
+
+    if (rules.length > 0) {
+      context += `\n\n=== BUSINESS RULES FOR ANA (HIGH PRIORITY) ===\n`;
+      context += rules.map(r => `- ${r.rule_text}`).join('\n');
+    }
+
+    for (const src of sources) {
+      context += `\n\n=== SOURCE: ${src.source_type.toUpperCase()} (${src.source_name || 'unnamed'}) ===\n${src.raw_text}`;
+    }
+
+    context = context.trim().slice(0, 16000);
+
+    const aiResp = await _anthropicClient.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      messages: [{
+        role: 'user',
+        content: `${TRAIN_ANA_PROMPT}\n\nBusiness name context: "${clinic.name}"\n\nTRAINING DATA:\n${context}`,
+      }],
+    });
+
+    let trained;
+    try {
+      const raw = aiResp.content[0].text.trim()
+        .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      trained = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? raw);
+    } catch {
+      return res.status(500).json({ error: 'AI could not generate structured knowledge. Add more content-rich sources and try again.' });
+    }
+
+    const KB_TRAIN_FIELDS = ['services','doctors','locations','office_hours','insurance',
+      'appointment_policy','cancellation_policy','new_patient_requirements',
+      'documents_needed','faqs','transfer_rules','emergency_instructions','do_not_answer'];
+
+    const fieldSources = {};
+    for (const field of KB_TRAIN_FIELDS) {
+      if (trained[field]?.trim()) {
+        fieldSources[field] = { type: 'trained', name: `Ana Training — ${new Date().toLocaleDateString()}` };
+      }
+    }
+
+    upsertKnowledgeBase(+req.params.clinicId, trained);
+    upsertKbSources(+req.params.clinicId, fieldSources);
+
+    const fieldsTrained = KB_TRAIN_FIELDS.filter(f => trained[f]?.trim()).length;
+    res.json({ ok: true, fieldsTrained, businessName: trained.business_name || clinic.name });
+  } catch (e) {
+    console.error('[Train Ana]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/api/train/:clinicId/test', async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: 'question required' });
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const kb = getKnowledgeBase(+req.params.clinicId);
+    const result = await runKbTest(clinic, kb, question);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Practice Conversation ─────────────────────────────────────────────────────
+
+const SCENARIO_CONTEXTS = {
+  new_patient_appointment:  'PRACTICE SCENARIO: A new patient is calling for the very first time to schedule an appointment. They may not know exactly what specialty they need. Be welcoming and helpful.',
+  reschedule_existing:      'PRACTICE SCENARIO: An existing patient wants to reschedule a previous appointment. They may be in a hurry or slightly frustrated.',
+  ask_insurance:            'PRACTICE SCENARIO: The caller wants to know which insurance plans are accepted. They are comparing options before choosing a provider.',
+  ask_office_hours:         'PRACTICE SCENARIO: The caller is asking about office hours and whether they can come in today.',
+  ask_location:             'PRACTICE SCENARIO: The caller needs the office address, parking information, or directions.',
+  cancel_appointment:       'PRACTICE SCENARIO: The caller wants to cancel an existing appointment. Collect their name, the appointment date/time, and reason for cancellation.',
+  elderly_spanish_slow:     'PRACTICE SCENARIO: An elderly Spanish-speaking patient is calling. They speak slowly, may repeat themselves, and need extra patience. Respond entirely in Spanish. Speak slowly and clearly. Confirm each piece of information.',
+  angry_caller:             'PRACTICE SCENARIO: The caller is frustrated or upset — possibly about a wait time, billing issue, or previous bad experience. De-escalate professionally. Do not argue.',
+  unknown_question:         'PRACTICE SCENARIO: The caller asks a question Ana does not have information about in the knowledge base. Ana must not invent an answer — she should offer to take a message or connect them with a staff member.',
+  emergency_urgent:         'PRACTICE SCENARIO: The caller may have a medical emergency or urgent situation. Follow emergency protocols. Ask about severity. Instruct to call 911 if life-threatening.',
+  ask_pricing:              'PRACTICE SCENARIO: The caller is asking about prices, fees, or costs for services. If pricing is not in the knowledge base, do not invent numbers. Offer to have someone from billing call them back.',
+  wants_human:              'PRACTICE SCENARIO: The caller immediately asks to speak with a real person or the front desk. Follow the configured transfer rules. Be polite and explain Ana can help while they wait, or offer to take a message.',
+};
+
+router.post('/api/practice/:clinicId/start', async (req, res) => {
+  try {
+    const clinic = getClinicAiConfig(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const { scenario = 'new_patient_appointment', language = 'es' } = req.body;
+    const sessionId = createPracticeSession(+req.params.clinicId, scenario, language);
+    const greeting  = getInitialGreeting(clinic);
+
+    const initialTranscript = [{ role: 'assistant', content: greeting, ts: new Date().toISOString() }];
+    updatePracticeTranscript(sessionId, +req.params.clinicId, initialTranscript);
+
+    res.json({ ok: true, sessionId, greeting, scenario, language });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/practice/:clinicId/message/:sessionId', async (req, res) => {
+  try {
+    const clinic = getClinicAiConfig(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const session = getPracticeSession(+req.params.sessionId, +req.params.clinicId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const { message } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error: 'message is required' });
+
+    // Load current transcript as conversation history for the AI
+    let transcriptArr = [];
+    try { transcriptArr = JSON.parse(session.transcript || '[]'); } catch {}
+
+    // Build conversationMessages in Claude format (role: user/assistant, content: string)
+    // The existing transcript stores full objects; extract just role+content for the AI call
+    const conversationMessages = transcriptArr.map(t => ({ role: t.role, content: t.content }));
+
+    // Add scenario context to the clinic object for this practice call
+    const scenarioCtx = SCENARIO_CONTEXTS[session.scenario] || '';
+    const practiceClinic = {
+      ...clinic,
+      ai_master_prompt: [
+        scenarioCtx,
+        'PRACTICE MODE: You are being tested by a NetCare Super Admin. Behave exactly as you would on a real phone call.',
+        session.language === 'es' ? 'DEFAULT LANGUAGE: Start in Spanish unless the caller uses English.' : 'DEFAULT LANGUAGE: Start in English unless the caller uses Spanish.',
+        clinic.ai_master_prompt || '',
+      ].filter(Boolean).join('\n\n'),
+    };
+
+    // Build system prompt with KB so practice uses the same knowledge as live calls
+    const kb = getKnowledgeBase(+req.params.clinicId);
+    let systemPrompt = buildSystemPrompt(practiceClinic);
+    if (kb) systemPrompt += buildKbPromptSection(kb, null);
+
+    const allMessages = [...conversationMessages, { role: 'user', content: message }];
+    const aiResp = await _anthropicClient.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 600,
+      system: systemPrompt,
+      messages: allMessages,
+    });
+
+    const rawText = aiResp.content[0].text.trim();
+    let parsed;
+    try {
+      const jsonStr = rawText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      parsed = JSON.parse(jsonStr.match(/\{[\s\S]*\}/)?.[0] ?? jsonStr);
+    } catch {
+      parsed = { speak: rawText.substring(0, 200), language: session.language || 'es', intent: 'collecting', collected: {}, complete: false, emergencyDetected: false };
+    }
+
+    const result = {
+      speak:             parsed.speak             || 'I had a technical issue.',
+      language:          parsed.language          || session.language || 'es',
+      complete:          parsed.complete          || false,
+      emergencyDetected: parsed.emergencyDetected || false,
+      intent:            parsed.intent            || 'collecting',
+      collected:         parsed.collected         || {},
+    };
+
+    // Append both the user turn and Ana's response to the transcript
+    transcriptArr.push({ role: 'user',      content: message,        ts: new Date().toISOString() });
+    transcriptArr.push({ role: 'assistant', content: result.speak,   ts: new Date().toISOString(), intent: result.intent, language: result.language, complete: result.complete, emergencyDetected: result.emergencyDetected });
+
+    updatePracticeTranscript(+req.params.sessionId, +req.params.clinicId, transcriptArr);
+
+    res.json({
+      speak:             result.speak,
+      language:          result.language,
+      intent:            result.intent,
+      complete:          result.complete,
+      emergencyDetected: result.emergencyDetected,
+      collected:         result.collected,
+      transcript:        transcriptArr,
+    });
+  } catch (e) {
+    console.error('[Practice]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put('/api/practice/:clinicId/sessions/:sessionId', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.clinicId)) return res.status(404).json({ error: 'Clinic not found' });
+    const { quality, notes } = req.body;
+    savePracticeResult(+req.params.sessionId, +req.params.clinicId, quality || {}, notes);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/practice/:clinicId/sessions', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.clinicId)) return res.status(404).json({ error: 'Clinic not found' });
+    res.json(listPracticeSessions(+req.params.clinicId, 30));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/practice/:clinicId/sessions/:sessionId', (req, res) => {
+  try {
+    const session = getPracticeSession(+req.params.sessionId, +req.params.clinicId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    let transcript = []; let quality = {};
+    try { transcript = JSON.parse(session.transcript || '[]'); } catch {}
+    try { quality    = JSON.parse(session.quality    || '{}'); } catch {}
+    res.json({ ...session, transcript, quality });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/practice/:clinicId/sessions/:sessionId', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.clinicId)) return res.status(404).json({ error: 'Clinic not found' });
+    deletePracticeSession(+req.params.sessionId, +req.params.clinicId);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Cost Management ───────────────────────────────────────────────────────────
+
+router.get('/api/costs/dashboard', (_req, res) => {
+  try { res.json(getDashboardStats()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/clinics', (_req, res) => {
+  try { res.json(getPerClinicCosts()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/alerts/active', async (_req, res) => {
+  try { res.json(await getActiveAlerts()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/alerts/history', (_req, res) => {
+  try { res.json(getCostAlerts(50)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/costs/alerts/check', async (_req, res) => {
+  try {
+    const results = await checkAndSendAlerts();
+    res.json({ ok: true, triggered: results.length, alerts: results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/costs/config', (_req, res) => {
+  try { res.json(getCostConfig()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/costs/config', (req, res) => {
+  try {
+    saveCostConfig(req.body);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
