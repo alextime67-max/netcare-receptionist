@@ -636,23 +636,42 @@ router.post('/api/kb/:clinicId/import-website', async (req, res) => {
 
     if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from this URL' });
 
-    // Ask Claude to extract structured info
+    // Ask Claude to deeply understand the business and structure conversational KB content
     const aiResp = await _anthropicClient.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 3000,
       messages: [{
         role: 'user',
-        content: `You are extracting business information from a website to populate a knowledge base for an AI phone receptionist.
+        content: `You are an expert at understanding businesses from their websites and building structured knowledge bases for AI phone receptionists.
 
-From the text below, extract and organize information into these categories:
-- services: List of services offered
-- locations: Physical addresses, neighborhoods, cities
-- office_hours: Days and hours of operation
-- insurance: Insurance plans accepted
-- faqs: Common questions and answers
-- appointment_policy: How to schedule appointments
+Your task: Read the website text below, DEEPLY UNDERSTAND this business, then write CONVERSATIONAL, FACTUAL content for each Knowledge Base section that an AI phone receptionist named Ana will use to answer callers naturally and accurately.
 
-Return a JSON object with exactly these keys. Only include categories where you found clear, relevant information. Keep content concise and factual. Do not include HTML, scripts, or navigation text. Return only valid JSON with no markdown fences.
+CRITICAL RULES:
+- Only state facts EXPLICITLY found on this website. NEVER invent, assume, or fill gaps with generic text.
+- Write naturally as if briefing a human receptionist — not copying raw website text
+- For phone numbers, addresses, and hours: be exact and complete
+- For services and providers: be specific (specialties, languages spoken, certifications)
+- Leave a field as "" if no relevant information was found — do not guess
+- FAQs must follow the format: Q: [question]\\nA: [answer]
+
+Return a JSON object with EXACTLY these keys (all must be present, use "" for missing fields):
+{
+  "business_name": "Official business name as shown on the website",
+  "services": "All services, specialties, treatments, procedures, and programs offered. Include pricing if mentioned. Write as clear readable paragraphs, not a raw copy.",
+  "doctors": "Each provider's full name, title (MD, DO, NP, PA, etc.), specialty or focus area, languages spoken, and any certifications mentioned. One provider per line.",
+  "locations": "Each physical location with: full street address, city/state/zip, phone number, fax, email, parking instructions, public transit, accessibility info. One location per paragraph.",
+  "office_hours": "Complete operating hours for every day and every location. Be exact with times. Note holiday closures, after-hours procedures, or seasonal changes if mentioned.",
+  "insurance": "All insurance plans, networks, and coverage types accepted. Include Medicare, Medicaid, and self-pay options if mentioned. Note any restrictions.",
+  "appointment_policy": "How to book appointments (phone, online, walk-in), appointment types available (new patient, follow-up, telehealth, same-day), preparation instructions, what to expect.",
+  "cancellation_policy": "Rules for cancelling or rescheduling, advance notice required, fees for late cancellations or no-shows, exceptions policy.",
+  "new_patient_requirements": "What new patients must do before their first visit: pre-registration, referral requirements, intake forms, insurance verification steps.",
+  "documents_needed": "Complete list of documents patients must bring to every visit and to specific visit types: photo ID, insurance cards, referral letters, medical records, medication lists.",
+  "faqs": "The most important questions callers typically ask, with clear helpful answers. Format: Q: [question]\\nA: [answer]\\n\\nQ: [question]\\nA: [answer]",
+  "transfer_rules": "Specific situations when Ana should transfer the caller to a live person: urgent clinical questions, billing disputes, specific staff requests, prescription issues. Include direct department phone numbers if available.",
+  "emergency_instructions": "After-hours emergency procedures, on-call nurse lines, when patients must call 911 immediately, nearest emergency room info if mentioned."
+}
+
+Return ONLY valid JSON. No markdown fences. No text outside the JSON object.
 
 Website text:
 ${text}`,
@@ -665,7 +684,7 @@ ${text}`,
         .replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
       extracted = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? raw);
     } catch {
-      return res.status(500).json({ error: 'AI could not parse website content into structured data' });
+      return res.status(500).json({ error: 'AI could not structure website content. Try a more content-rich page.' });
     }
 
     res.json({ ok: true, extracted });

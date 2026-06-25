@@ -2916,12 +2916,18 @@ async function loadUnanswered() {
 // ── Website Knowledge Import ──────────────────────────────────────────────────
 
 const KB_IMPORT_FIELDS = [
-  { key: 'services',           label: 'Services Offered',    kbId: 'kb-services' },
-  { key: 'locations',          label: 'Locations',           kbId: 'kb-locations' },
-  { key: 'office_hours',       label: 'Office Hours',        kbId: 'kb-office-hours' },
-  { key: 'insurance',          label: 'Insurance Accepted',  kbId: 'kb-insurance' },
-  { key: 'appointment_policy', label: 'Appointment Policy',  kbId: 'kb-appointment-policy' },
-  { key: 'faqs',               label: 'FAQs',                kbId: 'kb-faqs' },
+  { key: 'services',                 label: 'Services Offered',          kbId: 'kb-services' },
+  { key: 'doctors',                  label: 'Doctors & Providers',        kbId: 'kb-doctors' },
+  { key: 'locations',                label: 'Locations & Contact Info',   kbId: 'kb-locations' },
+  { key: 'office_hours',             label: 'Office Hours',               kbId: 'kb-office-hours' },
+  { key: 'insurance',                label: 'Insurance Accepted',         kbId: 'kb-insurance' },
+  { key: 'appointment_policy',       label: 'Appointment Policy',         kbId: 'kb-appointment-policy' },
+  { key: 'cancellation_policy',      label: 'Cancellation Policy',        kbId: 'kb-cancellation-policy' },
+  { key: 'new_patient_requirements', label: 'New Patient Requirements',   kbId: 'kb-new-patient-requirements' },
+  { key: 'documents_needed',         label: 'Documents Needed',           kbId: 'kb-documents-needed' },
+  { key: 'faqs',                     label: 'FAQs',                       kbId: 'kb-faqs' },
+  { key: 'transfer_rules',           label: 'Transfer Rules',             kbId: 'kb-transfer-rules' },
+  { key: 'emergency_instructions',   label: 'Emergency Instructions',     kbId: 'kb-emergency-instructions' },
 ];
 
 let _importedData = {};
@@ -2951,24 +2957,37 @@ async function importFromWebsite() {
     if (!r.ok) throw new Error(data.error || 'Import failed');
 
     _importedData = data.extracted || {};
-    const populated = KB_IMPORT_FIELDS.filter(f => _importedData[f.key]);
+    const bizName  = (_importedData.business_name || '').trim();
+    const populated = KB_IMPORT_FIELDS.filter(f => {
+      const v = _importedData[f.key];
+      return v && String(v).trim().length > 0;
+    });
     if (!populated.length) {
       status.className = 'text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-700';
-      status.textContent = 'No usable business information found on this page. Try a more content-rich URL (e.g. About or Services page).';
+      status.textContent = 'No structured business information could be extracted. Try a more content-rich URL (e.g. About, Services, or Contact page).';
       return;
     }
 
-    // Render preview with editable textareas
+    // Render preview with editable textareas — larger rows for richer content
     const fieldsEl = document.getElementById('kb-import-fields');
-    fieldsEl.innerHTML = populated.map(f => `
-      <div class="space-y-1">
+    const bizHeader = bizName
+      ? `<div class="col-span-full bg-indigo-100 border border-indigo-200 rounded-lg px-3 py-2 text-xs">
+           <span class="font-semibold text-indigo-800">Business identified:</span>
+           <span class="text-indigo-700 ml-1">${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+         </div>` : '';
+    fieldsEl.innerHTML = bizHeader + populated.map(f => {
+      const content = String(_importedData[f.key] || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const rows = Math.min(10, Math.max(3, Math.ceil(content.length / 80)));
+      return `<div class="space-y-1">
         <label class="text-xs font-semibold text-indigo-700 uppercase tracking-wide">${f.label}</label>
-        <textarea id="imp-${f.key}" rows="3"
-          class="w-full text-xs border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y bg-white">${(_importedData[f.key] || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
-      </div>`).join('');
+        <textarea id="imp-${f.key}" rows="${rows}"
+          class="w-full text-xs border border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y bg-white">${content}</textarea>
+      </div>`;
+    }).join('');
 
+    const bizLabel = bizName ? ` for <strong>${bizName.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong>` : '';
     status.className = 'text-xs px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700';
-    status.textContent = `Extracted ${populated.length} section(s) from ${url}. Review below and click "Apply to Knowledge Base".`;
+    status.innerHTML = `Extracted ${populated.length} section(s)${bizLabel}. Review below, edit if needed, then click "Apply to Knowledge Base".`;
     preview.classList.remove('hidden');
   } catch (e) {
     status.className = 'text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700';
