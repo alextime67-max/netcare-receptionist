@@ -129,6 +129,26 @@ function initDb() {
       question   TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS training_documents (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id  INTEGER NOT NULL,
+      type       TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      source     TEXT,
+      content    TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS training_faqs (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      clinic_id  INTEGER NOT NULL,
+      question   TEXT NOT NULL,
+      answer     TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE
+    );
   `);
 
   // ── Migrations: add clinic_id to all data tables ──────────────────────────
@@ -182,6 +202,10 @@ function initDb() {
 
   _addColumnIfMissing('clinics', 'ivr_enabled', 'INTEGER DEFAULT 0');
   _addColumnIfMissing('clinics', 'ivr_config',  'TEXT');
+
+  // ── Migrations: AI Training Center ────────────────────────────────────────
+
+  _addColumnIfMissing('clinics', 'ai_training_notes', 'TEXT');
 
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
@@ -832,7 +856,7 @@ function updateClinicAiConfig(id, data) {
     'ai_business_description', 'ai_services', 'ai_faq',
     'ai_appointment_instructions', 'ai_transfer_rules',
     'ai_office_hours', 'ai_after_hours_message', 'ai_emergency_instructions',
-    'ai_industry_template', 'ai_master_prompt',
+    'ai_industry_template', 'ai_master_prompt', 'ai_training_notes',
   ];
   const map = {
     ai_assistant_name:           data.assistantName,
@@ -848,6 +872,7 @@ function updateClinicAiConfig(id, data) {
     ai_emergency_instructions:   data.emergencyInstructions,
     ai_industry_template:        data.industryTemplate,
     ai_master_prompt:            data.masterPrompt,
+    ai_training_notes:           data.trainingNotes,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])
@@ -987,6 +1012,38 @@ function getUnansweredQuestions(clinicId, limit = 50, offset = 0) {
   `).all(...params);
 }
 
+// ── Training Center ───────────────────────────────────────────────────────────
+
+function getTrainingDocs(clinicId) {
+  return db.prepare('SELECT * FROM training_documents WHERE clinic_id = ? ORDER BY created_at DESC').all(clinicId);
+}
+
+function addTrainingDoc(clinicId, type, title, source, content) {
+  return db.prepare('INSERT INTO training_documents (clinic_id, type, title, source, content) VALUES (?, ?, ?, ?, ?)')
+    .run(clinicId, type, title || source || type, source || null, content).lastInsertRowid;
+}
+
+function deleteTrainingDoc(id) {
+  db.prepare('DELETE FROM training_documents WHERE id = ?').run(id);
+}
+
+function getTrainingFaqs(clinicId) {
+  return db.prepare('SELECT * FROM training_faqs WHERE clinic_id = ? ORDER BY created_at ASC').all(clinicId);
+}
+
+function addTrainingFaq(clinicId, question, answer) {
+  return db.prepare('INSERT INTO training_faqs (clinic_id, question, answer) VALUES (?, ?, ?)')
+    .run(clinicId, question, answer).lastInsertRowid;
+}
+
+function updateTrainingFaq(id, question, answer) {
+  db.prepare('UPDATE training_faqs SET question = ?, answer = ? WHERE id = ?').run(question, answer, id);
+}
+
+function deleteTrainingFaq(id) {
+  db.prepare('DELETE FROM training_faqs WHERE id = ?').run(id);
+}
+
 module.exports = {
   db,
   initDb,
@@ -1033,4 +1090,12 @@ module.exports = {
   upsertKnowledgeBase,
   logUnansweredQuestion,
   getUnansweredQuestions,
+  // training center
+  getTrainingDocs,
+  addTrainingDoc,
+  deleteTrainingDoc,
+  getTrainingFaqs,
+  addTrainingFaq,
+  updateTrainingFaq,
+  deleteTrainingFaq,
 };

@@ -240,6 +240,10 @@ function buildSystemPrompt(clinic) {
   if (tmpl && tmpl.extraRules && tmpl.extraRules.length)
     sections.push(`INDUSTRY-SPECIFIC RULES:\n${tmpl.extraRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}`);
 
+  // Training Center compiled knowledge (imported websites, files, notes)
+  if (cfg.ai_training_notes && cfg.ai_training_notes.trim())
+    sections.push(`ADDITIONAL TRAINING KNOWLEDGE:\n${cfg.ai_training_notes.trim()}`);
+
   // Master prompt — highest priority, appended last, can override anything above
   if (cfg.ai_master_prompt && cfg.ai_master_prompt.trim())
     sections.push(`CUSTOM MASTER INSTRUCTIONS (HIGHEST PRIORITY — these override any conflicting rule):\n${cfg.ai_master_prompt.trim()}`);

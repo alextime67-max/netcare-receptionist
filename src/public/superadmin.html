@@ -138,6 +138,13 @@
       </svg>
       Knowledge Base
     </button>
+    <button onclick="switchView('training')" id="nav-training"
+      class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+      </svg>
+      AI Training Center
+    </button>
   </nav>
 
   <!-- Bottom info -->
@@ -492,6 +499,194 @@
       </div>
 
     </div><!-- /view-kb -->
+
+    <!-- ── TRAINING CENTER VIEW ────────────────────────────────────────── -->
+    <div id="view-training" class="hidden p-6 space-y-4">
+
+      <!-- Clinic selector row -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap gap-3 items-center">
+        <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+        <label class="text-sm font-semibold text-slate-700">Clinic:</label>
+        <select id="tc-clinic" onchange="loadTrainingCenter()" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700">
+          <option value="">— select a clinic —</option>
+        </select>
+        <span id="tc-stats" class="ml-auto text-xs text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-200"></span>
+      </div>
+
+      <!-- Main panel with sub-tabs -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+
+        <!-- Sub-tab bar -->
+        <div class="flex border-b border-slate-200 bg-slate-50/50 overflow-x-auto">
+          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-indigo-600 border-b-2 border-indigo-500 whitespace-nowrap" onclick="switchTcTab('sources',this)">📥 Import Sources</button>
+          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('faqs',this)">❓ FAQ Manager</button>
+          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('train',this)">🧠 Train Ana</button>
+          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('test',this)">🔬 Test Ana</button>
+          <button class="tc-tab-btn px-4 py-3 text-sm font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap" onclick="switchTcTab('practice',this)">💬 Practice Conversation</button>
+        </div>
+
+        <!-- ── SOURCES TAB ── -->
+        <div id="tc-tab-sources" class="p-6 space-y-6">
+
+          <!-- Import Website -->
+          <div class="border border-blue-100 bg-blue-50/30 rounded-xl p-4 space-y-3">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">🌐</span>
+              <h3 class="text-sm font-semibold text-slate-800">Import Website</h3>
+            </div>
+            <p class="text-xs text-slate-500">Enter a URL — the page text will be imported as training data for Ana.</p>
+            <div class="flex gap-2">
+              <input type="url" id="tc-url-input" placeholder="https://yourclinic.com/about" class="form-input flex-1 text-sm">
+              <button onclick="importWebsite()" id="tc-url-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap transition-colors">Import</button>
+            </div>
+            <div id="tc-url-status" class="hidden text-xs rounded-lg p-2.5 border"></div>
+          </div>
+
+          <!-- Upload File -->
+          <div class="border border-green-100 bg-green-50/30 rounded-xl p-4 space-y-3">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">📄</span>
+              <h3 class="text-sm font-semibold text-slate-800">Upload Document</h3>
+            </div>
+            <p class="text-xs text-slate-500">Upload a <strong>.txt</strong>, <strong>.pdf</strong>, or <strong>.docx</strong> file. Text is extracted in your browser and sent to Ana's training.</p>
+            <div class="flex gap-2 items-center flex-wrap">
+              <label for="tc-file-input" class="cursor-pointer px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg border border-slate-300 transition-colors">
+                Choose File
+              </label>
+              <input type="file" id="tc-file-input" accept=".txt,.pdf,.docx" class="hidden" onchange="handleFileSelect(event)">
+              <span id="tc-file-name" class="text-xs text-slate-400 italic">No file selected</span>
+              <button onclick="uploadFile()" id="tc-file-btn" disabled
+                class="ml-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                Add to Training
+              </button>
+            </div>
+            <div id="tc-file-preview" class="hidden text-xs font-mono text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-24 overflow-y-auto"></div>
+            <div id="tc-file-status" class="hidden text-xs rounded-lg p-2.5 border"></div>
+          </div>
+
+          <!-- Manual Notes -->
+          <div class="border border-purple-100 bg-purple-50/30 rounded-xl p-4 space-y-3">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">📝</span>
+              <h3 class="text-sm font-semibold text-slate-800">Manual Notes</h3>
+            </div>
+            <p class="text-xs text-slate-500">Paste or type any information you want Ana to know — special procedures, pricing, custom policies, anything.</p>
+            <input type="text" id="tc-notes-title" placeholder="Title (e.g. Special Pricing, Holiday Hours)" class="form-input text-sm w-full">
+            <textarea id="tc-notes-content" rows="4" placeholder="Enter training content here..." class="form-input text-sm w-full resize-y"></textarea>
+            <button onclick="saveManualNotes()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors">Add Notes</button>
+            <div id="tc-notes-status" class="hidden text-xs rounded-lg p-2.5 border"></div>
+          </div>
+
+          <!-- Training Documents List -->
+          <div class="border border-slate-200 rounded-xl overflow-hidden">
+            <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-slate-700">Training Documents <span id="tc-docs-count" class="text-xs font-normal text-slate-400"></span></h3>
+              <button onclick="loadTrainingCenter()" class="text-xs text-blue-600 hover:underline">Refresh</button>
+            </div>
+            <div id="tc-docs-list" class="divide-y divide-slate-100 min-h-[60px]">
+              <div class="p-4 text-xs text-slate-400 italic">Select a clinic above to view training documents.</div>
+            </div>
+          </div>
+
+        </div><!-- /tc-tab-sources -->
+
+        <!-- ── FAQ MANAGER TAB ── -->
+        <div id="tc-tab-faqs" class="hidden p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">FAQ Manager</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Build Ana's question &amp; answer library. After adding FAQs, click <strong>Train Ana</strong> to apply them.</p>
+            </div>
+            <button onclick="showAddFaqForm()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">+ Add FAQ</button>
+          </div>
+
+          <!-- Add FAQ form -->
+          <div id="tc-add-faq-form" class="hidden border border-blue-200 bg-blue-50/40 rounded-xl p-4 space-y-3">
+            <p class="text-xs font-semibold text-blue-700 uppercase tracking-wide">New Question &amp; Answer</p>
+            <input type="text" id="tc-faq-q" placeholder="Question — e.g. Do you accept Medicare?" class="form-input text-sm w-full">
+            <textarea id="tc-faq-a" rows="3" placeholder="Answer — e.g. Yes, we accept Medicare and most major insurance plans." class="form-input text-sm w-full resize-y"></textarea>
+            <div class="flex gap-2 items-center">
+              <button onclick="addFaqEntry()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">Save FAQ</button>
+              <button onclick="hideAddFaqForm()" class="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
+              <div id="tc-faq-status" class="hidden text-xs rounded-lg p-2 border ml-2"></div>
+            </div>
+          </div>
+
+          <!-- FAQs list -->
+          <div id="tc-faqs-list" class="space-y-2">
+            <div class="text-xs text-slate-400 italic p-2">Select a clinic above to view FAQs.</div>
+          </div>
+        </div><!-- /tc-tab-faqs -->
+
+        <!-- ── TRAIN ANA TAB ── -->
+        <div id="tc-tab-train" class="hidden p-10 text-center space-y-6">
+          <div class="text-6xl">🧠</div>
+          <div>
+            <h3 class="text-2xl font-bold text-slate-800">Train Ana</h3>
+            <p class="text-sm text-slate-500 mt-2 max-w-lg mx-auto">Compiles all imported documents, notes, and FAQs into Ana's active knowledge base. Ana will use this information on every future call.</p>
+          </div>
+          <div id="tc-train-summary" class="inline-flex gap-6 bg-slate-50 rounded-2xl px-8 py-4 border border-slate-200 text-sm text-slate-600 flex-wrap justify-center"></div>
+          <div>
+            <button onclick="trainAna()" id="tc-train-btn"
+              class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow text-sm">
+              🚀 Train Ana Now
+            </button>
+          </div>
+          <div id="tc-train-result" class="hidden text-sm rounded-xl p-4 border max-w-md mx-auto text-left"></div>
+        </div><!-- /tc-tab-train -->
+
+        <!-- ── TEST ANA TAB ── -->
+        <div id="tc-tab-test" class="hidden p-6 space-y-4">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-800">Test Ana</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Ask Ana a question to verify she can answer using the current knowledge base. Run <strong>Train Ana</strong> first to apply the latest training.</p>
+          </div>
+          <div class="flex gap-2">
+            <input type="text" id="tc-test-q" placeholder="e.g. Do you accept Medicare? What are your hours?" class="form-input flex-1 text-sm"
+              onkeydown="if(event.key==='Enter') testAnaQuestion()">
+            <button onclick="testAnaQuestion()" id="tc-test-btn"
+              class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap transition-colors">
+              Ask Ana
+            </button>
+          </div>
+          <div id="tc-test-chat" class="space-y-3 max-h-96 overflow-y-auto"></div>
+        </div><!-- /tc-tab-test -->
+
+        <!-- ── PRACTICE CONVERSATION TAB ── -->
+        <div id="tc-tab-practice" class="hidden p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">Practice Conversation</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Simulate a full patient phone call with Ana end-to-end.</p>
+            </div>
+            <button onclick="resetPracticeConv()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors">New Conversation</button>
+          </div>
+          <div class="chat-area" id="practice-chat">
+            <div class="chat-empty" id="practice-empty">
+              <div><div class="text-2xl mb-2">📞</div><div>Click <strong>Start Call</strong> to begin a practice conversation with Ana</div></div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button id="practice-start-btn" onclick="startPracticeConv()"
+              class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg whitespace-nowrap transition-colors">
+              Start Call
+            </button>
+            <input type="text" id="practice-input" placeholder="Type what the patient says…"
+              class="form-input flex-1" disabled
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendPracticeMsg();}">
+            <button onclick="sendPracticeMsg()" id="practice-send-btn"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40" disabled>
+              Send
+            </button>
+          </div>
+          <div id="practice-error" class="hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+        </div><!-- /tc-tab-practice -->
+
+      </div><!-- /main panel -->
+
+    </div><!-- /view-training -->
 
   </div><!-- /main-body -->
 </div><!-- /main -->
@@ -1083,13 +1278,14 @@ function typeBadge(t) {
 
 function switchView(view) {
   currentView = view;
-  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb'];
+  const views  = ['dashboard', 'clients', 'calls', 'analytics', 'kb', 'training'];
   const titles = {
-    dashboard: ['Dashboard',      'NetCare Phone platform overview'],
-    clients:   ['Clients',        'Manage all clinic accounts'],
-    calls:     ['Call Log',       'All inbound calls across every clinic'],
-    analytics: ['Analytics',      'Call volume, intent breakdown, and language trends'],
-    kb:        ['Knowledge Base', 'AI knowledge base and test simulator'],
+    dashboard: ['Dashboard',           'NetCare Phone platform overview'],
+    clients:   ['Clients',             'Manage all clinic accounts'],
+    calls:     ['Call Log',            'All inbound calls across every clinic'],
+    analytics: ['Analytics',           'Call volume, intent breakdown, and language trends'],
+    kb:        ['Knowledge Base',      'AI knowledge base and test simulator'],
+    training:  ['AI Training Center',  'Import data, train Ana, and test her knowledge'],
   };
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -1106,6 +1302,7 @@ function switchView(view) {
   if (view === 'analytics') loadAnalytics();
   if (view === 'dashboard') loadHealth();
   if (view === 'kb')        loadKb();
+  if (view === 'training')  { populateTrainingClinicFilter(); }
 }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
@@ -1154,6 +1351,7 @@ async function loadClients() {
     populateCallClinicFilter();
     populateAnalyticsClinicFilter();
     populateKbClinicFilter();
+    populateTrainingClinicFilter();
   } catch(e) {
     document.getElementById('clients-tbody').innerHTML =
       `<tr><td colspan="10" class="px-4 py-8 text-center text-red-400 text-sm">Error: ${e.message}</td></tr>`;
@@ -2544,6 +2742,521 @@ async function loadUnanswered() {
     </table>`;
   } catch (e) {
     container.innerHTML = `<p class="text-xs text-red-400">Error: ${e.message}</p>`;
+  }
+}
+
+// ── Training Center ───────────────────────────────────────────────────────────
+
+let tcFileContent  = null;
+let tcFileName     = null;
+let tcPracticeMessages = [];
+let tcPracticeRunning  = false;
+
+function populateTrainingClinicFilter() {
+  const sel = document.getElementById('tc-clinic');
+  if (!sel || !allClients) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— select a clinic —</option>' +
+    allClients.map(c => `<option value="${c.id}" ${c.id == cur ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('');
+}
+
+function switchTcTab(tab, btn) {
+  ['sources','faqs','train','test','practice'].forEach(t => {
+    const el = document.getElementById(`tc-tab-${t}`);
+    if (el) el.classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('.tc-tab-btn').forEach(b => {
+    b.classList.remove('text-indigo-600','border-indigo-500');
+    b.classList.add('text-slate-500','border-transparent');
+  });
+  if (btn) {
+    btn.classList.remove('text-slate-500','border-transparent');
+    btn.classList.add('text-indigo-600','border-indigo-500');
+  }
+  if (tab === 'train') updateTrainSummary();
+}
+
+async function loadTrainingCenter() {
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  const statsEl  = document.getElementById('tc-stats');
+  if (!clinicId) {
+    if (statsEl) statsEl.textContent = '';
+    renderTrainingDocs([]);
+    renderTrainingFaqs([]);
+    return;
+  }
+  try {
+    const data = await (await fetch(`/superadmin/api/training/${clinicId}`)).json();
+    renderTrainingDocs(data.docs || []);
+    renderTrainingFaqs(data.faqs || []);
+    if (statsEl) statsEl.textContent = `${(data.docs||[]).length} docs · ${(data.faqs||[]).length} FAQs`;
+    updateTrainSummary(data.docs || [], data.faqs || []);
+  } catch (e) {
+    if (statsEl) statsEl.textContent = 'Error loading';
+  }
+}
+
+function updateTrainSummary(docs, faqs) {
+  const el = document.getElementById('tc-train-summary');
+  if (!el) return;
+  if (!docs && !faqs) {
+    const clinicId = document.getElementById('tc-clinic')?.value;
+    if (!clinicId) { el.innerHTML = '<span class="text-slate-400">Select a clinic to see training summary.</span>'; return; }
+  }
+  const d = docs || [], f = faqs || [];
+  const websites = d.filter(x => x.type === 'website').length;
+  const files    = d.filter(x => x.type === 'file').length;
+  const notes    = d.filter(x => x.type === 'notes').length;
+  el.innerHTML =
+    `<div class="text-center"><div class="text-xl font-bold text-blue-600">${websites}</div><div class="text-xs text-slate-500">Websites</div></div>` +
+    `<div class="text-center"><div class="text-xl font-bold text-green-600">${files}</div><div class="text-xs text-slate-500">Files</div></div>` +
+    `<div class="text-center"><div class="text-xl font-bold text-purple-600">${notes}</div><div class="text-xs text-slate-500">Notes</div></div>` +
+    `<div class="text-center"><div class="text-xl font-bold text-amber-600">${f.length}</div><div class="text-xs text-slate-500">FAQs</div></div>`;
+}
+
+function renderTrainingDocs(docs) {
+  const el = document.getElementById('tc-docs-list');
+  const cnt = document.getElementById('tc-docs-count');
+  if (cnt) cnt.textContent = docs.length ? `(${docs.length})` : '';
+  if (!el) return;
+  if (!docs.length) {
+    el.innerHTML = '<div class="p-4 text-xs text-slate-400 italic">No training documents yet. Import a website, upload a file, or add manual notes above.</div>';
+    return;
+  }
+  const typeIcon = { website:'🌐', file:'📄', notes:'📝' };
+  const typeBg   = { website:'bg-blue-50 text-blue-700 border-blue-200', file:'bg-green-50 text-green-700 border-green-200', notes:'bg-purple-50 text-purple-700 border-purple-200' };
+  el.innerHTML = docs.map(d => `
+    <div class="flex items-start gap-3 px-4 py-3 hover:bg-slate-50">
+      <span class="text-lg mt-0.5">${typeIcon[d.type] || '📋'}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-sm text-slate-800 truncate">${escHtml(d.title)}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full border font-medium ${typeBg[d.type] || 'bg-slate-50 text-slate-500 border-slate-200'}">${d.type}</span>
+        </div>
+        ${d.source ? `<div class="text-xs text-slate-400 truncate mt-0.5">${escHtml(d.source)}</div>` : ''}
+        <div class="text-xs text-slate-400 mt-0.5">${d.content.length.toLocaleString()} chars · ${new Date(d.created_at).toLocaleDateString()}</div>
+      </div>
+      <button onclick="deleteTcDoc(${d.id})" class="flex-shrink-0 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">${iconTrash()}</button>
+    </div>`).join('');
+}
+
+async function deleteTcDoc(docId) {
+  if (!confirm('Delete this training document?')) return;
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  try {
+    await fetch(`/superadmin/api/training/${clinicId}/docs/${docId}`, { method: 'DELETE' });
+    await loadTrainingCenter();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+function renderTrainingFaqs(faqs) {
+  const el = document.getElementById('tc-faqs-list');
+  if (!el) return;
+  if (!faqs.length) {
+    el.innerHTML = '<div class="text-xs text-slate-400 italic p-2">No FAQs yet. Click <strong>+ Add FAQ</strong> to create question-and-answer pairs for Ana.</div>';
+    return;
+  }
+  el.innerHTML = faqs.map(f => `
+    <div class="border border-slate-200 rounded-xl p-4 space-y-2 hover:border-slate-300 transition-colors">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold text-slate-800">Q: ${escHtml(f.question)}</div>
+          <div class="text-sm text-slate-600 mt-1">A: ${escHtml(f.answer)}</div>
+        </div>
+        <button onclick="deleteTcFaq(${f.id})" class="flex-shrink-0 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">${iconTrash()}</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteTcFaq(faqId) {
+  if (!confirm('Delete this FAQ?')) return;
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  try {
+    await fetch(`/superadmin/api/training/${clinicId}/faqs/${faqId}`, { method: 'DELETE' });
+    await loadTrainingCenter();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+function showAddFaqForm() {
+  document.getElementById('tc-add-faq-form').classList.remove('hidden');
+  document.getElementById('tc-faq-q').focus();
+}
+function hideAddFaqForm() {
+  document.getElementById('tc-add-faq-form').classList.add('hidden');
+  document.getElementById('tc-faq-q').value = '';
+  document.getElementById('tc-faq-a').value = '';
+  document.getElementById('tc-faq-status').classList.add('hidden');
+}
+
+async function addFaqEntry() {
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  if (!clinicId) return alert('Please select a clinic first.');
+  const q = document.getElementById('tc-faq-q').value.trim();
+  const a = document.getElementById('tc-faq-a').value.trim();
+  if (!q || !a) return alert('Both question and answer are required.');
+  const statusEl = document.getElementById('tc-faq-status');
+  try {
+    const r = await fetch(`/superadmin/api/training/${clinicId}/faqs`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ question: q, answer: a }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    hideAddFaqForm();
+    await loadTrainingCenter();
+  } catch (e) {
+    statusEl.textContent = '✗ ' + e.message;
+    statusEl.className = 'text-xs rounded-lg p-2 border bg-red-50 text-red-700 border-red-200';
+    statusEl.classList.remove('hidden');
+  }
+}
+
+// ── Import Website ────────────────────────────────────────────────────────────
+
+async function importWebsite() {
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  if (!clinicId) return alert('Please select a clinic first.');
+  const url     = document.getElementById('tc-url-input').value.trim();
+  if (!url)     return alert('Please enter a URL.');
+  const btn     = document.getElementById('tc-url-btn');
+  const statusEl = document.getElementById('tc-url-status');
+  btn.disabled  = true; btn.textContent = 'Importing…';
+  statusEl.className = 'text-xs rounded-lg p-2.5 border bg-slate-50 text-slate-600 border-slate-200';
+  statusEl.textContent = 'Fetching page content…';
+  statusEl.classList.remove('hidden');
+  try {
+    const r    = await fetch(`/superadmin/api/training/${clinicId}/fetch-url`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ url }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    statusEl.textContent = `Fetched ${data.length.toLocaleString()} chars — saving…`;
+    const hostname = new URL(url).hostname;
+    const r2 = await fetch(`/superadmin/api/training/${clinicId}/docs`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'website', title: hostname, source: url, content: data.content }),
+    });
+    if (!r2.ok) throw new Error((await r2.json()).error);
+    statusEl.textContent = `✓ Imported ${data.length.toLocaleString()} chars from ${hostname}`;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
+    document.getElementById('tc-url-input').value = '';
+    await loadTrainingCenter();
+  } catch (e) {
+    statusEl.textContent = '✗ ' + e.message;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Import';
+  }
+}
+
+// ── File Upload ───────────────────────────────────────────────────────────────
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  tcFileName    = file.name;
+  tcFileContent = null;
+  document.getElementById('tc-file-name').textContent = file.name;
+  document.getElementById('tc-file-btn').disabled = true;
+  document.getElementById('tc-file-preview').classList.add('hidden');
+  document.getElementById('tc-file-status').classList.add('hidden');
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'txt') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      tcFileContent = e.target.result;
+      const preview = document.getElementById('tc-file-preview');
+      preview.textContent = tcFileContent.slice(0, 300) + (tcFileContent.length > 300 ? '…' : '');
+      preview.classList.remove('hidden');
+      document.getElementById('tc-file-btn').disabled = false;
+    };
+    reader.readAsText(file);
+  } else if (ext === 'pdf') {
+    extractPdfText(file);
+  } else if (ext === 'docx') {
+    extractDocxText(file);
+  } else {
+    document.getElementById('tc-file-name').textContent = file.name + ' (unsupported format)';
+  }
+}
+
+async function extractPdfText(file) {
+  const statusEl = document.getElementById('tc-file-status');
+  statusEl.textContent = 'Extracting PDF text…';
+  statusEl.className = 'text-xs rounded-lg p-2.5 border bg-slate-50 text-slate-600 border-slate-200';
+  statusEl.classList.remove('hidden');
+  try {
+    if (!window.pdfjsLib) {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    const arrBuf = await file.arrayBuffer();
+    const pdf    = await pdfjsLib.getDocument({ data: arrBuf }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page    = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(s => s.str).join(' ') + '\n';
+    }
+    tcFileContent = text.trim();
+    const preview = document.getElementById('tc-file-preview');
+    preview.textContent = tcFileContent.slice(0, 300) + (tcFileContent.length > 300 ? '…' : '');
+    preview.classList.remove('hidden');
+    document.getElementById('tc-file-btn').disabled = false;
+    statusEl.textContent = `✓ Extracted ${tcFileContent.length.toLocaleString()} chars from ${pdf.numPages} pages`;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
+  } catch (e) {
+    statusEl.textContent = '✗ PDF extraction failed: ' + e.message;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
+  }
+}
+
+async function extractDocxText(file) {
+  const statusEl = document.getElementById('tc-file-status');
+  statusEl.textContent = 'Extracting DOCX text…';
+  statusEl.className = 'text-xs rounded-lg p-2.5 border bg-slate-50 text-slate-600 border-slate-200';
+  statusEl.classList.remove('hidden');
+  try {
+    if (!window.mammoth) {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+    }
+    const arrBuf = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: arrBuf });
+    tcFileContent = result.value.trim();
+    const preview = document.getElementById('tc-file-preview');
+    preview.textContent = tcFileContent.slice(0, 300) + (tcFileContent.length > 300 ? '…' : '');
+    preview.classList.remove('hidden');
+    document.getElementById('tc-file-btn').disabled = false;
+    statusEl.textContent = `✓ Extracted ${tcFileContent.length.toLocaleString()} chars`;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
+  } catch (e) {
+    statusEl.textContent = '✗ DOCX extraction failed: ' + e.message;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
+  }
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function uploadFile() {
+  if (!tcFileContent) return;
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  if (!clinicId) return alert('Please select a clinic first.');
+  const btn      = document.getElementById('tc-file-btn');
+  const statusEl = document.getElementById('tc-file-status');
+  btn.disabled   = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`/superadmin/api/training/${clinicId}/docs`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'file', title: tcFileName, source: tcFileName, content: tcFileContent }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    statusEl.textContent = `✓ ${tcFileName} added to training`;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
+    statusEl.classList.remove('hidden');
+    tcFileContent = null; tcFileName = null;
+    document.getElementById('tc-file-input').value = '';
+    document.getElementById('tc-file-name').textContent = 'No file selected';
+    document.getElementById('tc-file-preview').classList.add('hidden');
+    document.getElementById('tc-file-btn').disabled = true;
+    await loadTrainingCenter();
+  } catch (e) {
+    statusEl.textContent = '✗ ' + e.message;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
+    statusEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Add to Training';
+  }
+}
+
+// ── Manual Notes ──────────────────────────────────────────────────────────────
+
+async function saveManualNotes() {
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  if (!clinicId) return alert('Please select a clinic first.');
+  const title   = document.getElementById('tc-notes-title').value.trim();
+  const content = document.getElementById('tc-notes-content').value.trim();
+  if (!content) return alert('Please enter some notes content.');
+  const statusEl = document.getElementById('tc-notes-status');
+  try {
+    const r = await fetch(`/superadmin/api/training/${clinicId}/docs`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'notes', title: title || 'Manual Notes', source: null, content }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    statusEl.textContent = '✓ Notes saved to training';
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-emerald-50 text-emerald-700 border-emerald-200';
+    statusEl.classList.remove('hidden');
+    document.getElementById('tc-notes-title').value   = '';
+    document.getElementById('tc-notes-content').value = '';
+    setTimeout(() => statusEl.classList.add('hidden'), 3000);
+    await loadTrainingCenter();
+  } catch (e) {
+    statusEl.textContent = '✗ ' + e.message;
+    statusEl.className = 'text-xs rounded-lg p-2.5 border bg-red-50 text-red-700 border-red-200';
+    statusEl.classList.remove('hidden');
+  }
+}
+
+// ── Train Ana ─────────────────────────────────────────────────────────────────
+
+async function trainAna() {
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  if (!clinicId) return alert('Please select a clinic first.');
+  const btn      = document.getElementById('tc-train-btn');
+  const resultEl = document.getElementById('tc-train-result');
+  btn.disabled   = true; btn.textContent = '⏳ Training Ana…';
+  resultEl.classList.add('hidden');
+  try {
+    const r    = await fetch(`/superadmin/api/training/${clinicId}/train`, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    resultEl.innerHTML =
+      `<div class="font-semibold text-emerald-700 mb-2">✅ Ana has been trained!</div>
+       <div class="text-slate-600 space-y-1 text-sm">
+         <div>📚 Documents compiled: <strong>${data.docsCompiled}</strong></div>
+         <div>❓ FAQs merged into AI config: <strong>${data.faqsMerged}</strong></div>
+         <div class="text-xs text-slate-400 mt-2">Ana will use this knowledge on all future calls and in the Practice Conversation simulator.</div>
+       </div>`;
+    resultEl.className = 'text-sm rounded-xl p-4 border bg-emerald-50 border-emerald-200';
+    resultEl.classList.remove('hidden');
+  } catch (e) {
+    resultEl.textContent = '✗ Training failed: ' + e.message;
+    resultEl.className = 'text-sm rounded-xl p-4 border bg-red-50 text-red-700 border-red-200';
+    resultEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = '🚀 Train Ana Now';
+  }
+}
+
+// ── Test Ana ──────────────────────────────────────────────────────────────────
+
+async function testAnaQuestion() {
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  const question = document.getElementById('tc-test-q')?.value?.trim();
+  if (!clinicId) return alert('Please select a clinic first.');
+  if (!question) return;
+  const chat    = document.getElementById('tc-test-chat');
+  const btn     = document.getElementById('tc-test-btn');
+  chat.innerHTML += `<div class="flex justify-end"><div class="bg-blue-100 text-blue-900 text-sm rounded-2xl rounded-tr-sm px-4 py-2 max-w-sm">${escHtml(question)}</div></div>`;
+  document.getElementById('tc-test-q').value = '';
+  btn.disabled = true;
+  const thinking = document.createElement('div');
+  thinking.className = 'flex justify-start';
+  thinking.innerHTML = '<div class="bg-slate-100 text-slate-400 text-xs rounded-2xl rounded-tl-sm px-4 py-2 italic">Ana is thinking…</div>';
+  chat.appendChild(thinking);
+  chat.scrollTop = chat.scrollHeight;
+  try {
+    const r    = await fetch('/superadmin/api/kb/test', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ clinicId: +clinicId, question }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    let badges = '';
+    if (data.unanswered)        badges += ' <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Unanswered</span>';
+    if (data.emergencyDetected) badges += ' <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Emergency</span>';
+    thinking.outerHTML = `<div class="flex justify-start items-end gap-2">
+      <div class="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-sm flex-shrink-0">🤖</div>
+      <div class="bg-slate-100 text-slate-800 text-sm rounded-2xl rounded-tl-sm px-4 py-2 max-w-sm">${escHtml(data.response)}${badges}</div>
+    </div>`;
+  } catch (e) {
+    thinking.outerHTML = `<div class="text-xs text-red-500 px-2 py-1">Error: ${escHtml(e.message)}</div>`;
+  }
+  btn.disabled = false;
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ── Practice Conversation ─────────────────────────────────────────────────────
+
+function resetPracticeConv() {
+  tcPracticeMessages = [];
+  tcPracticeRunning  = false;
+  const area = document.getElementById('practice-chat');
+  area.innerHTML = `<div class="chat-empty" id="practice-empty"><div><div class="text-2xl mb-2">📞</div><div>Click <strong>Start Call</strong> to begin a practice conversation with Ana</div></div></div>`;
+  document.getElementById('practice-input').value    = '';
+  document.getElementById('practice-input').disabled = true;
+  document.getElementById('practice-send-btn').disabled  = true;
+  const startBtn = document.getElementById('practice-start-btn');
+  startBtn.disabled = false; startBtn.textContent = 'Start Call'; startBtn.onclick = startPracticeConv;
+  document.getElementById('practice-error').classList.add('hidden');
+}
+
+async function startPracticeConv() {
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  if (!clinicId) { alert('Please select a clinic first.'); return; }
+  const startBtn = document.getElementById('practice-start-btn');
+  const errEl    = document.getElementById('practice-error');
+  startBtn.disabled = true; startBtn.textContent = 'Starting…';
+  errEl.classList.add('hidden');
+  const area = document.getElementById('practice-chat');
+  area.innerHTML = '';
+  tcPracticeMessages = [];
+  try {
+    const r    = await fetch(`/superadmin/api/clinics/${clinicId}/ai/test`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: [], userMessage: '__start__' }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    tcPracticeMessages = data.updatedMessages || [{ role: 'assistant', content: data.speak }];
+    appendBubble('ai', data.speak, data);
+    tcPracticeRunning = true;
+    document.getElementById('practice-input').disabled  = false;
+    document.getElementById('practice-send-btn').disabled = false;
+    document.getElementById('practice-input').focus();
+    startBtn.disabled = false; startBtn.textContent = 'Restart';
+    startBtn.onclick = () => resetPracticeConv();
+  } catch (e) {
+    errEl.textContent = '⚠ ' + e.message; errEl.classList.remove('hidden');
+    startBtn.disabled = false; startBtn.textContent = 'Start Call'; startBtn.onclick = startPracticeConv;
+  }
+}
+
+async function sendPracticeMsg() {
+  if (!tcPracticeRunning) return;
+  const clinicId = document.getElementById('tc-clinic')?.value;
+  const input    = document.getElementById('practice-input');
+  const text     = input.value.trim();
+  if (!text) return;
+  const errEl    = document.getElementById('practice-error');
+  input.value = ''; input.disabled = true;
+  document.getElementById('practice-send-btn').disabled = true;
+  errEl.classList.add('hidden');
+  appendBubble('user', text, null);
+  try {
+    const r    = await fetch(`/superadmin/api/clinics/${clinicId}/ai/test`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: tcPracticeMessages, userMessage: text }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    tcPracticeMessages = data.updatedMessages || tcPracticeMessages;
+    appendBubble('ai', data.speak, data);
+    const area = document.getElementById('practice-chat');
+    area.scrollTop = area.scrollHeight;
+    if (data.complete) {
+      tcPracticeRunning = false;
+      input.disabled = true;
+      document.getElementById('practice-send-btn').disabled = true;
+      const startBtn = document.getElementById('practice-start-btn');
+      startBtn.textContent = 'New Call'; startBtn.disabled = false;
+      startBtn.onclick = () => resetPracticeConv();
+    } else {
+      input.disabled = false;
+      document.getElementById('practice-send-btn').disabled = false;
+      input.focus();
+    }
+  } catch (e) {
+    errEl.textContent = '⚠ ' + e.message; errEl.classList.remove('hidden');
+    input.disabled = false;
+    document.getElementById('practice-send-btn').disabled = false;
   }
 }
 

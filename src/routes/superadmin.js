@@ -14,6 +14,8 @@ const {
   getAllCalls, getCallCount, getCallWithTranscript,
   getCallVolumeByDay, getCallAnalyticsSummary,
   getKnowledgeBase, upsertKnowledgeBase, getUnansweredQuestions,
+  getTrainingDocs, addTrainingDoc, deleteTrainingDoc,
+  getTrainingFaqs, addTrainingFaq, updateTrainingFaq, deleteTrainingFaq,
   db,
 } = require('../database/db');
 
@@ -530,6 +532,130 @@ router.post('/api/kb/test', async (req, res) => {
     const result = await runKbTest(clinic, kb, question);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Training Center ───────────────────────────────────────────────────────────
+
+router.get('/api/training/:clinicId', (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    res.json({
+      docs: getTrainingDocs(+req.params.clinicId),
+      faqs: getTrainingFaqs(+req.params.clinicId),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/training/:clinicId/docs', (req, res) => {
+  const { type, title, source, content } = req.body;
+  if (!type || !content) return res.status(400).json({ error: 'type and content are required' });
+  try {
+    const clinic = getClinicById(+req.params.clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+    const id = addTrainingDoc(+req.params.clinicId, type, title, source, content);
+    res.json({ ok: true, id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/training/:clinicId/docs/:docId', (req, res) => {
+  try {
+    deleteTrainingDoc(+req.params.docId);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/training/:clinicId/faqs', (req, res) => {
+  const { question, answer } = req.body;
+  if (!question || !answer) return res.status(400).json({ error: 'question and answer required' });
+  try {
+    const id = addTrainingFaq(+req.params.clinicId, question, answer);
+    res.json({ ok: true, id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/training/:clinicId/faqs/:faqId', (req, res) => {
+  const { question, answer } = req.body;
+  if (!question || !answer) return res.status(400).json({ error: 'question and answer required' });
+  try {
+    updateTrainingFaq(+req.params.faqId, question, answer);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/training/:clinicId/faqs/:faqId', (req, res) => {
+  try {
+    deleteTrainingFaq(+req.params.faqId);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/training/:clinicId/train', (req, res) => {
+  try {
+    const clinicId = +req.params.clinicId;
+    const clinic   = getClinicById(clinicId);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const docs = getTrainingDocs(clinicId);
+    const faqs = getTrainingFaqs(clinicId);
+
+    const sections = [];
+    const websites = docs.filter(d => d.type === 'website');
+    const files    = docs.filter(d => d.type === 'file');
+    const notes    = docs.filter(d => d.type === 'notes');
+
+    if (websites.length)
+      sections.push(`IMPORTED WEBSITES:\n${websites.map(d => `[${d.title}]\n${d.content}`).join('\n\n')}`);
+    if (files.length)
+      sections.push(`UPLOADED DOCUMENTS:\n${files.map(d => `[${d.title}]\n${d.content}`).join('\n\n')}`);
+    if (notes.length)
+      sections.push(`MANUAL NOTES:\n${notes.map(d => `[${d.title}]\n${d.content}`).join('\n\n')}`);
+
+    const trainingNotes = sections.join('\n\n---\n\n');
+    updateClinicAiConfig(clinicId, { trainingNotes });
+
+    if (faqs.length) {
+      let existing = [];
+      try { existing = JSON.parse(clinic.ai_faq || '[]'); } catch {}
+      const incoming = faqs.map(f => ({ q: f.question, a: f.answer }));
+      const merged   = [
+        ...existing.filter(ef => !incoming.some(tf => tf.q.toLowerCase() === ef.q.toLowerCase())),
+        ...incoming,
+      ];
+      updateClinicAiConfig(clinicId, { faq: JSON.stringify(merged) });
+    }
+
+    res.json({ ok: true, docsCompiled: docs.length, faqsMerged: faqs.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/training/:clinicId/fetch-url', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  try {
+    const parsed = new URL(url);
+    const mod    = parsed.protocol === 'https:' ? require('https') : require('http');
+    const raw    = await new Promise((resolve, reject) => {
+      const req2 = mod.get(url, { timeout: 12000, headers: { 'User-Agent': 'NetCare-Admin/2.0' } }, (resp) => {
+        let data = '';
+        resp.on('data', chunk => { data += chunk; if (data.length > 250000) req2.destroy(); });
+        resp.on('end', () => resolve(data));
+      });
+      req2.on('error', reject);
+      req2.on('timeout', () => { req2.destroy(); reject(new Error('Request timed out')); });
+    });
+    const text = raw
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 15000);
+    res.json({ ok: true, content: text, length: text.length });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 module.exports = router;
