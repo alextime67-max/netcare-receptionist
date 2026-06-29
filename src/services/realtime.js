@@ -287,8 +287,9 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
     try { browserWs.close(); } catch {}
   });
 
-  browserWs.on('message', raw => {
-    try { if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(raw); } catch {}
+  browserWs.on('message', (raw, isBinary) => {
+    // Convert text frames (Buffer) to string so OpenAI receives text, not binary
+    try { if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(!isBinary && Buffer.isBuffer(raw) ? raw.toString('utf8') : raw); } catch {}
   });
   browserWs.on('close', () => {
     console.log(`[Realtime:Browser:${clinicName}] Browser disconnected`);
