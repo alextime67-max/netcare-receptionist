@@ -1734,19 +1734,12 @@
           <div>
             <label class="form-label">Voice</label>
             <select id="f-openai-voice" class="form-input bg-white">
-              <optgroup label="Female voices">
-                <option value="shimmer">Shimmer — warm, natural (Recommended for Spanish)</option>
-                <option value="nova">Nova — bright, friendly</option>
-                <option value="coral">Coral — clear, professional</option>
-              </optgroup>
-              <optgroup label="Male voices">
-                <option value="alloy">Alloy — balanced, neutral</option>
-                <option value="echo">Echo — smooth, calm</option>
-                <option value="fable">Fable — expressive</option>
-                <option value="onyx">Onyx — deep, authoritative</option>
-                <option value="sage">Sage — measured, precise</option>
-                <option value="ash">Ash — conversational</option>
-              </optgroup>
+              <option value="coral">Coral (Default)</option>
+              <option value="shimmer">Shimmer</option>
+              <option value="alloy">Alloy</option>
+              <option value="ballad">Ballad</option>
+              <option value="sage">Sage</option>
+              <option value="verse">Verse</option>
             </select>
           </div>
           <div>
@@ -2530,7 +2523,7 @@ async function loadAiConfig(clinicId) {
     document.getElementById('f-ai-voice-es').value     = c.ai_voice_es                 || '';
     document.getElementById('f-ai-voice-en').value     = c.ai_voice_en                 || '';
     document.getElementById('f-openai-api-key').value  = c.openai_api_key              || '';
-    document.getElementById('f-openai-voice').value    = c.openai_voice                || 'shimmer';
+    document.getElementById('f-openai-voice').value    = c.openai_voice                || 'coral';
     document.getElementById('f-openai-language').value = c.openai_language             || 'es';
     onTemplateChange();
     // Rebuild FAQ list
@@ -2578,7 +2571,7 @@ async function saveAiConfig() {
     voiceEs:                 document.getElementById('f-ai-voice-es').value || null,
     voiceEn:                 document.getElementById('f-ai-voice-en').value || null,
     openaiApiKey:            document.getElementById('f-openai-api-key').value.trim() || null,
-    openaiVoice:             document.getElementById('f-openai-voice').value || 'shimmer',
+    openaiVoice:             document.getElementById('f-openai-voice').value || 'coral',
     openaiLanguage:          document.getElementById('f-openai-language').value || 'es',
   };
 

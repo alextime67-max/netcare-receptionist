@@ -253,7 +253,7 @@ function initDb() {
 
   // ── Migrations: OpenAI Realtime Voice ────────────────────────────────────
   _addColumnIfMissing('clinics', 'openai_api_key',  'TEXT');
-  _addColumnIfMissing('clinics', 'openai_voice',    "TEXT DEFAULT 'shimmer'");
+  _addColumnIfMissing('clinics', 'openai_voice',    "TEXT DEFAULT 'coral'");
   _addColumnIfMissing('clinics', 'openai_language', "TEXT DEFAULT 'es'");
 
   // Back-fill account numbers for any clinic that doesn't have one yet

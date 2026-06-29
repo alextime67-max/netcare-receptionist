@@ -114,7 +114,7 @@ function buildRealtimeInstructions(clinic, kb) {
 
 async function createEphemeralSession(apiKey, clinic, kb) {
   const instructions = buildRealtimeInstructions(clinic, kb);
-  const voice        = clinic.openai_voice || 'shimmer';
+  const voice        = clinic.openai_voice || 'coral';
 
   const res = await fetch('https://api.openai.com/v1/realtime/sessions', {
     method: 'POST',
@@ -148,7 +148,7 @@ async function createEphemeralSession(apiKey, clinic, kb) {
 
 function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
   const instructions = buildRealtimeInstructions(clinic, kb);
-  const voice        = clinic.openai_voice || 'shimmer';
+  const voice        = clinic.openai_voice || 'coral';
   const clinicName   = clinic.name || 'the clinic';
 
   const openaiWs = new WebSocket(REALTIME_URL, {
@@ -167,7 +167,11 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     console.log(`[Realtime] OpenAI WS connected for ${clinicName}`);
     sendToOpenAI({
       type: 'session.update',
-      session: { type: 'realtime', instructions },
+      session: {
+        type:         'realtime',
+        instructions,
+        audio: { output: { voice } },
+      },
     });
   });
 
@@ -241,7 +245,7 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
 
 function createBrowserRelay(browserWs, apiKey, clinic, kb) {
   const instructions = buildRealtimeInstructions(clinic, kb);
-  const voice        = clinic.openai_voice || 'shimmer';
+  const voice        = clinic.openai_voice || 'coral';
   const clinicName   = clinic.name || 'the clinic';
 
   const openaiWs = new WebSocket(REALTIME_URL, {
@@ -258,7 +262,11 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
     console.log(`[Realtime:Browser] Connected to OpenAI for ${clinicName}`);
     sendToOpenAI({
       type: 'session.update',
-      session: { type: 'realtime', instructions },
+      session: {
+        type:         'realtime',
+        instructions,
+        audio: { output: { voice } },
+      },
     });
   });
 
