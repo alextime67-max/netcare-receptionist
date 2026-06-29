@@ -1,7 +1,7 @@
 const crypto    = require('crypto');
 const WebSocket = require('ws');
 
-const REALTIME_MODEL = 'gpt-realtime-2025-08-28';
+const REALTIME_MODEL = 'gpt-realtime';
 const REALTIME_URL   = `wss://api.openai.com/v1/realtime?model=${REALTIME_MODEL}`;
 
 // ── One-time voice tokens for browser WebSocket auth ─────────────────────────
