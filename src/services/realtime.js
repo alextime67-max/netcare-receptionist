@@ -277,7 +277,8 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
       console.error(`[Realtime:Browser:${clinicName}] Error:`, evt.error?.message);
     }
 
-    try { if (browserWs.readyState === WebSocket.OPEN) browserWs.send(raw); } catch {}
+    // Send as UTF-8 text so the browser receives a string (not a Blob) and JSON.parse succeeds
+    try { if (browserWs.readyState === WebSocket.OPEN) browserWs.send(Buffer.isBuffer(raw) ? raw.toString('utf8') : raw); } catch {}
   });
 
   openaiWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] WS error:`, e.message));
