@@ -1,0 +1,21 @@
+name: Deploy to Hetzner
+on:
+  push:
+    branches:
+      - master
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 5.161.59.190
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/netcare-receptionist
+            git pull origin master
+            npm install --production
+            pm2 restart all
+            pm2 save
