@@ -47,8 +47,8 @@ server.on('upgrade', (req, socket, head) => {
 
   if (twilioMatch) {
     wss.handleUpgrade(req, socket, head, ws => {
-      const { getClinicBySlug, getKnowledgeBase } = require('./database/db');
-      const { createTwilioRelay }                 = require('./services/realtime');
+      const { getClinicBySlug, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
+      const { createTwilioRelay } = require('./services/realtime');
 
       const clinic = getClinicBySlug(twilioMatch[1]);
       if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
@@ -56,13 +56,17 @@ server.on('upgrade', (req, socket, head) => {
       const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
       if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
 
-      const kb = getKnowledgeBase(clinic.id);
+      // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
+      const kb = getKnowledgeBase(clinic.id) || {};
+      kb.businessRules = getBusinessRules(clinic.id);
+      kb.trainingFaqs  = getTrainingFaqs(clinic.id);
+
       createTwilioRelay(ws, apiKey, clinic, kb);
     });
 
   } else if (browserMatch) {
     wss.handleUpgrade(req, socket, head, ws => {
-      const { getClinicAiConfig, getKnowledgeBase } = require('./database/db');
+      const { getClinicAiConfig, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
       const { consumeVoiceToken, createBrowserRelay } = require('./services/realtime');
 
       const clinicId = consumeVoiceToken(browserMatch[1]);
@@ -74,7 +78,11 @@ server.on('upgrade', (req, socket, head) => {
       const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
       if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
 
-      const kb = getKnowledgeBase(clinicId);
+      // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
+      const kb = getKnowledgeBase(clinicId) || {};
+      kb.businessRules = getBusinessRules(clinicId);
+      kb.trainingFaqs  = getTrainingFaqs(clinicId);
+
       createBrowserRelay(ws, apiKey, clinic, kb);
     });
 

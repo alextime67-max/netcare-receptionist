@@ -728,21 +728,36 @@ async function finalizeCall(callSid, ai, clinic) {
 }
 
 // ── OpenAI Realtime Voice — Twilio Media Streams TwiML ───────────────────────
-// Set this URL as the Twilio webhook for a phone number to use OpenAI Realtime.
+// Point your Twilio number's Voice URL to: POST /webhook/:slug/realtime-voice
 // Requires APP_URL to be set to your public HTTPS/WSS domain (e.g. ngrok URL).
 
-router.post('/:slug/realtime-voice', (req, res) => {
-  const clinic = getClinicBySlug(req.params.slug);
-  if (!clinic) return res.status(404).type('text/plain').send('Clinic not found');
+router.post('/:slug/realtime-voice', clinicMiddleware, (req, res) => {
+  const clinic = req.clinic;
+  const { CallSid = '', From = 'anonymous' } = req.body;
+
+  const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn(`[Realtime:Twilio/${clinic.slug}] No OpenAI API key — rejecting  CallSid=${CallSid}`);
+    return res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>We're sorry, this service is temporarily unavailable. Please call back later.</Say>
+  <Hangup/>
+</Response>`);
+  }
 
   const appUrl = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`)
     .replace(/^https?:\/\//, '')
     .replace(/\/$/, '');
 
+  console.log(`[Realtime:Twilio/${clinic.slug}] Inbound call  CallSid=${CallSid}  From=${From}`);
+
   res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="wss://${appUrl}/realtime/twilio/${clinic.slug}"/>
+    <Stream url="wss://${appUrl}/realtime/twilio/${clinic.slug}">
+      <Parameter name="from" value="${From}"/>
+      <Parameter name="callSid" value="${CallSid}"/>
+    </Stream>
   </Connect>
 </Response>`);
 });

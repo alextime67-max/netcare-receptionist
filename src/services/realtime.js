@@ -1,5 +1,6 @@
 const crypto    = require('crypto');
 const WebSocket = require('ws');
+const { createCall, updateCall, addTranscript } = require('../database/db');
 
 const REALTIME_MODEL = 'gpt-realtime';
 const REALTIME_URL   = `wss://api.openai.com/v1/realtime?model=${REALTIME_MODEL}`;
@@ -107,6 +108,38 @@ function buildRealtimeInstructions(clinic, kb) {
   const cfgBody = cfgFields.filter(([, v]) => v && v.trim()).map(([k, v]) => `${k}:\n${v.trim()}`).join('\n\n');
   if (cfgBody) lines.push('', cfgBody);
 
+  // Business rules from Training Center
+  const rules = kb?.businessRules || [];
+  if (rules.length) {
+    lines.push(
+      '', '════════════════════',
+      'BUSINESS RULES — follow these exactly on every call:',
+      '════════════════════',
+      ...rules.map(r => `• ${r.rule_text}`)
+    );
+  }
+
+  // Trained FAQs from Training Center
+  const trainingFaqs = kb?.trainingFaqs || [];
+  if (trainingFaqs.length) {
+    lines.push(
+      '', '════════════════════',
+      'FREQUENTLY ASKED QUESTIONS — use these exact answers when the topic comes up:',
+      '════════════════════',
+      ...trainingFaqs.flatMap(f => [`Q: ${f.question}`, `A: ${f.answer}`, ''])
+    );
+  }
+
+  // Master prompt override — placed last so it always takes effect
+  if (clinic.ai_master_prompt?.trim()) {
+    lines.push(
+      '', '════════════════════',
+      'OVERRIDE INSTRUCTIONS — highest priority, always follow these:',
+      '════════════════════',
+      clinic.ai_master_prompt.trim()
+    );
+  }
+
   return lines.join('\n');
 }
 
@@ -155,22 +188,30 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 
-  let streamSid    = null;
-  let sessionReady = false;
-  const pending    = [];
+  let streamSid        = null;
+  let callSid          = null;
+  let dbId             = null;
+  let sessionReady     = false;
+  let greetingTriggered = false;
+  const pending        = [];
 
   function sendToOpenAI(obj) {
     if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
   }
 
+  // ── OpenAI WebSocket handlers ─────────────────────────────────────────────
+
   openaiWs.on('open', () => {
-    console.log(`[Realtime] OpenAI WS connected for ${clinicName}`);
+    console.log(`[Realtime:Twilio] OpenAI connected  clinic=${clinicName}`);
     sendToOpenAI({
       type: 'session.update',
       session: {
         type:         'realtime',
         instructions,
-        audio: { output: { voice } },
+        audio: {
+          input:  { format: { type: 'audio/pcmu' } },       // G.711 μ-law — Twilio native, no transcoding
+          output: { format: { type: 'audio/pcmu' }, voice }, // Same for output → Twilio receives it directly
+        },
       },
     });
   });
@@ -179,41 +220,80 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     let evt;
     try { evt = JSON.parse(raw); } catch { return; }
 
-    if (evt.type === 'session.created' || evt.type === 'session.updated') {
+    if (evt.type === 'session.created') {
+      console.log(`[Realtime:Twilio:${clinicName}] session.created`);
+    }
+
+    if (evt.type === 'session.updated') {
+      const fmt   = evt.session?.audio?.input?.format?.type  || 'unknown';
+      const outFmt= evt.session?.audio?.output?.format?.type || 'unknown';
+      const v     = evt.session?.audio?.output?.voice         || voice;
+      console.log(`[Realtime:Twilio:${clinicName}] session.updated  input=${fmt}  output=${outFmt}  voice=${v}`);
       sessionReady = true;
       while (pending.length) {
         sendToOpenAI({ type: 'input_audio_buffer.append', audio: pending.shift() });
       }
+      // Trigger Ana's opening greeting — same as browser relay
+      if (!greetingTriggered) {
+        greetingTriggered = true;
+        sendToOpenAI({ type: 'response.create' });
+      }
     }
 
-    // Forward Ana's audio to Twilio
+    // Forward Ana's pcmu audio directly to Twilio — no conversion needed
     if (evt.type === 'response.output_audio.delta' && evt.delta && streamSid) {
       try {
         if (twilioWs.readyState === WebSocket.OPEN) {
           twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: evt.delta } }));
         }
-      } catch { /* Twilio closed */ }
+      } catch { /* Twilio disconnected */ }
     }
 
     if (evt.type === 'response.output_audio_transcript.done') {
-      console.log(`[Realtime:${clinicName}] Ana: ${evt.transcript}`);
+      const text = evt.transcript;
+      console.log(`[Realtime:Twilio:${clinicName}] Ana: ${text}`);
+      if (dbId && text) {
+        try { addTranscript(dbId, 'assistant', text); } catch (e) {
+          console.error(`[Realtime:Twilio:${clinicName}] transcript log error:`, e.message);
+        }
+      }
     }
+
     if (evt.type === 'error') {
-      console.error(`[Realtime:${clinicName}] Error:`, evt.error?.message);
+      console.error(`[Realtime:Twilio:${clinicName}] OpenAI error:`, evt.error?.message, `(${evt.error?.code})`);
     }
   });
 
-  openaiWs.on('error', e => console.error(`[Realtime:${clinicName}] WS error:`, e.message));
-  openaiWs.on('close', () => { try { twilioWs.close(); } catch {} });
+  openaiWs.on('error', e => console.error(`[Realtime:Twilio:${clinicName}] OpenAI WS error:`, e.message));
 
-  // Receive audio and events from Twilio
+  openaiWs.on('close', () => {
+    console.log(`[Realtime:Twilio:${clinicName}] OpenAI WS closed  callSid=${callSid || 'none'}`);
+    if (callSid) {
+      try { updateCall(callSid, { status: 'completed' }); } catch {}
+    }
+    try { twilioWs.close(); } catch {}
+  });
+
+  // ── Twilio WebSocket handlers ─────────────────────────────────────────────
+
   twilioWs.on('message', raw => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.event === 'start') {
-      streamSid = msg.start?.streamSid || msg.streamSid;
-      console.log(`[Realtime:${clinicName}] Twilio stream started: ${streamSid}`);
+      streamSid        = msg.start?.streamSid || msg.streamSid;
+      callSid          = msg.start?.callSid;
+      const callerPhone = msg.start?.customParameters?.from || 'anonymous';
+      console.log(`[Realtime:Twilio:${clinicName}] Stream started  callSid=${callSid}  from=${callerPhone}  streamSid=${streamSid}`);
+
+      if (callSid) {
+        try {
+          dbId = createCall(callSid, callerPhone, clinic.id);
+          console.log(`[Realtime:Twilio:${clinicName}] Call record created  dbId=${dbId}`);
+        } catch (e) {
+          console.error(`[Realtime:Twilio:${clinicName}] createCall error:`, e.message);
+        }
+      }
     }
 
     if (msg.event === 'media') {
@@ -223,19 +303,27 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
         sendToOpenAI({ type: 'input_audio_buffer.append', audio });
       } else {
         pending.push(audio);
+        if (pending.length === 1) {
+          console.log(`[Realtime:Twilio:${clinicName}] Buffering audio until session ready…`);
+        }
       }
     }
 
     if (msg.event === 'stop') {
+      console.log(`[Realtime:Twilio:${clinicName}] Twilio stream stopped  callSid=${callSid}`);
       try { openaiWs.close(); } catch {}
     }
   });
 
   twilioWs.on('close', () => {
-    console.log(`[Realtime:${clinicName}] Twilio stream closed`);
+    console.log(`[Realtime:Twilio:${clinicName}] Twilio WS disconnected  callSid=${callSid || 'none'}`);
+    if (callSid) {
+      try { updateCall(callSid, { status: 'completed' }); } catch {}
+    }
     try { openaiWs.close(); } catch {}
   });
-  twilioWs.on('error', e => console.error(`[Realtime:${clinicName}] Twilio WS error:`, e.message));
+
+  twilioWs.on('error', e => console.error(`[Realtime:Twilio:${clinicName}] Twilio WS error:`, e.message));
 }
 
 // ── Browser relay — WebSocket proxy (browser → our server → OpenAI) ──────────
