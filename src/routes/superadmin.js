@@ -7,7 +7,12 @@ const fs        = require('fs');
 const twilio = require('twilio');
 
 const Anthropic = require('@anthropic-ai/sdk');
-const _anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+function makeAnthropicClient() {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY is not configured on this server');
+  return new Anthropic({ apiKey: key });
+}
 
 const multer  = require('multer');
 const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -644,7 +649,7 @@ Return ONLY valid JSON. No markdown fences. No text outside the JSON object.`;
 
 async function runKbExtraction(text) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not configured');
-  const aiResp = await _anthropicClient.messages.create({
+  const aiResp = await makeAnthropicClient().messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 3000,
     messages: [{ role: 'user', content: `${KB_EXTRACTION_PROMPT}\n\nContent:\n${text}` }],
@@ -1038,7 +1043,7 @@ router.post('/api/train/:clinicId/train', async (req, res) => {
 
     context = context.trim().slice(0, 16000);
 
-    const aiResp = await _anthropicClient.messages.create({
+    const aiResp = await makeAnthropicClient().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       messages: [{
@@ -1163,7 +1168,7 @@ router.post('/api/practice/:clinicId/message/:sessionId', async (req, res) => {
     if (kb) systemPrompt += buildKbPromptSection(kb, null);
 
     const allMessages = [...conversationMessages, { role: 'user', content: message }];
-    const aiResp = await _anthropicClient.messages.create({
+    const aiResp = await makeAnthropicClient().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       system: systemPrompt,
