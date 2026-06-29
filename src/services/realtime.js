@@ -165,23 +165,9 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
 
   openaiWs.on('open', () => {
     console.log(`[Realtime] OpenAI WS connected for ${clinicName}`);
-    // Configure session to use g711_ulaw — same as Twilio, zero transcoding
     sendToOpenAI({
       type: 'session.update',
-      session: {
-        voice,
-        instructions,
-        input_audio_format:  'g711_ulaw',
-        output_audio_format: 'g711_ulaw',
-        input_audio_transcription: { model: 'whisper-1' },
-        turn_detection: {
-          type:                'server_vad',
-          threshold:           0.5,
-          prefix_padding_ms:   300,
-          silence_duration_ms: 700,
-        },
-        temperature: 0.8,
-      },
+      session: { type: 'realtime', instructions },
     });
   });
 
@@ -197,7 +183,7 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     }
 
     // Forward Ana's audio to Twilio
-    if (evt.type === 'response.audio.delta' && evt.delta && streamSid) {
+    if (evt.type === 'response.output_audio.delta' && evt.delta && streamSid) {
       try {
         if (twilioWs.readyState === WebSocket.OPEN) {
           twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: evt.delta } }));
@@ -205,11 +191,7 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
       } catch { /* Twilio closed */ }
     }
 
-    // Logging only
-    if (evt.type === 'conversation.item.input_audio_transcription.completed') {
-      console.log(`[Realtime:${clinicName}] Caller: ${evt.transcript}`);
-    }
-    if (evt.type === 'response.audio_transcript.done') {
+    if (evt.type === 'response.output_audio_transcript.done') {
       console.log(`[Realtime:${clinicName}] Ana: ${evt.transcript}`);
     }
     if (evt.type === 'error') {
@@ -276,20 +258,7 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
     console.log(`[Realtime:Browser] Connected to OpenAI for ${clinicName}`);
     sendToOpenAI({
       type: 'session.update',
-      session: {
-        voice,
-        instructions,
-        input_audio_format:  'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: { model: 'whisper-1' },
-        turn_detection: {
-          type:                'server_vad',
-          threshold:           0.5,
-          prefix_padding_ms:   300,
-          silence_duration_ms: 700,
-        },
-        temperature: 0.8,
-      },
+      session: { type: 'realtime', instructions },
     });
   });
 
@@ -301,10 +270,7 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
       greetingTriggered = true;
       sendToOpenAI({ type: 'response.create' });
     }
-    if (evt.type === 'conversation.item.input_audio_transcription.completed') {
-      console.log(`[Realtime:Browser:${clinicName}] User: ${evt.transcript}`);
-    }
-    if (evt.type === 'response.audio_transcript.done') {
+    if (evt.type === 'response.output_audio_transcript.done') {
       console.log(`[Realtime:Browser:${clinicName}] Ana: ${evt.transcript}`);
     }
     if (evt.type === 'error') {

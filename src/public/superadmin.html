@@ -5110,17 +5110,17 @@ function voicePlayAudio(b64) {
 }
 
 function voiceHandleEvent(evt) {
-  // Ana's audio — play it
-  if (evt.type === 'response.audio.delta' && evt.delta) {
+  // Ana's audio — play it (gpt-realtime uses response.output_audio.delta)
+  if ((evt.type === 'response.output_audio.delta' || evt.type === 'response.audio.delta') && evt.delta) {
     voicePlayAudio(evt.delta);
   }
 
-  // User was interrupted → reset playback cursor so Ana stops mid-sentence
+  // User interrupted Ana → reset playback cursor
   if (evt.type === 'input_speech_started' || evt.type === 'output_audio_buffer.cleared') {
     if (_voiceAudioCtx) _voiceNextTime = _voiceAudioCtx.currentTime;
   }
 
-  // Partial transcription — what the user is saying live
+  // Partial transcription of what the user is saying
   if (evt.type === 'conversation.item.input_audio_transcription.delta') {
     const partial = document.getElementById('voice-live-partial');
     const txt     = document.getElementById('voice-partial-text');
@@ -5135,8 +5135,8 @@ function voiceHandleEvent(evt) {
     if (evt.transcript?.trim()) voicePushBubble('user', evt.transcript.trim());
   }
 
-  // Ana's spoken response transcript
-  if (evt.type === 'response.audio_transcript.done') {
+  // Ana's spoken response transcript (gpt-realtime uses response.output_audio_transcript.done)
+  if (evt.type === 'response.output_audio_transcript.done' || evt.type === 'response.audio_transcript.done') {
     if (evt.transcript?.trim()) voicePushBubble('assistant', evt.transcript.trim());
   }
 
@@ -5146,10 +5146,10 @@ function voiceHandleEvent(evt) {
   }
 
   // Speaking indicators
-  if (evt.type === 'output_audio_buffer.started') {
+  if (evt.type === 'output_audio_buffer.started' || evt.type === 'response.output_audio.delta') {
     voiceSetStatus('🗣️ Ana is speaking…', 'green');
   }
-  if (evt.type === 'output_audio_buffer.stopped') {
+  if (evt.type === 'output_audio_buffer.stopped' || evt.type === 'response.output_audio.done') {
     voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
   }
 
