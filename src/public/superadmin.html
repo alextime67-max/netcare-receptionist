@@ -1657,15 +1657,37 @@
       <!-- Greeting -->
       <div class="border-t border-slate-100 pt-5">
         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Greeting</p>
-        <p class="text-xs text-slate-400 mb-3">Ana says this EXACTLY at the start of every call — used by both Twilio Realtime and Live Voice. Leave blank to use a generic fallback.</p>
+        <p class="text-xs text-slate-400 mb-1">The system automatically prepends <strong class="text-slate-500">Buenos días / Buenas tardes / Buenas noches</strong> (or English equivalent) based on the caller's local time. Write the rest of the greeting below — do <em>not</em> include the time-of-day phrase.</p>
+        <p class="text-xs text-slate-400 mb-3">Example result: <span class="font-mono text-slate-500">"Buenos días. Gracias por llamar a MDcare Medical Center. Soy Ana. ¿Cómo puedo ayudarle hoy?"</span></p>
         <div class="grid grid-cols-2 gap-4">
           <div class="col-span-2">
-            <label class="form-label">Greeting (Spanish) <span class="normal-case font-normal text-slate-400">— primary greeting for Spanish-first clinics</span></label>
-            <textarea id="ai-greeting-es" rows="2" placeholder="Hola, muy buenos días. Gracias por llamar. Mi nombre es Ana. ¿En qué puedo ayudarle hoy?" class="form-input resize-none"></textarea>
+            <label class="form-label">Greeting (Spanish) <span class="normal-case font-normal text-slate-400">— for Spanish-first clinics</span></label>
+            <textarea id="ai-greeting-es" rows="2" placeholder="Gracias por llamar a MDcare Medical Center. Soy Ana. ¿Cómo puedo ayudarle hoy?" class="form-input resize-none"></textarea>
           </div>
           <div class="col-span-2">
-            <label class="form-label">Greeting (English) <span class="normal-case font-normal text-slate-400">— primary greeting for English-first clinics</span></label>
-            <textarea id="ai-greeting-en" rows="2" placeholder="Hello, good morning. Thank you for calling. My name is Ana. How may I help you today?" class="form-input resize-none"></textarea>
+            <label class="form-label">Greeting (English) <span class="normal-case font-normal text-slate-400">— for English-first clinics</span></label>
+            <textarea id="ai-greeting-en" rows="2" placeholder="Thank you for calling MDcare Medical Center. I'm Ana. How may I help you today?" class="form-input resize-none"></textarea>
+          </div>
+          <div class="col-span-2">
+            <label class="form-label">Timezone <span class="normal-case font-normal text-slate-400">— used to calculate morning / afternoon / evening</span></label>
+            <select id="ai-timezone" class="form-input">
+              <option value="America/New_York">America/New_York — Eastern (ET)</option>
+              <option value="America/Chicago">America/Chicago — Central (CT)</option>
+              <option value="America/Denver">America/Denver — Mountain (MT)</option>
+              <option value="America/Phoenix">America/Phoenix — Mountain no DST (AZ)</option>
+              <option value="America/Los_Angeles">America/Los_Angeles — Pacific (PT)</option>
+              <option value="America/Anchorage">America/Anchorage — Alaska (AK)</option>
+              <option value="Pacific/Honolulu">Pacific/Honolulu — Hawaii (HI)</option>
+              <option value="America/Puerto_Rico">America/Puerto_Rico — Puerto Rico (AST)</option>
+              <option value="America/Bogota">America/Bogota — Colombia (COT)</option>
+              <option value="America/Mexico_City">America/Mexico_City — Mexico City (CST)</option>
+              <option value="America/Lima">America/Lima — Peru (PET)</option>
+              <option value="America/Caracas">America/Caracas — Venezuela (VET)</option>
+              <option value="America/Buenos_Aires">America/Buenos_Aires — Argentina (ART)</option>
+              <option value="America/Sao_Paulo">America/Sao_Paulo — Brazil (BRT)</option>
+              <option value="Europe/Madrid">Europe/Madrid — Spain (CET)</option>
+              <option value="UTC">UTC</option>
+            </select>
           </div>
         </div>
       </div>
@@ -2540,6 +2562,7 @@ async function loadAiConfig(clinicId) {
     document.getElementById('f-openai-api-key').value  = c.openai_api_key              || '';
     document.getElementById('f-openai-voice').value    = c.openai_voice                || 'coral';
     document.getElementById('f-openai-language').value = c.openai_language             || 'es';
+    document.getElementById('ai-timezone').value       = c.timezone                    || 'America/New_York';
     onTemplateChange();
     // Rebuild FAQ list
     const list = document.getElementById('faq-list');
@@ -2588,6 +2611,7 @@ async function saveAiConfig() {
     openaiApiKey:            document.getElementById('f-openai-api-key').value.trim() || null,
     openaiVoice:             document.getElementById('f-openai-voice').value || 'coral',
     openaiLanguage:          document.getElementById('f-openai-language').value || 'es',
+    timezone:                document.getElementById('ai-timezone').value || 'America/New_York',
   };
 
   try {

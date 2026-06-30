@@ -25,18 +25,40 @@ function consumeVoiceToken(token) {
 
 // ── System prompt for Realtime API ───────────────────────────────────────────
 
+// Returns "Buenos días." / "Buenas tardes." / "Buenas noches." (or English equivalents)
+// based on the current hour in the clinic's configured timezone.
+function getTimeBasedGreeting(clinic) {
+  const tz   = clinic.timezone || 'America/New_York';
+  const lang = clinic.openai_language || 'es';
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
+    10
+  );
+  if (lang === 'es') {
+    if (hour >= 5 && hour < 12)  return 'Buenos días.';
+    if (hour >= 12 && hour < 18) return 'Buenas tardes.';
+    return 'Buenas noches.';
+  }
+  if (hour >= 5 && hour < 12)  return 'Good morning.';
+  if (hour >= 12 && hour < 18) return 'Good afternoon.';
+  return 'Good evening.';
+}
+
 function buildRealtimeInstructions(clinic, kb) {
   const name     = clinic.name || 'the clinic';
   const asstName = clinic.ai_assistant_name || 'Ana';
   const lang     = clinic.openai_language || 'es';
 
-  // Greeting configured in SuperAdmin → AI Settings → Greeting.
-  // Falls back to a generic greeting if not set.
+  // Time-based greeting prepended automatically — clinic does NOT write it manually.
+  const timeGreeting = getTimeBasedGreeting(clinic);
+
+  // Body of greeting configured in SuperAdmin → AI Settings → Greeting.
+  // Falls back to a generic phrase if not set.
   const greetingEs = clinic.ai_greeting_es?.trim()
-    || `Hola, gracias por llamar. ¿En qué puedo ayudarle hoy?`;
+    || `Gracias por llamar. ¿En qué puedo ayudarle hoy?`;
   const greetingEn = clinic.ai_greeting_en?.trim()
-    || `Hello, thank you for calling. How may I help you today?`;
-  const openingGreeting = lang === 'es' ? greetingEs : greetingEn;
+    || `Thank you for calling. How may I help you today?`;
+  const openingGreeting = `${timeGreeting} ${lang === 'es' ? greetingEs : greetingEn}`;
 
   const lines = [
     `You are ${asstName}, an experienced, warm receptionist at ${name}.`,

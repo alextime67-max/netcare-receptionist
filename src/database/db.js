@@ -256,6 +256,9 @@ function initDb() {
   _addColumnIfMissing('clinics', 'openai_voice',    "TEXT DEFAULT 'coral'");
   _addColumnIfMissing('clinics', 'openai_language', "TEXT DEFAULT 'es'");
 
+  // ── Migrations: Timezone for smart time-based greeting ───────────────────
+  _addColumnIfMissing('clinics', 'timezone', "TEXT DEFAULT 'America/New_York'");
+
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
   for (const row of noAcct) {
@@ -986,7 +989,8 @@ function getClinicAiConfig(id) {
            ai_office_hours, ai_after_hours_message, ai_emergency_instructions,
            ai_industry_template, ai_master_prompt,
            ai_voice_es, ai_voice_en,
-           openai_api_key, openai_voice, openai_language
+           openai_api_key, openai_voice, openai_language,
+           timezone
     FROM clinics WHERE id = ?
   `).get(id);
 }
@@ -1000,6 +1004,7 @@ function updateClinicAiConfig(id, data) {
     'ai_industry_template', 'ai_master_prompt',
     'ai_voice_es', 'ai_voice_en',
     'openai_api_key', 'openai_voice', 'openai_language',
+    'timezone',
   ];
   const map = {
     ai_assistant_name:           data.assistantName,
@@ -1020,6 +1025,7 @@ function updateClinicAiConfig(id, data) {
     openai_api_key:              data.openaiApiKey,
     openai_voice:                data.openaiVoice,
     openai_language:             data.openaiLanguage,
+    timezone:                    data.timezone,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])
