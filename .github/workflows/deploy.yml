@@ -1,21 +1,58 @@
 name: Deploy to Hetzner
+
 on:
   push:
     branches:
       - master
+
 jobs:
   deploy:
+    name: Deploy netcare-phone to production
     runs-on: ubuntu-latest
+
     steps:
-      - name: Deploy to server
+      - name: Deploy, verify, and rollback on failure
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 5.161.59.190
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             cd /root/netcare-receptionist
+
+            # Save current commit in case we need to roll back
+            PREV=$(git rev-parse HEAD)
+            echo "[deploy] Current HEAD: $PREV"
+
+            # Pull latest code
             git pull origin master
-            npm install --production
-            pm2 restart all
+            echo "[deploy] New HEAD: $(git rev-parse HEAD)"
+
+            # Install any new production dependencies
+            npm install --production --silent
+
+            # Restart the app
+            pm2 restart netcare-phone
             pm2 save
+
+            # Health check — wait up to 30 s for the app to respond
+            echo "[deploy] Running health check..."
+            for i in $(seq 1 6); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/)
+              if [ "$STATUS" = "200" ]; then
+                echo "[deploy] Health check passed (HTTP 200)"
+                exit 0
+              fi
+              echo "[deploy] Attempt $i — HTTP $STATUS, retrying in 5s..."
+              sleep 5
+            done
+
+            # Health check failed — roll back to previous commit
+            echo "[deploy] Health check failed — rolling back to $PREV"
+            git reset --hard "$PREV"
+            npm install --production --silent
+            pm2 restart netcare-phone
+            pm2 save
+            echo "[deploy] Rollback complete"
+            exit 1
