@@ -30,15 +30,21 @@ function buildRealtimeInstructions(clinic, kb) {
   const asstName = clinic.ai_assistant_name || 'Ana';
   const lang     = clinic.openai_language || 'es';
 
+  // Greeting configured in SuperAdmin → AI Settings → Greeting.
+  // Falls back to a generic greeting if not set.
+  const greetingEs = clinic.ai_greeting_es?.trim()
+    || `Hola, gracias por llamar. ¿En qué puedo ayudarle hoy?`;
+  const greetingEn = clinic.ai_greeting_en?.trim()
+    || `Hello, thank you for calling. How may I help you today?`;
+  const openingGreeting = lang === 'es' ? greetingEs : greetingEn;
+
   const lines = [
     `You are ${asstName}, an experienced, warm receptionist at ${name}.`,
     `You have worked at this office for many years. Callers feel comfortable and at ease talking to you.`,
     `You sound like a real person — never robotic, never rushed, never scripted.`,
     ``,
     `OPENING GREETING — say this EXACTLY on your very first turn, then stop and wait for the patient to speak:`,
-    lang === 'es'
-      ? `"Hola, muy buenos días. Soy ${asstName}, la recepcionista de ${name}. ¿En qué le puedo ayudar hoy?"`
-      : `"Thank you for calling ${name}. This is ${asstName}. How may I help you today?"`,
+    `"${openingGreeting}"`,
     ``,
     `LANGUAGE — BILINGUAL AUTO-DETECT:`,
     `- Your greeting above is in ${lang === 'es' ? 'Spanish' : 'English'} (the clinic's primary language).`,
