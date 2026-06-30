@@ -35,9 +35,22 @@ function buildRealtimeInstructions(clinic, kb) {
     `You have worked at this office for many years. Callers feel comfortable and at ease talking to you.`,
     `You sound like a real person — never robotic, never rushed, never scripted.`,
     ``,
+    `OPENING GREETING — say this EXACTLY on your very first turn, then stop and wait for the patient to speak:`,
     lang === 'es'
-      ? `Always respond in natural Latin American Spanish unless the caller clearly switches to English.\nUse these phrases naturally — not every turn:\n"Con mucho gusto.", "Claro, cómo no.", "Permítame un momento.", "No se preocupe, yo le ayudo.", "Perfecto, ya tengo esa información.", "Déjeme confirmar.", "Entendido.", "Muy bien.", "Claro que sí."`
-      : `Always respond in clear, warm American English unless the caller speaks Spanish.\nUse these naturally: "Of course.", "Absolutely, I can help with that.", "Let me confirm that.", "Got it, thank you.", "No worries.", "You're all set."`,
+      ? `"Hola, muy buenos días. Soy ${asstName}, la recepcionista de ${name}. ¿En qué le puedo ayudar hoy?"`
+      : `"Thank you for calling ${name}. This is ${asstName}. How may I help you today?"`,
+    ``,
+    `LANGUAGE — BILINGUAL AUTO-DETECT:`,
+    `- Your greeting above is in ${lang === 'es' ? 'Spanish' : 'English'} (the clinic's primary language).`,
+    `- The moment the patient speaks, detect their language from their first words.`,
+    `- If they speak ${lang === 'es' ? 'English' : 'Spanish'}: switch entirely to that language immediately and stay in it.`,
+    `- If they speak ${lang === 'es' ? 'Spanish' : 'English'}: continue in ${lang === 'es' ? 'Spanish' : 'English'}.`,
+    `- If they switch languages mid-call: match them instantly, no comment needed.`,
+    `- NEVER ask "¿Prefiere español o inglés?" or "Do you prefer Spanish or English?" — just detect and respond.`,
+    ``,
+    lang === 'es'
+      ? `Natural Spanish phrases (use sparingly): "Con mucho gusto.", "Claro, cómo no.", "Permítame un momento.", "No se preocupe, yo le ayudo.", "Perfecto.", "Déjeme confirmar.", "Entendido.", "Claro que sí."\nNatural English phrases when caller switches (use sparingly): "Of course.", "Absolutely.", "Let me confirm that.", "Got it.", "No worries.", "You're all set."`
+      : `Natural English phrases (use sparingly): "Of course.", "Absolutely, I can help with that.", "Let me confirm that.", "Got it, thank you.", "No worries.", "You're all set."\nNatural Spanish phrases when caller switches (use sparingly): "Con mucho gusto.", "Claro, cómo no.", "Permítame un momento.", "No se preocupe.", "Perfecto.", "Entendido."`,
     ``,
     `CONVERSATION STYLE:`,
     `- Short responses — 1 to 2 natural sentences on the phone`,
@@ -188,12 +201,12 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 
-  let streamSid        = null;
-  let callSid          = null;
-  let dbId             = null;
-  let sessionReady     = false;
+  let streamSid         = null;
+  let callSid           = null;
+  let dbId              = null;
+  let sessionReady      = false;
   let greetingTriggered = false;
-  const pending        = [];
+  let greetingDone      = false; // blocks patient audio until Ana's opening is finished
 
   function sendToOpenAI(obj) {
     if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
@@ -230,14 +243,18 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
       const v     = evt.session?.audio?.output?.voice         || voice;
       console.log(`[Realtime:Twilio:${clinicName}] session.updated  input=${fmt}  output=${outFmt}  voice=${v}`);
       sessionReady = true;
-      while (pending.length) {
-        sendToOpenAI({ type: 'input_audio_buffer.append', audio: pending.shift() });
-      }
-      // Trigger Ana's opening greeting — same as browser relay
+      // Do NOT flush pre-connection audio — Twilio sends noise before the patient speaks.
+      // Flushing it would make VAD trigger a second response right after the greeting.
       if (!greetingTriggered) {
         greetingTriggered = true;
         sendToOpenAI({ type: 'response.create' });
       }
+    }
+
+    // Greeting is done — now the patient can speak and we will forward their audio.
+    if (evt.type === 'response.done' && greetingTriggered && !greetingDone) {
+      greetingDone = true;
+      console.log(`[Realtime:Twilio:${clinicName}] Greeting done — listening for patient`);
     }
 
     // Forward Ana's pcmu audio directly to Twilio — no conversion needed
@@ -299,13 +316,11 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     if (msg.event === 'media') {
       const audio = msg.media?.payload;
       if (!audio) return;
-      if (sessionReady) {
+      // Only forward patient audio after Ana's greeting is complete.
+      // Audio received before greetingDone is connection noise — discarding it
+      // prevents VAD from triggering a second response without the patient speaking.
+      if (greetingDone) {
         sendToOpenAI({ type: 'input_audio_buffer.append', audio });
-      } else {
-        pending.push(audio);
-        if (pending.length === 1) {
-          console.log(`[Realtime:Twilio:${clinicName}] Buffering audio until session ready…`);
-        }
       }
     }
 
