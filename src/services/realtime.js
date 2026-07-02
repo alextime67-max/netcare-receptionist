@@ -65,8 +65,14 @@ function buildRealtimeInstructions(clinic, kb) {
     `You have worked at this office for many years. Callers feel comfortable and at ease talking to you.`,
     `You sound like a real person — never robotic, never rushed, never scripted.`,
     ``,
-    `OPENING GREETING — say this EXACTLY on your very first turn, then stop and wait for the patient to speak:`,
-    `"${openingGreeting}"`,
+    `OPENING GREETING — CRITICAL RULES (follow exactly):`,
+    `1. Your very first response MUST be EXACTLY this phrase — word for word, nothing added, nothing removed:`,
+    `   "${openingGreeting}"`,
+    `2. After saying the greeting → STOP. Say NOTHING else. Go completely silent.`,
+    `3. Wait for the patient to speak first. Do NOT generate any follow-up text, questions, or filler.`,
+    `4. Do NOT say "Claro, con mucho gusto...", "Of course...", or any other phrase until the patient has told you what they need.`,
+    `5. Do NOT assume the patient wants an appointment or any specific service.`,
+    `6. Only respond when the patient has finished speaking.`,
     ``,
     `LANGUAGE — BILINGUAL AUTO-DETECT:`,
     `- Your greeting above is in ${lang === 'es' ? 'Spanish' : 'English'} (the clinic's primary language).`,
@@ -83,6 +89,9 @@ function buildRealtimeInstructions(clinic, kb) {
     `CONVERSATION STYLE:`,
     `- Short responses — 1 to 2 natural sentences on the phone`,
     `- Ask only one question per turn`,
+    `- Always wait for the patient to finish speaking before you respond`,
+    `- Never say "Claro, con mucho gusto...", "Of course...", or similar until after the patient has stated their need`,
+    `- Never assume or guess what the patient wants — always listen first`,
     `- Remember everything the caller tells you — NEVER ask again for information already given`,
     `- With elderly or slow callers: shorter sentences, confirm each item, say "No hay prisa." / "Take your time."`,
     ``,
@@ -253,6 +262,12 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
           input:  { format: { type: 'audio/pcmu' } },       // G.711 μ-law — Twilio native, no transcoding
           output: { format: { type: 'audio/pcmu' }, voice }, // Same for output → Twilio receives it directly
         },
+        turn_detection: {
+          type:                'server_vad',
+          threshold:           0.5,
+          prefix_padding_ms:   300,
+          silence_duration_ms: 700,
+        },
       },
     });
   });
@@ -384,6 +399,7 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
   });
 
   let greetingTriggered = false;
+  let greetingDone      = false; // blocks patient audio until Ana's opening is finished
 
   function sendToOpenAI(obj) {
     if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
@@ -397,6 +413,12 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
         type:         'realtime',
         instructions,
         audio: { output: { voice } },
+        turn_detection: {
+          type:                'server_vad',
+          threshold:           0.5,
+          prefix_padding_ms:   300,
+          silence_duration_ms: 700,
+        },
       },
     });
   });
@@ -409,6 +431,13 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
       greetingTriggered = true;
       sendToOpenAI({ type: 'response.create' });
     }
+
+    // Greeting is done — now the patient can speak and we will forward their audio.
+    if (evt.type === 'response.done' && greetingTriggered && !greetingDone) {
+      greetingDone = true;
+      console.log(`[Realtime:Browser:${clinicName}] Greeting done — listening for patient`);
+    }
+
     if (evt.type === 'response.output_audio_transcript.done') {
       console.log(`[Realtime:Browser:${clinicName}] Ana: ${evt.transcript}`);
     }
@@ -427,8 +456,15 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
   });
 
   browserWs.on('message', (raw, isBinary) => {
-    // Convert text frames (Buffer) to string so OpenAI receives text, not binary
-    try { if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(!isBinary && Buffer.isBuffer(raw) ? raw.toString('utf8') : raw); } catch {}
+    try {
+      const str = !isBinary && Buffer.isBuffer(raw) ? raw.toString('utf8') : (Buffer.isBuffer(raw) ? raw : raw);
+      // Block patient audio until Ana's greeting is complete (same logic as Twilio relay).
+      if (!greetingDone && !isBinary) {
+        const msg = JSON.parse(typeof str === 'string' ? str : str.toString('utf8'));
+        if (msg.type === 'input_audio_buffer.append') return;
+      }
+      if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(str);
+    } catch {}
   });
   browserWs.on('close', () => {
     console.log(`[Realtime:Browser:${clinicName}] Browser disconnected`);
