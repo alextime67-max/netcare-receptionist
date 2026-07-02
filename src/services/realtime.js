@@ -262,12 +262,6 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
           input:  { format: { type: 'audio/pcmu' } },       // G.711 μ-law — Twilio native, no transcoding
           output: { format: { type: 'audio/pcmu' }, voice }, // Same for output → Twilio receives it directly
         },
-        turn_detection: {
-          type:                'server_vad',
-          threshold:           0.5,
-          prefix_padding_ms:   300,
-          silence_duration_ms: 700,
-        },
       },
     });
   });
@@ -413,12 +407,6 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
         type:         'realtime',
         instructions,
         audio: { output: { voice } },
-        turn_detection: {
-          type:                'server_vad',
-          threshold:           0.5,
-          prefix_padding_ms:   300,
-          silence_duration_ms: 700,
-        },
       },
     });
   });
