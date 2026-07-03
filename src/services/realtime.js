@@ -545,6 +545,7 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
     sendToOpenAI({
       type: 'session.update',
       session: {
+        modalities:   ['text', 'audio'],
         instructions,
         voice,
         // Browser uses PCM16 natively — keep defaults for audio format
