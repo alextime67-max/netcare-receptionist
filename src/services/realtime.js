@@ -2,7 +2,7 @@ const crypto    = require('crypto');
 const WebSocket = require('ws');
 const { createCall, updateCall, addTranscript } = require('../database/db');
 
-const REALTIME_MODEL = 'gpt-realtime';
+const REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
 const REALTIME_URL   = `wss://api.openai.com/v1/realtime?model=${REALTIME_MODEL}`;
 
 // ── One-time voice tokens for browser WebSocket auth ─────────────────────────
