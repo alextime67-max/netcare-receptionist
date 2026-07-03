@@ -241,27 +241,75 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
   let streamSid         = null;
   let callSid           = null;
   let dbId              = null;
-  let sessionReady      = false;
+  let greetingDone      = false; // true after first response.done (greeting complete)
   let greetingTriggered = false;
-  let greetingDone      = false; // blocks patient audio until Ana's opening is finished
+
+  // ── State machine ─────────────────────────────────────────────────────────
+  // GREETING   — greeting playing; Ana's audio → Twilio; patient audio discarded
+  // WAITING    — silence; NO audio to OpenAI; local energy detection only; Ana SILENT
+  // FORWARDING — patient audio → OpenAI; accumulating; Ana SILENT
+  // COMMITTED  — buffer committed; awaiting Whisper transcript; Ana SILENT
+  // RESPONDING — Ana generating reply; Ana's audio → Twilio; patient audio discarded
+  //
+  // The ABSOLUTE rule: response.output_audio.delta is forwarded ONLY in GREETING or RESPONDING.
+  // All other states: Ana's audio is silently discarded regardless of what OpenAI sends.
+  let twilioState  = 'GREETING';
+  let activeFrames = 0;   // consecutive high-energy frames (WAITING → FORWARDING onset)
+  let silentFrames = 0;   // consecutive low-energy frames (FORWARDING → commit offset)
+  let blockedCount = 0;   // throttle for periodic WAITING log
+  let guardTimer   = null; // COMMITTED safety timeout — reset if no transcript arrives
+
+  const SPEECH_ON_FRAMES  = 3;    //  3 × 20 ms = 60 ms sustained energy to start forwarding
+  const SPEECH_OFF_FRAMES = 40;   // 40 × 20 ms = 800 ms silence to commit buffer
+  const COMMITTED_TIMEOUT = 8000; // ms — safety reset if Whisper never responds
 
   function sendToOpenAI(obj) {
     if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
   }
 
+  function clearBuffer() {
+    sendToOpenAI({ type: 'input_audio_buffer.clear' });
+  }
+
+  function resetToWaiting(reason) {
+    if (guardTimer) { clearTimeout(guardTimer); guardTimer = null; }
+    twilioState  = 'WAITING';
+    activeFrames = 0;
+    silentFrames = 0;
+    clearBuffer();
+    console.log(`[${clinicName}] twilio_waiting_for_user — ${reason}`);
+  }
+
+  // Variance-based G.711/PCMU speech detector — encoding-agnostic.
+  // Silence: bytes cluster near one value (low variance ≈ 0–150).
+  // Speech:  bytes span a wide range (high variance ≈ 800+).
+  // This avoids wrong assumptions about whether silence is near 0x00 or 0xFF.
+  function g711HasSpeech(base64Chunk) {
+    const buf = Buffer.from(base64Chunk, 'base64');
+    const n   = buf.length;
+    if (n === 0) return false;
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += buf[i];
+    const mean = sum / n;
+    let v = 0;
+    for (let i = 0; i < n; i++) { const d = buf[i] - mean; v += d * d; }
+    v /= n;
+    return v > 300;
+  }
+
   // ── OpenAI WebSocket handlers ─────────────────────────────────────────────
 
   openaiWs.on('open', () => {
-    console.log(`[Realtime:Twilio] OpenAI connected  clinic=${clinicName}`);
+    console.log(`[${clinicName}] Twilio → OpenAI connected`);
     sendToOpenAI({
       type: 'session.update',
       session: {
-        type:         'realtime',
         instructions,
-        audio: {
-          input:  { format: { type: 'audio/pcmu' } },       // G.711 μ-law — Twilio native, no transcoding
-          output: { format: { type: 'audio/pcmu' }, voice }, // Same for output → Twilio receives it directly
-        },
+        voice,
+        input_audio_format:        'g711_ulaw',
+        output_audio_format:       'g711_ulaw',
+        input_audio_transcription: { model: 'whisper-1' },
+        turn_detection:            null, // VAD completely disabled; we manage commits manually
       },
     });
   });
@@ -271,56 +319,88 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     try { evt = JSON.parse(raw); } catch { return; }
 
     if (evt.type === 'session.created') {
-      console.log(`[Realtime:Twilio:${clinicName}] session.created`);
+      console.log(`[${clinicName}] session.created`);
     }
 
     if (evt.type === 'session.updated') {
-      const fmt   = evt.session?.audio?.input?.format?.type  || 'unknown';
-      const outFmt= evt.session?.audio?.output?.format?.type || 'unknown';
-      const v     = evt.session?.audio?.output?.voice         || voice;
-      console.log(`[Realtime:Twilio:${clinicName}] session.updated  input=${fmt}  output=${outFmt}  voice=${v}`);
-      sessionReady = true;
-      // Do NOT flush pre-connection audio — Twilio sends noise before the patient speaks.
-      // Flushing it would make VAD trigger a second response right after the greeting.
+      console.log(`[${clinicName}] session.updated  vad=${evt.session?.turn_detection?.type || 'none'}  voice=${evt.session?.voice || voice}`);
       if (!greetingTriggered) {
         greetingTriggered = true;
         sendToOpenAI({ type: 'response.create' });
       }
     }
 
-    // Greeting is done — now the patient can speak and we will forward their audio.
-    if (evt.type === 'response.done' && greetingTriggered && !greetingDone) {
-      greetingDone = true;
-      console.log(`[Realtime:Twilio:${clinicName}] Greeting done — listening for patient`);
+    // ── ABSOLUTE gate: Ana's audio only reaches Twilio in GREETING or RESPONDING ─
+    // Any audio event in WAITING / FORWARDING / COMMITTED is silently discarded.
+    // This is the last line of defense — even if OpenAI generates audio unexpectedly,
+    // the patient never hears it unless we deliberately entered RESPONDING state.
+    if ((evt.type === 'response.output_audio.delta' || evt.type === 'response.audio.delta') && evt.delta && streamSid) {
+      if (twilioState === 'GREETING' || twilioState === 'RESPONDING') {
+        try {
+          if (twilioWs.readyState === WebSocket.OPEN)
+            twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: evt.delta } }));
+        } catch { }
+      }
+      return;
     }
 
-    // Forward Ana's pcmu audio directly to Twilio — no conversion needed
-    if (evt.type === 'response.output_audio.delta' && evt.delta && streamSid) {
-      try {
-        if (twilioWs.readyState === WebSocket.OPEN) {
-          twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: evt.delta } }));
-        }
-      } catch { /* Twilio disconnected */ }
+    // ── Ana finished a response ───────────────────────────────────────────────
+    if (evt.type === 'response.done') {
+      if (!greetingDone) {
+        // First response.done ever = greeting complete
+        greetingDone = true;
+        console.log(`[${clinicName}] twilio_greeting_done`);
+        resetToWaiting('greeting complete');
+      } else if (twilioState === 'RESPONDING') {
+        resetToWaiting('Ana response complete');
+      }
+      // response.done in other states (e.g. stray cancelled response) → ignore
+    }
+
+    // ── Authoritative gate: transcript required before any response ───────────
+    // With VAD disabled, this event fires only after our manual input_audio_buffer.commit.
+    // Whisper transcribes what the patient actually said. If the transcript is empty or
+    // too short to be real speech (noise/echo committed by mistake), we reset silently.
+    if (evt.type === 'conversation.item.input_audio_transcription.completed') {
+      if (guardTimer) { clearTimeout(guardTimer); guardTimer = null; }
+
+      const transcript = (evt.transcript || '').trim();
+      const words      = transcript.split(/\s+/).filter(w => w.length > 1);
+      console.log(`[${clinicName}] twilio_user_transcript_received: "${transcript}"  (${words.length} real words)`);
+
+      if (words.length >= 2 && twilioState === 'COMMITTED') {
+        // Real patient speech confirmed → generate Ana's response
+        twilioState = 'RESPONDING';
+        sendToOpenAI({ type: 'response.create' });
+        console.log(`[${clinicName}] twilio_response_allowed`);
+      } else {
+        resetToWaiting(
+          words.length < 2
+            ? `transcript too short or noise: "${transcript}"`
+            : `unexpected state ${twilioState} on transcript`
+        );
+      }
     }
 
     if (evt.type === 'response.output_audio_transcript.done') {
       const text = evt.transcript;
-      console.log(`[Realtime:Twilio:${clinicName}] Ana: ${text}`);
+      console.log(`[${clinicName}] Ana: ${text}`);
       if (dbId && text) {
         try { addTranscript(dbId, 'assistant', text); } catch (e) {
-          console.error(`[Realtime:Twilio:${clinicName}] transcript log error:`, e.message);
+          console.error(`[${clinicName}] transcript log error:`, e.message);
         }
       }
     }
 
     if (evt.type === 'error') {
-      console.error(`[Realtime:Twilio:${clinicName}] OpenAI error:`, evt.error?.message, `(${evt.error?.code})`);
+      console.error(`[${clinicName}] OpenAI error:`, evt.error?.message, `(${evt.error?.code})`);
     }
   });
 
-  openaiWs.on('error', e => console.error(`[Realtime:Twilio:${clinicName}] OpenAI WS error:`, e.message));
+  openaiWs.on('error', e => console.error(`[Realtime:Twilio:${clinicName}] WS error:`, e.message));
 
   openaiWs.on('close', () => {
+    if (guardTimer) clearTimeout(guardTimer);
     console.log(`[Realtime:Twilio:${clinicName}] OpenAI WS closed  callSid=${callSid || 'none'}`);
     if (callSid) {
       try { updateCall(callSid, { status: 'completed' }); } catch {}
@@ -335,15 +415,13 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.event === 'start') {
-      streamSid        = msg.start?.streamSid || msg.streamSid;
-      callSid          = msg.start?.callSid;
+      streamSid         = msg.start?.streamSid || msg.streamSid;
+      callSid           = msg.start?.callSid;
       const callerPhone = msg.start?.customParameters?.from || 'anonymous';
-      console.log(`[Realtime:Twilio:${clinicName}] Stream started  callSid=${callSid}  from=${callerPhone}  streamSid=${streamSid}`);
-
+      console.log(`[Realtime:Twilio:${clinicName}] Stream started  callSid=${callSid}  from=${callerPhone}`);
       if (callSid) {
         try {
           dbId = createCall(callSid, callerPhone, clinic.id);
-          console.log(`[Realtime:Twilio:${clinicName}] Call record created  dbId=${dbId}`);
         } catch (e) {
           console.error(`[Realtime:Twilio:${clinicName}] createCall error:`, e.message);
         }
@@ -353,11 +431,50 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     if (msg.event === 'media') {
       const audio = msg.media?.payload;
       if (!audio) return;
-      // Only forward patient audio after Ana's greeting is complete.
-      // Audio received before greetingDone is connection noise — discarding it
-      // prevents VAD from triggering a second response without the patient speaking.
-      if (greetingDone) {
+
+      // GREETING / RESPONDING / COMMITTED: discard all patient audio
+      if (twilioState !== 'WAITING' && twilioState !== 'FORWARDING') return;
+
+      if (twilioState === 'WAITING') {
+        // Local energy detection. Audio is NEVER sent to OpenAI in this state.
+        if (g711HasSpeech(audio)) {
+          activeFrames++;
+          if (activeFrames >= SPEECH_ON_FRAMES) {
+            twilioState  = 'FORWARDING';
+            activeFrames = 0;
+            silentFrames = 0;
+            blockedCount = 0;
+            console.log(`[${clinicName}] twilio_user_activity_detected — forwarding audio to OpenAI`);
+          }
+        } else {
+          activeFrames = 0;
+          blockedCount++;
+          if (blockedCount % 100 === 1) {
+            console.log(`[${clinicName}] twilio_audio_blocked_waiting — ${blockedCount} frames suppressed`);
+          }
+        }
+        return; // NEVER forward in WAITING
+      }
+
+      if (twilioState === 'FORWARDING') {
         sendToOpenAI({ type: 'input_audio_buffer.append', audio });
+
+        if (g711HasSpeech(audio)) {
+          silentFrames = 0;  // patient still speaking — reset silence counter
+        } else {
+          silentFrames++;
+          if (silentFrames === SPEECH_OFF_FRAMES) {
+            // 800 ms of silence after speech → commit buffer; wait for transcript
+            twilioState  = 'COMMITTED';
+            silentFrames = 0;
+            sendToOpenAI({ type: 'input_audio_buffer.commit' });
+            console.log(`[${clinicName}] twilio_buffer_committed — awaiting Whisper transcript`);
+            guardTimer = setTimeout(() => {
+              guardTimer = null;
+              if (twilioState === 'COMMITTED') resetToWaiting('transcript timeout 8 s');
+            }, COMMITTED_TIMEOUT);
+          }
+        }
       }
     }
 
@@ -368,6 +485,7 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
   });
 
   twilioWs.on('close', () => {
+    if (guardTimer) clearTimeout(guardTimer);
     console.log(`[Realtime:Twilio:${clinicName}] Twilio WS disconnected  callSid=${callSid || 'none'}`);
     if (callSid) {
       try { updateCall(callSid, { status: 'completed' }); } catch {}
@@ -394,9 +512,32 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
 
   let greetingTriggered = false;
   let greetingDone      = false; // blocks patient audio until Ana's opening is finished
+  let patientSpeaking   = false; // true while VAD reports active speech
+  let patientSpoke      = false; // true after confirmed speech in this turn (gate for response)
+  let speechStartTime   = null;  // timestamp of most recent speech_started
+  let silenceTimer      = null;  // re-arms every 30 s to clear accumulated noise
 
   function sendToOpenAI(obj) {
     if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
+  }
+
+  function clearBuffer() {
+    sendToOpenAI({ type: 'input_audio_buffer.clear' });
+  }
+
+  function armSilenceGuard() {
+    if (silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => {
+      if (greetingDone && !patientSpeaking) {
+        console.log(`[Realtime:Browser:${clinicName}] 30 s silence — clearing buffer`);
+        clearBuffer();
+        armSilenceGuard();
+      }
+    }, 30_000);
+  }
+
+  function disarmSilenceGuard() {
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   }
 
   openaiWs.on('open', () => {
@@ -404,9 +545,15 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
     sendToOpenAI({
       type: 'session.update',
       session: {
-        type:         'realtime',
         instructions,
-        audio: { output: { voice } },
+        voice,
+        // Browser uses PCM16 natively — keep defaults for audio format
+        turn_detection: {
+          type:                'server_vad',
+          threshold:           0.6,
+          prefix_padding_ms:   300,
+          silence_duration_ms: 800,
+        },
       },
     });
   });
@@ -420,10 +567,47 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
       sendToOpenAI({ type: 'response.create' });
     }
 
-    // Greeting is done — now the patient can speak and we will forward their audio.
-    if (evt.type === 'response.done' && greetingTriggered && !greetingDone) {
-      greetingDone = true;
-      console.log(`[Realtime:Browser:${clinicName}] Greeting done — listening for patient`);
+    if (evt.type === 'response.done') {
+      if (greetingTriggered && !greetingDone) {
+        greetingDone = true;
+        clearBuffer();
+        armSilenceGuard();
+        console.log(`[Realtime:Browser:${clinicName}] Greeting done — buffer cleared, waiting for patient`);
+      } else if (greetingDone && !patientSpeaking) {
+        clearBuffer();
+        armSilenceGuard();
+      }
+    }
+
+    if (evt.type === 'input_audio_buffer.speech_started') {
+      patientSpeaking = true;
+      speechStartTime = Date.now();
+      disarmSilenceGuard();
+      console.log(`[Realtime:Browser:${clinicName}] Patient speech started`);
+    }
+
+    if (evt.type === 'input_audio_buffer.speech_stopped') {
+      const duration = speechStartTime ? (Date.now() - speechStartTime) : 0;
+      patientSpeaking = false;
+      speechStartTime = null;
+      if (duration >= 300) {
+        patientSpoke = true;
+        console.log(`[Realtime:Browser:${clinicName}] Patient speech confirmed (${duration} ms)`);
+      } else {
+        console.log(`[Realtime:Browser:${clinicName}] Noise suppressed (${duration} ms) — clearing buffer`);
+        clearBuffer();
+      }
+    }
+
+    if (evt.type === 'response.created' && greetingDone) {
+      if (patientSpoke) {
+        patientSpoke = false;
+        console.log(`[Realtime:Browser:${clinicName}] Response allowed — patient spoke`);
+      } else {
+        console.log(`[Realtime:Browser:${clinicName}] Blocking auto-response — no patient speech detected`);
+        sendToOpenAI({ type: 'response.cancel' });
+        clearBuffer();
+      }
     }
 
     if (evt.type === 'response.output_audio_transcript.done') {
@@ -433,12 +617,13 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
       console.error(`[Realtime:Browser:${clinicName}] Error:`, evt.error?.message);
     }
 
-    // Send as UTF-8 text so the browser receives a string (not a Blob) and JSON.parse succeeds
+    // Forward all OpenAI events to browser as UTF-8 text (not binary Blob)
     try { if (browserWs.readyState === WebSocket.OPEN) browserWs.send(Buffer.isBuffer(raw) ? raw.toString('utf8') : raw); } catch {}
   });
 
   openaiWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] WS error:`, e.message));
   openaiWs.on('close', () => {
+    disarmSilenceGuard();
     console.log(`[Realtime:Browser:${clinicName}] OpenAI closed`);
     try { browserWs.close(); } catch {}
   });
@@ -446,7 +631,7 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
   browserWs.on('message', (raw, isBinary) => {
     try {
       const str = !isBinary && Buffer.isBuffer(raw) ? raw.toString('utf8') : (Buffer.isBuffer(raw) ? raw : raw);
-      // Block patient audio until Ana's greeting is complete (same logic as Twilio relay).
+      // Block input audio until Ana's greeting is complete
       if (!greetingDone && !isBinary) {
         const msg = JSON.parse(typeof str === 'string' ? str : str.toString('utf8'));
         if (msg.type === 'input_audio_buffer.append') return;
@@ -455,6 +640,7 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
     } catch {}
   });
   browserWs.on('close', () => {
+    disarmSilenceGuard();
     console.log(`[Realtime:Browser:${clinicName}] Browser disconnected`);
     try { openaiWs.close(); } catch {}
   });
