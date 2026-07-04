@@ -334,10 +334,8 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     sendToOpenAI({
       type: 'session.update',
       session: {
-        type:                'realtime',
+        type:         'realtime',
         instructions,
-        input_audio_format:  'g711_ulaw',
-        output_audio_format: 'g711_ulaw',
       },
     });
     console.log(`[${clinicName}] session.update sent`);
