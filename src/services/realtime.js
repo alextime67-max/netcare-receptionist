@@ -227,6 +227,35 @@ async function createEphemeralSession(apiKey, clinic, kb) {
   return data;
 }
 
+// ── PCM16 → G.711 μ-law conversion (for Twilio Media Streams) ───────────────
+
+function linearToMulaw(sample) {
+  const BIAS = 0x84;
+  const CLIP = 32635;
+  let sign = 0;
+  if (sample < 0) { sign = 0x80; sample = -sample; }
+  if (sample > CLIP) sample = CLIP;
+  sample += BIAS;
+  let exponent = 7;
+  for (let mask = 0x4000; (sample & mask) === 0 && exponent > 0; exponent--, mask >>= 1);
+  const mantissa = (sample >> (exponent + 3)) & 0x0F;
+  return (~(sign | (exponent << 4) | mantissa)) & 0xFF;
+}
+
+// Converts base64 PCM16 at inputRate Hz → Buffer of μ-law bytes at 8kHz
+function pcm16Base64ToMulaw8k(base64, inputRate = 24000) {
+  const pcm    = Buffer.from(base64, 'base64');
+  const ratio  = inputRate / 8000;                         // 3 for 24kHz, 2 for 16kHz
+  const nIn    = Math.floor(pcm.length / 2);
+  const nOut   = Math.floor(nIn / ratio);
+  const out    = Buffer.alloc(nOut);
+  for (let i = 0; i < nOut; i++) {
+    const idx  = Math.floor(i * ratio) * 2;
+    out[i]     = linearToMulaw(pcm.readInt16LE(idx));
+  }
+  return out;
+}
+
 // ── Twilio Media Streams → OpenAI Realtime relay (server-side WebSocket) ─────
 
 function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
@@ -352,15 +381,20 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     // This is the last line of defense — even if OpenAI generates audio unexpectedly,
     // the patient never hears it unless we deliberately entered RESPONDING state.
     if ((evt.type === 'response.output_audio.delta' || evt.type === 'response.audio.delta') && evt.delta && streamSid) {
-      console.log(`[${clinicName}] audio_delta len=${evt.delta.length} first10="${evt.delta.slice(0, 10)}" state=${twilioState}`);
       if (twilioState === 'GREETING' || twilioState === 'RESPONDING') {
         try {
-          if (twilioWs.readyState === WebSocket.OPEN) {
-            twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: evt.delta } }));
-            console.log(`[${clinicName}] media_sent_to_twilio len=${evt.delta.length}`);
+          const mulaw   = pcm16Base64ToMulaw8k(evt.delta, 24000);
+          const CHUNK   = 160; // 20 ms at 8kHz
+          let   chunks  = 0;
+          for (let off = 0; off < mulaw.length; off += CHUNK) {
+            const slice = mulaw.slice(off, off + CHUNK);
+            if (twilioWs.readyState === WebSocket.OPEN)
+              twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: slice.toString('base64') } }));
+            chunks++;
           }
+          console.log(`[${clinicName}] audio_sent mulaw_bytes=${mulaw.length} chunks=${chunks}`);
         } catch (err) {
-          console.error(`[${clinicName}] media_send_error: ${err.message}`);
+          console.error(`[${clinicName}] audio_convert_error: ${err.message}`);
         }
       }
       return;
