@@ -305,13 +305,12 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
       type: 'session.update',
       session: {
         type:                      'realtime',
-        modalities:                ['text', 'audio'],
         instructions,
         voice,
         input_audio_format:        'g711_ulaw',
         output_audio_format:       'g711_ulaw',
         input_audio_transcription: { model: 'whisper-1' },
-        turn_detection:            null, // VAD completely disabled; we manage commits manually
+        turn_detection:            null,
       },
     });
     console.log(`[${clinicName}] session.update sent`);
