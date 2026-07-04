@@ -305,6 +305,7 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
       type: 'session.update',
       session: {
         type:                      'realtime',
+        modalities:                ['text', 'audio'],
         instructions,
         voice,
         input_audio_format:        'g711_ulaw',
@@ -313,22 +314,38 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
         turn_detection:            null, // VAD completely disabled; we manage commits manually
       },
     });
+    console.log(`[${clinicName}] session.update sent`);
   });
 
   openaiWs.on('message', raw => {
     let evt;
     try { evt = JSON.parse(raw); } catch { return; }
 
+    // Log every event type for diagnostics
+    console.log(`[${clinicName}] openai_event: ${evt.type}`);
+
     if (evt.type === 'session.created') {
-      console.log(`[${clinicName}] session.created`);
+      console.log(`[${clinicName}] session.created — waiting for session.updated`);
     }
 
     if (evt.type === 'session.updated') {
       console.log(`[${clinicName}] session.updated  vad=${evt.session?.turn_detection?.type || 'none'}  voice=${evt.session?.voice || voice}`);
       if (!greetingTriggered) {
         greetingTriggered = true;
+        console.log(`[${clinicName}] greeting triggered by session.updated`);
         sendToOpenAI({ type: 'response.create' });
       }
+    }
+
+    // Fallback: if session.updated never arrives, trigger greeting on session.created
+    if (evt.type === 'session.created' && !greetingTriggered) {
+      setTimeout(() => {
+        if (!greetingTriggered) {
+          greetingTriggered = true;
+          console.log(`[${clinicName}] greeting triggered by session.created fallback`);
+          sendToOpenAI({ type: 'response.create' });
+        }
+      }, 1500);
     }
 
     // ── ABSOLUTE gate: Ana's audio only reaches Twilio in GREETING or RESPONDING ─
