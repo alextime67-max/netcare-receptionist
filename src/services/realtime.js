@@ -352,11 +352,16 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
     // This is the last line of defense — even if OpenAI generates audio unexpectedly,
     // the patient never hears it unless we deliberately entered RESPONDING state.
     if ((evt.type === 'response.output_audio.delta' || evt.type === 'response.audio.delta') && evt.delta && streamSid) {
+      console.log(`[${clinicName}] audio_delta len=${evt.delta.length} first10="${evt.delta.slice(0, 10)}" state=${twilioState}`);
       if (twilioState === 'GREETING' || twilioState === 'RESPONDING') {
         try {
-          if (twilioWs.readyState === WebSocket.OPEN)
+          if (twilioWs.readyState === WebSocket.OPEN) {
             twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: evt.delta } }));
-        } catch { }
+            console.log(`[${clinicName}] media_sent_to_twilio len=${evt.delta.length}`);
+          }
+        } catch (err) {
+          console.error(`[${clinicName}] media_send_error: ${err.message}`);
+        }
       }
       return;
     }
