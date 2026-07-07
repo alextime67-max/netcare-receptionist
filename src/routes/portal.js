@@ -5,7 +5,7 @@ const path    = require('path');
 
 const {
   getClinicBySlug, getClinicById,
-  updateClinicTwilio, getClinicBilling,
+  updateClinic, getClinicBilling,
   getStats, getCalls, getCallWithTranscript,
   getAppointments, updateAppointmentStatus,
   getDoctorMessages, updateDoctorMessageStatus,
