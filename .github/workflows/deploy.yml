@@ -25,6 +25,9 @@ jobs:
             PREV=$(git rev-parse HEAD)
             echo "[deploy] Current HEAD: $PREV"
 
+            # Clean any npm-modified tracked files (package-lock.json) before pulling
+            git checkout -- .
+
             # Pull latest code
             git pull origin master
             echo "[deploy] New HEAD: $(git rev-parse HEAD)"
