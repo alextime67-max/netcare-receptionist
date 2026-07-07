@@ -299,7 +299,7 @@
                 <th class="px-4 py-3 font-semibold">Status</th>
                 <th class="px-4 py-3 font-semibold text-center">Calls</th>
                 <th class="px-4 py-3 font-semibold text-center">Appts</th>
-                <th class="px-4 py-3 font-semibold">Twilio #</th>
+                <th class="px-4 py-3 font-semibold">Phone #</th>
                 <th class="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -1040,20 +1040,20 @@
 
       </div><!-- /tsec-practice -->
 
-      <!-- ── SECTION: Live Voice Test (OpenAI Realtime) ─────────────────── -->
+      <!-- ── SECTION: Live Chat Test (Claude text relay) ─────────────────── -->
       <div id="tsec-voice" class="hidden space-y-4">
 
         <!-- Status bar -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-sm font-semibold text-slate-800">Live Voice Test — OpenAI Realtime</h3>
-              <p class="text-xs text-slate-400 mt-0.5">Talk directly with Ana using your microphone. Uses GPT-4o Realtime with the clinic knowledge base.</p>
+              <h3 class="text-sm font-semibold text-slate-800">Live Chat Test — Claude AI</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Chat with Ana using the same Claude AI and clinic knowledge base as live calls.</p>
             </div>
             <div id="voice-status-dot" class="w-3 h-3 rounded-full bg-slate-300" title="Disconnected"></div>
           </div>
 
-          <!-- Clinic selector (self-contained — no dependency on Training Center dropdown) -->
+          <!-- Clinic selector -->
           <div class="flex items-center gap-3">
             <label for="voice-clinic-select" class="text-xs font-medium text-slate-600 whitespace-nowrap">Clinic:</label>
             <select id="voice-clinic-select"
@@ -1071,20 +1071,19 @@
           <div class="flex gap-3 items-center flex-wrap">
             <button id="voice-start-btn" onclick="voiceStart()"
               class="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm flex items-center gap-2">
-              <span>🎙️</span> Start Voice Chat
+              <span>💬</span> Start Chat
             </button>
             <button id="voice-stop-btn" onclick="voiceStop()" disabled
               class="px-5 py-2.5 bg-red-500 text-white text-sm font-semibold rounded-xl hover:bg-red-600 transition-colors shadow-sm opacity-40 flex items-center gap-2">
               <span>⏹</span> Stop
             </button>
-            <span class="text-xs text-slate-400">Requires: OpenAI API key saved in AI Settings for the selected clinic</span>
           </div>
         </div>
 
-        <!-- Live transcription -->
+        <!-- Conversation -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-slate-800">Live Conversation</h3>
+            <h3 class="text-sm font-semibold text-slate-800">Conversation</h3>
             <button onclick="voiceClearTranscript()" class="text-xs text-slate-400 hover:text-slate-600">Clear</button>
           </div>
 
@@ -1093,20 +1092,25 @@
             <p class="text-xs text-slate-400 italic text-center">Conversation will appear here when connected.</p>
           </div>
 
-          <!-- Live transcription in progress -->
-          <div id="voice-live-partial" class="hidden px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-            <p class="text-xs text-blue-500 font-medium uppercase tracking-wide mb-1">Hearing you…</p>
-            <p id="voice-partial-text" class="text-sm text-blue-700 italic"></p>
+          <!-- Text input -->
+          <div id="voice-input-row" class="hidden flex gap-2">
+            <input type="text" id="voice-text-input" placeholder="Type your message…"
+              class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();voiceSendText();}">
+            <button onclick="voiceSendText()"
+              class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 whitespace-nowrap">
+              Send
+            </button>
           </div>
         </div>
 
         <!-- Instructions -->
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 space-y-1">
-          <p class="font-semibold">Before using Live Voice:</p>
-          <p>1. Select a clinic from the dropdown at the top of AI Training Center.</p>
-          <p>2. Go to AI Settings → OpenAI Realtime Voice → enter your OpenAI API key and save.</p>
-          <p>3. Allow microphone access when prompted by your browser.</p>
-          <p>4. Speak naturally — Ana will respond in the configured language.</p>
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700 space-y-1">
+          <p class="font-semibold">How to use Live Chat:</p>
+          <p>1. Select a clinic from the dropdown above.</p>
+          <p>2. Press Start Chat — Ana will greet you automatically.</p>
+          <p>3. Type your messages to test how Ana responds with the clinic knowledge base.</p>
+          <p>4. Press Stop when done.</p>
         </div>
 
       </div><!-- /tsec-voice -->
@@ -1147,7 +1151,7 @@
                 <th class="px-4 py-3 text-left">Status</th>
                 <th class="px-4 py-3 text-right">Calls</th>
                 <th class="px-4 py-3 text-right">Minutes</th>
-                <th class="px-4 py-3 text-right">Twilio Cost</th>
+                <th class="px-4 py-3 text-right">Telnyx Cost</th>
                 <th class="px-4 py-3 text-right">AI Cost</th>
                 <th class="px-4 py-3 text-right">Total Cost</th>
                 <th class="px-4 py-3 text-right">Plan Price</th>
@@ -1196,10 +1200,10 @@
         <!-- Cost rates -->
         <div class="px-6 py-5 space-y-4">
           <h3 class="font-semibold text-slate-800 text-sm">Cost Rate Estimates</h3>
-          <p class="text-xs text-slate-400">Used to estimate your monthly costs from call data. Adjust to match your actual Twilio and AI rates.</p>
+          <p class="text-xs text-slate-400">Used to estimate your monthly costs from call data. Adjust to match your actual Telnyx and AI rates.</p>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="form-label">Twilio Rate ($ / minute)</label>
+              <label class="form-label">Telnyx Rate ($ / minute)</label>
               <input type="number" id="cfg-twilio-rate" step="0.0001" min="0" placeholder="0.0085" class="form-input">
             </div>
             <div>
@@ -1216,7 +1220,7 @@
         <!-- Alert thresholds -->
         <div class="px-6 py-5 space-y-4">
           <h3 class="font-semibold text-slate-800 text-sm">Alert Thresholds</h3>
-          <p class="text-xs text-slate-400">Notifications fire when remaining AI budget or Twilio balance falls below these values.</p>
+          <p class="text-xs text-slate-400">Notifications fire when remaining AI budget falls below these values.</p>
           <div class="grid grid-cols-1 gap-4">
             <div class="flex items-center gap-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
               <div class="flex-1">
@@ -1230,10 +1234,10 @@
                 <input type="number" id="cfg-ai-critical" step="0.5" min="0" placeholder="2" class="form-input">
               </div>
             </div>
-            <div class="flex items-center gap-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+            <div class="flex items-center gap-4 p-3 bg-slate-50 border border-slate-100 rounded-lg">
               <div class="flex-1">
-                <label class="form-label text-amber-700">Twilio Balance Warning — alert when Twilio account balance drops below ($)</label>
-                <input type="number" id="cfg-twilio-low" step="1" min="0" placeholder="10" class="form-input">
+                <label class="form-label text-slate-500">Legacy Telnyx Balance Threshold ($) <span class="font-normal normal-case text-slate-400">— reserved for future use</span></label>
+                <input type="number" id="cfg-twilio-low" step="1" min="0" placeholder="10" class="form-input" disabled>
               </div>
             </div>
           </div>
@@ -1358,29 +1362,18 @@
           </div>
         </div>
         <div class="border-t border-slate-100 pt-4">
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Twilio Configuration</p>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Telnyx Configuration</p>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="form-label">Account SID</label>
-              <input type="text" id="f-twilio-sid" placeholder="ACxxxxxxxxxxxxxxxx" class="form-input font-mono">
+              <label class="form-label">Telnyx API Key <span class="normal-case font-normal text-slate-400">— overrides server env key</span></label>
+              <input type="text" id="f-telnyx-api-key" placeholder="KEY..." class="form-input font-mono">
             </div>
             <div>
-              <label class="form-label">Auth Token</label>
-              <input type="text" id="f-twilio-token" placeholder="auth_token" class="form-input font-mono">
-            </div>
-            <div>
-              <label class="form-label">Phone Number</label>
-              <input type="text" id="f-twilio-phone" placeholder="+1XXXXXXXXXX" class="form-input font-mono">
-            </div>
-            <div>
-              <label class="form-label">Signature Validation</label>
-              <select id="f-twilio-validate" class="form-input bg-white">
-                <option value="0">Disabled</option>
-                <option value="1">Enabled (production)</option>
-              </select>
+              <label class="form-label">Telnyx Phone Number</label>
+              <input type="text" id="f-telnyx-phone" placeholder="+1XXXXXXXXXX" class="form-input font-mono">
             </div>
             <div class="col-span-2">
-              <label class="form-label">Transfer Phone Number <span class="normal-case font-normal text-slate-400">— when AI signals a live transfer, Twilio dials this number</span></label>
+              <label class="form-label">Transfer Phone Number <span class="normal-case font-normal text-slate-400">— when AI signals a live transfer</span></label>
               <input type="text" id="f-transfer-phone" placeholder="+1XXXXXXXXXX" class="form-input font-mono">
             </div>
           </div>
@@ -1409,26 +1402,11 @@
             <div id="provision-status" class="hidden mt-2 text-xs rounded-lg p-2 border"></div>
           </div>
 
-          <!-- Twilio toolbox -->
+          <!-- Telnyx toolbox -->
           <div class="mt-4 space-y-3">
             <div class="flex flex-wrap gap-3">
               <div class="flex-1 min-w-56">
-                <button type="button" onclick="testTwilioCredentials()" id="twilio-test-btn"
-                  class="w-full px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors">
-                  Validate Credentials
-                </button>
-                <div id="twilio-test-result" class="hidden mt-2 text-xs rounded-lg p-3 border"></div>
-              </div>
-              <div class="flex-1 min-w-56">
-                <div class="flex gap-2">
-                  <input type="tel" id="twilio-test-phone" placeholder="+1XXXXXXXXXX test number"
-                    class="form-input flex-1 font-mono text-sm">
-                  <button type="button" onclick="makeTestCall()" id="twilio-call-btn"
-                    class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg whitespace-nowrap">
-                    📞 Call Me
-                  </button>
-                </div>
-                <div id="twilio-call-result" class="hidden mt-2 text-xs rounded-lg p-3 border"></div>
+                <p class="text-xs text-slate-400">Save the clinic first, then test by making a real call to the Telnyx number configured above.</p>
               </div>
             </div>
             <!-- Webhook Call Simulator -->
@@ -1697,7 +1675,7 @@
         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Voice — Legacy IVR</p>
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="form-label">Voice (Spanish) <span class="normal-case font-normal text-slate-400">— Amazon Polly via Twilio</span></label>
+            <label class="form-label">Voice (Spanish) <span class="normal-case font-normal text-slate-400">— Telnyx TTS voice ID</span></label>
             <div class="flex gap-2">
               <select id="f-ai-voice-es" class="form-input bg-white flex-1">
                 <option value="">— Default (Lupe Neural) —</option>
@@ -1726,7 +1704,7 @@
             </div>
           </div>
           <div>
-            <label class="form-label">Voice (English) <span class="normal-case font-normal text-slate-400">— Amazon Polly via Twilio</span></label>
+            <label class="form-label">Voice (English) <span class="normal-case font-normal text-slate-400">— Telnyx TTS voice ID</span></label>
             <div class="flex gap-2">
               <select id="f-ai-voice-en" class="form-input bg-white flex-1">
                 <option value="">— Default (Joanna) —</option>
@@ -1751,26 +1729,28 @@
                 🔊 Test
               </button>
             </div>
-            <p class="text-xs text-slate-400 mt-1.5">All voices use Amazon Polly via Twilio. Neural voices sound more natural. Browser preview uses system TTS (approximate match).</p>
+            <p class="text-xs text-slate-400 mt-1.5">Telnyx Ultra voices — enter the voice ID. Default es: Adriana (f4d6bb07…). Default en: Jacqueline (9626c31c…). Browser preview uses system TTS.</p>
           </div>
         </div>
       </div>
 
-      <!-- OpenAI Realtime Voice -->
+      <!-- Claude AI + Telnyx Voice -->
       <div class="border-t border-slate-100 pt-5">
         <div class="flex items-center gap-2 mb-3">
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">OpenAI Realtime Voice</p>
-          <span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">NEW</span>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Claude AI + Telnyx Voice</p>
         </div>
-        <p class="text-xs text-slate-400 mb-4">Powers the Live Voice Test and Twilio phone calls with speech-to-speech AI. Uses OpenAI GPT-4o Realtime with natural voices.</p>
+        <p class="text-xs text-slate-400 mb-4">Ana uses Claude (Anthropic) for conversation and Telnyx TTS for voice. The AI language sets the primary language and default TTS voice.</p>
         <div class="grid grid-cols-2 gap-4">
-          <div class="col-span-2">
-            <label class="form-label">OpenAI API Key <span class="normal-case font-normal text-slate-400">— stored per clinic, overrides server environment key</span></label>
-            <input id="f-openai-api-key" type="password" placeholder="sk-..." autocomplete="off" class="form-input font-mono text-sm">
+          <div>
+            <label class="form-label">Default Language</label>
+            <select id="f-ai-language" class="form-input bg-white">
+              <option value="es">Español — Latin American Spanish</option>
+              <option value="en">English — US English</option>
+            </select>
           </div>
           <div>
-            <label class="form-label">Voice</label>
-            <select id="f-openai-voice" class="form-input bg-white">
+            <label class="form-label">Placeholder</label>
+            <select id="f-openai-voice" class="form-input bg-white hidden">
               <option value="coral">Coral (Default)</option>
               <option value="shimmer">Shimmer</option>
               <option value="alloy">Alloy</option>
@@ -1779,15 +1759,9 @@
               <option value="verse">Verse</option>
             </select>
           </div>
-          <div>
-            <label class="form-label">Default Language</label>
-            <select id="f-openai-language" class="form-input bg-white">
-              <option value="es">Español — Latin American Spanish</option>
-              <option value="en">English — US English</option>
-            </select>
           </div>
         </div>
-        <p class="text-xs text-slate-400 mt-3">Twilio Realtime webhook: <code class="bg-slate-100 px-1 rounded">/webhook/{slug}/realtime-voice</code> — point your Twilio number here to use OpenAI voice for live calls.</p>
+        <p class="text-xs text-slate-400 mt-3">Telnyx webhook: <code class="bg-slate-100 px-1 rounded">/telnyx/webhook</code> — configure this URL in the Telnyx Voice API Application portal.</p>
       </div>
 
       <!-- Business Context -->
@@ -2158,7 +2132,7 @@ function renderTable() {
       <td class="px-4 py-3 text-center text-sm font-medium text-slate-700">${(c.stats?.totalCalls ?? 0).toLocaleString()}</td>
       <td class="px-4 py-3 text-center text-sm font-medium text-slate-700">${(c.stats?.appointmentsTotal ?? 0).toLocaleString()}</td>
       <td class="px-4 py-3">
-        <div class="font-mono text-xs text-slate-600">${c.twilio_phone || '<span class="text-slate-300">Not set</span>'}</div>
+        <div class="font-mono text-xs text-slate-600">${c.telnyx_phone || '<span class="text-slate-300">Not set</span>'}</div>
       </td>
       <td class="px-4 py-3" onclick="event.stopPropagation()">
         <div class="flex items-center gap-1 justify-end">
@@ -2264,11 +2238,9 @@ async function openEditModal(id) {
     // Technical
     document.getElementById('f-admin-user').value    = c.admin_user || 'admin';
     document.getElementById('f-admin-pass').value    = c.admin_pass || '';
-    document.getElementById('f-twilio-sid').value    = c.twilio_sid || '';
-    document.getElementById('f-twilio-token').value  = c.twilio_token || '';
-    document.getElementById('f-twilio-phone').value  = c.twilio_phone || '';
-    document.getElementById('f-twilio-validate').value = c.twilio_validate ? '1' : '0';
-    document.getElementById('f-transfer-phone').value  = c.transfer_phone || '';
+    document.getElementById('f-telnyx-api-key').value = c.telnyx_api_key || '';
+    document.getElementById('f-telnyx-phone').value   = c.telnyx_phone || '';
+    document.getElementById('f-transfer-phone').value = c.transfer_phone || '';
     document.getElementById('f-sms-follow-up').checked = !!c.sms_follow_up_enabled;
     // IVR
     document.getElementById('f-ivr-enabled').checked = !!c.ivr_enabled;
@@ -2354,11 +2326,9 @@ async function saveClinic(e) {
     contactEmail:   document.getElementById('f-contact-email').value.trim(),
     adminUser:      document.getElementById('f-admin-user').value.trim() || 'admin',
     adminPass:      document.getElementById('f-admin-pass').value.trim(),
-    twilioSid:      document.getElementById('f-twilio-sid').value.trim(),
-    twilioToken:    document.getElementById('f-twilio-token').value.trim(),
-    twilioPhone:    document.getElementById('f-twilio-phone').value.trim(),
-    twilioValidate:      document.getElementById('f-twilio-validate').value === '1',
-    transferPhone:       document.getElementById('f-transfer-phone').value.trim(),
+    telnyxApiKey:   document.getElementById('f-telnyx-api-key').value.trim() || null,
+    telnyxPhone:    document.getElementById('f-telnyx-phone').value.trim(),
+    transferPhone:  document.getElementById('f-transfer-phone').value.trim(),
     smsFollowUpEnabled:  document.getElementById('f-sms-follow-up').checked,
     ivrEnabled:     document.getElementById('f-ivr-enabled').checked,
     ivrConfig:      buildIvrConfig(),
@@ -2559,9 +2529,7 @@ async function loadAiConfig(clinicId) {
     document.getElementById('ai-master-prompt').value  = c.ai_master_prompt            || '';
     document.getElementById('f-ai-voice-es').value     = c.ai_voice_es                 || '';
     document.getElementById('f-ai-voice-en').value     = c.ai_voice_en                 || '';
-    document.getElementById('f-openai-api-key').value  = c.openai_api_key              || '';
-    document.getElementById('f-openai-voice').value    = c.openai_voice                || 'coral';
-    document.getElementById('f-openai-language').value = c.openai_language             || 'es';
+    document.getElementById('f-ai-language').value     = c.ai_language                 || 'es';
     document.getElementById('ai-timezone').value       = c.timezone                    || 'America/New_York';
     onTemplateChange();
     // Rebuild FAQ list
@@ -2608,9 +2576,7 @@ async function saveAiConfig() {
     masterPrompt:            document.getElementById('ai-master-prompt').value.trim(),
     voiceEs:                 document.getElementById('f-ai-voice-es').value || null,
     voiceEn:                 document.getElementById('f-ai-voice-en').value || null,
-    openaiApiKey:            document.getElementById('f-openai-api-key').value.trim() || null,
-    openaiVoice:             document.getElementById('f-openai-voice').value || 'coral',
-    openaiLanguage:          document.getElementById('f-openai-language').value || 'es',
+    aiLanguage:              document.getElementById('f-ai-language').value || 'es',
     timezone:                document.getElementById('ai-timezone').value || 'America/New_York',
   };
 
@@ -3024,74 +2990,6 @@ function populateCallClinicFilter() {
   if (!sel || !allClients) return;
   sel.innerHTML = '<option value="">All Clinics</option>' +
     allClients.map(c => '<option value="' + c.id + '">' + escHtml(c.name) + '</option>').join('');
-}
-
-// ── Twilio credential test ────────────────────────────────────────────────────
-
-async function testTwilioCredentials() {
-  const id = document.getElementById('edit-id').value;
-  if (!id) { alert('Save the clinic first before testing credentials.'); return; }
-  const btn = document.getElementById('twilio-test-btn');
-  const res = document.getElementById('twilio-test-result');
-  btn.disabled = true; btn.textContent = 'Validating…';
-  res.className = 'hidden mt-2 text-xs rounded-lg p-3 border';
-  try {
-    const r    = await fetch('/superadmin/api/clinics/' + id + '/twilio/test', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        twilioSid:   document.getElementById('f-twilio-sid').value.trim(),
-        twilioToken: document.getElementById('f-twilio-token').value.trim(),
-        twilioPhone: document.getElementById('f-twilio-phone').value.trim(),
-      }),
-    });
-    const data = await r.json();
-    if (data.ok) {
-      const pn = data.phoneNumber;
-      const phoneExtra = pn && !pn.error
-        ? '<br><strong>Phone:</strong> ' + pn.phoneNumber + ' (' + pn.friendlyName + ') — voice: ' + (pn.capabilities && pn.capabilities.voice ? '✓' : '✗')
-        : (pn && pn.error ? '<br>⚠ ' + pn.error : '');
-      res.innerHTML = '<strong>✓ Valid!</strong> Account: ' + data.account.friendlyName + ' (' + data.account.status + ')' + phoneExtra;
-      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-emerald-50 text-emerald-700 border-emerald-200';
-    } else {
-      res.textContent = '✗ ' + (data.error || 'Invalid credentials');
-      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
-    }
-  } catch(e) {
-    res.textContent = '✗ ' + e.message;
-    res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
-  } finally {
-    btn.disabled = false; btn.textContent = 'Validate Credentials';
-  }
-}
-
-async function makeTestCall() {
-  const id    = document.getElementById('edit-id').value;
-  const phone = document.getElementById('twilio-test-phone').value.trim();
-  if (!id)    { alert('Save the clinic first.'); return; }
-  if (!phone) { alert('Enter a phone number to call.'); return; }
-  const btn = document.getElementById('twilio-call-btn');
-  const res = document.getElementById('twilio-call-result');
-  btn.disabled = true; btn.textContent = 'Calling…';
-  res.className = 'hidden mt-2 text-xs rounded-lg p-3 border';
-  try {
-    const r    = await fetch('/superadmin/api/clinics/' + id + '/twilio/call', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ testPhone: phone }),
-    });
-    const data = await r.json();
-    if (data.ok) {
-      res.textContent = '📞 Call initiated! SID: ' + data.callSid;
-      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-emerald-50 text-emerald-700 border-emerald-200';
-    } else {
-      res.textContent = '✗ ' + (data.error || 'Failed');
-      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
-    }
-  } catch(e) {
-    res.textContent = '✗ ' + e.message;
-    res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
-  } finally {
-    btn.disabled = false; btn.textContent = '📞 Call Me';
-  }
 }
 
 // ── Webhook Call Simulator ────────────────────────────────────────────────────
@@ -4756,7 +4654,7 @@ async function loadCostDashboard() {
       costKpi('Calls Today',       dash.callsToday,                   'text-slate-800',   'bg-slate-100',   iconPhone()),
       costKpi('Calls This Month',  (dash.callsThisMonth||0).toLocaleString(), 'text-indigo-700','bg-indigo-50', iconPhone()),
       costKpi('AI Cost (Month)',   fmt$(dash.aiCostMonth),            'text-violet-700',  'bg-violet-50',   iconDollar()),
-      costKpi('Twilio Cost (Month)',fmt$(dash.twilioCostMonth),       'text-blue-700',    'bg-blue-50',     iconPhone()),
+      costKpi('Telnyx Cost (Month)',fmt$(dash.telnyxCostMonth),       'text-blue-700',    'bg-blue-50',     iconPhone()),
       costKpi('Total Cost (Month)',fmt$(dash.totalCost),              'text-red-700',     'bg-red-50',      iconDollar()),
       costKpi('Monthly Revenue',  fmt$(dash.monthlyRevenue),          'text-emerald-700', 'bg-emerald-50',  iconDollar()),
       costKpi('Est. Profit',      fmt$(dash.profit),
@@ -4784,7 +4682,7 @@ async function loadCostDashboard() {
           <td class="px-4 py-3">${statusBadge}</td>
           <td class="px-4 py-3 text-right">${c.totalCalls}</td>
           <td class="px-4 py-3 text-right">${c.totalMinutes}</td>
-          <td class="px-4 py-3 text-right text-slate-600">${fmt$(c.twilioCost)}</td>
+          <td class="px-4 py-3 text-right text-slate-600">${fmt$(c.telnyxCost)}</td>
           <td class="px-4 py-3 text-right text-slate-600">${fmt$(c.aiCost)}</td>
           <td class="px-4 py-3 text-right font-medium">${fmt$(c.totalCost)}</td>
           <td class="px-4 py-3 text-right">${fmt$(c.monthlyPrice)}</td>
@@ -4939,14 +4837,10 @@ async function saveCostConfig() {
   }
 }
 
-// ── Live Voice Test (WebSocket relay → OpenAI Realtime + Web Audio) ──────────
+// ── Live Chat Test (WebSocket relay → Claude text chat) ──────────────────────
 
-let _voiceWs        = null;   // WebSocket to our server relay
-let _voiceAudioCtx  = null;   // AudioContext (24 kHz)
-let _voiceProcNode  = null;   // ScriptProcessorNode for mic capture
-let _voiceMicStream = null;   // MediaStream from getUserMedia
+let _voiceWs        = null;
 let _voiceConnected = false;
-let _voiceNextTime  = 0;      // scheduled playback cursor (AudioContext seconds)
 
 function voiceSetStatus(text, color = 'slate') {
   const colors = {
@@ -4990,22 +4884,17 @@ function voiceClearTranscript() {
 }
 
 async function voiceStart() {
-  // Read clinic from the voice panel's own selector (or fall back to training center)
   const clinicId = document.getElementById('voice-clinic-select')?.value || _trainClinicId;
-  if (!clinicId) {
-    voiceSetStatus('Select a clinic from the dropdown above first', 'amber');
-    return;
-  }
+  if (!clinicId) { voiceSetStatus('Select a clinic from the dropdown above first', 'amber'); return; }
 
   const startBtn = document.getElementById('voice-start-btn');
   const stopBtn  = document.getElementById('voice-stop-btn');
   startBtn.disabled = true;
-  startBtn.innerHTML = '<span class="animate-spin">⏳</span> Connecting…';
-  voiceSetStatus(`Requesting session for clinic ${clinicId}…`, 'blue');
+  startBtn.innerHTML = '<span>⏳</span> Connecting…';
+  voiceSetStatus('Connecting to Ana…', 'blue');
 
   try {
-    // 1. Get one-time WS token from our server (protected by Basic Auth)
-    const tokenRes = await fetch(`/superadmin/api/clinics/${clinicId}/realtime/session`, {
+    const tokenRes  = await fetch(`/superadmin/api/clinics/${clinicId}/realtime/session`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
     });
     const tokenData = await tokenRes.json();
@@ -5013,73 +4902,41 @@ async function voiceStart() {
     const wsToken = tokenData.ws_token;
     if (!wsToken) throw new Error('No session token returned from server');
 
-    voiceSetStatus('Requesting microphone access…', 'blue');
-
-    // 2. Capture microphone (24 kHz mono for OpenAI pcm16)
-    _voiceMicStream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, sampleRate: 24000, echoCancellation: true, noiseSuppression: true },
-    });
-
-    // 3. Create AudioContext at 24 kHz (matches OpenAI pcm16 sample rate)
-    _voiceAudioCtx = new AudioContext({ sampleRate: 24000 });
-    _voiceNextTime = 0;
-
-    voiceSetStatus('Connecting to Ana…', 'blue');
-
-    // 4. Open WebSocket to our server relay
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     _voiceWs = new WebSocket(`${proto}//${location.host}/realtime/browser/${wsToken}`);
 
     _voiceWs.onopen = () => {
-      try {
-        // 5. Mic → ScriptProcessorNode → base64 PCM16 → WebSocket
-        const source = _voiceAudioCtx.createMediaStreamSource(_voiceMicStream);
-        _voiceProcNode = _voiceAudioCtx.createScriptProcessor(4096, 1, 1);
-
-        _voiceProcNode.onaudioprocess = e => {
-          if (!_voiceWs || _voiceWs.readyState !== 1 /* OPEN */) return;
-          const f32 = e.inputBuffer.getChannelData(0);
-          const i16 = new Int16Array(f32.length);
-          for (let i = 0; i < f32.length; i++) {
-            i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32768)));
-          }
-          // Int16 → Uint8 → base64 in chunks to avoid call-stack limit
-          const bytes = new Uint8Array(i16.buffer);
-          let bin = '';
-          for (let i = 0; i < bytes.length; i += 32768) {
-            bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
-          }
-          _voiceWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: btoa(bin) }));
-          // Silence the output buffer to prevent mic echo through speakers
-          e.outputBuffer.getChannelData(0).fill(0);
-        };
-
-        // Must connect to destination to keep the audio graph alive
-        const silentGain = _voiceAudioCtx.createGain();
-        silentGain.gain.value = 0;
-        source.connect(_voiceProcNode);
-        _voiceProcNode.connect(silentGain);
-        silentGain.connect(_voiceAudioCtx.destination);
-
-        _voiceConnected = true;
-        voiceSetStatus('⏳ Ana is warming up — she will greet you in a moment…', 'blue');
-        startBtn.innerHTML = '🎙️ Start Voice Chat';
-        startBtn.disabled  = false;
-        stopBtn.disabled   = false;
-        stopBtn.classList.remove('opacity-40');
-      } catch (audioErr) {
-        voiceSetStatus(`Audio setup failed: ${audioErr.message}`, 'red');
-        voiceStop(false);
-      }
+      _voiceConnected = true;
+      voiceSetStatus('🟢 Connected — Ana will greet you shortly…', 'green');
+      startBtn.innerHTML = '💬 Start Chat';
+      startBtn.disabled  = false;
+      stopBtn.disabled   = false;
+      stopBtn.classList.remove('opacity-40');
+      const row = document.getElementById('voice-input-row');
+      if (row) row.classList.remove('hidden');
+      const inp = document.getElementById('voice-text-input');
+      if (inp) inp.focus();
     };
 
     _voiceWs.onmessage = e => {
-      try { voiceHandleEvent(JSON.parse(e.data)); } catch {}
+      try {
+        const evt = JSON.parse(e.data);
+        if (evt.type === 'assistant_message' && evt.text) {
+          voicePushBubble('assistant', evt.text);
+          voiceSetStatus('🟢 Connected — type your reply below', 'green');
+        }
+        if (evt.type === 'thinking') {
+          voiceSetStatus('⏳ Ana is thinking…', 'blue');
+        }
+        if (evt.type === 'error') {
+          voiceSetStatus(`Error: ${evt.message}`, 'red');
+        }
+      } catch {}
     };
 
     _voiceWs.onerror = () => {
       voiceSetStatus('WebSocket error — check that the server is running', 'red');
-      startBtn.innerHTML = '🎙️ Start Voice Chat';
+      startBtn.innerHTML = '💬 Start Chat';
       startBtn.disabled  = false;
       voiceStop(false);
     };
@@ -5090,105 +4947,37 @@ async function voiceStart() {
         voiceSetStatus('Disconnected.', 'slate');
         const sb = document.getElementById('voice-stop-btn');
         if (sb) { sb.disabled = true; sb.classList.add('opacity-40'); }
+        const row = document.getElementById('voice-input-row');
+        if (row) row.classList.add('hidden');
       }
     };
 
   } catch (e) {
     voiceSetStatus(`Error: ${e.message}`, 'red');
-    startBtn.innerHTML = '🎙️ Start Voice Chat';
+    startBtn.innerHTML = '💬 Start Chat';
     startBtn.disabled  = false;
     voiceStop(false);
   }
 }
 
 function voiceStop(clearStatus = true) {
-  if (_voiceWs)       { try { _voiceWs.close(); }        catch {} _voiceWs       = null; }
-  if (_voiceProcNode) { try { _voiceProcNode.disconnect(); } catch {} _voiceProcNode = null; }
-  if (_voiceAudioCtx) { try { _voiceAudioCtx.close(); }  catch {} _voiceAudioCtx = null; }
-  if (_voiceMicStream){ _voiceMicStream.getTracks().forEach(t => t.stop()); _voiceMicStream = null; }
+  if (_voiceWs) { try { _voiceWs.close(); } catch {} _voiceWs = null; }
   _voiceConnected = false;
-  _voiceNextTime  = 0;
-
   const stopBtn = document.getElementById('voice-stop-btn');
   if (stopBtn) { stopBtn.disabled = true; stopBtn.classList.add('opacity-40'); }
+  const row = document.getElementById('voice-input-row');
+  if (row) row.classList.add('hidden');
   if (clearStatus) voiceSetStatus('Disconnected.', 'slate');
-
-  const partial = document.getElementById('voice-live-partial');
-  if (partial) partial.classList.add('hidden');
 }
 
-// Play a base64 PCM16 audio chunk from OpenAI through the AudioContext
-function voicePlayAudio(b64) {
-  if (!_voiceAudioCtx || _voiceAudioCtx.state === 'closed') return;
-  try {
-    const binary = atob(b64);
-    const bytes  = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const i16   = new Int16Array(bytes.buffer);
-    const f32   = new Float32Array(i16.length);
-    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
-
-    const buf = _voiceAudioCtx.createBuffer(1, f32.length, 24000);
-    buf.copyToChannel(f32, 0);
-    const src = _voiceAudioCtx.createBufferSource();
-    src.buffer = buf;
-    src.connect(_voiceAudioCtx.destination);
-
-    const now     = _voiceAudioCtx.currentTime;
-    const startAt = Math.max(now + 0.01, _voiceNextTime);
-    src.start(startAt);
-    _voiceNextTime = startAt + buf.duration;
-  } catch(e) { /* chunk error — skip */ }
-}
-
-function voiceHandleEvent(evt) {
-  // Ana's audio — play it (gpt-realtime uses response.output_audio.delta)
-  if ((evt.type === 'response.output_audio.delta' || evt.type === 'response.audio.delta') && evt.delta) {
-    voicePlayAudio(evt.delta);
-  }
-
-  // User interrupted Ana → reset playback cursor
-  if (evt.type === 'input_speech_started' || evt.type === 'output_audio_buffer.cleared') {
-    if (_voiceAudioCtx) _voiceNextTime = _voiceAudioCtx.currentTime;
-  }
-
-  // Partial transcription of what the user is saying
-  if (evt.type === 'conversation.item.input_audio_transcription.delta') {
-    const partial = document.getElementById('voice-live-partial');
-    const txt     = document.getElementById('voice-partial-text');
-    if (partial) partial.classList.remove('hidden');
-    if (txt) txt.textContent = (txt.textContent || '') + (evt.delta || '');
-  }
-  if (evt.type === 'conversation.item.input_audio_transcription.completed') {
-    const partial = document.getElementById('voice-live-partial');
-    if (partial) partial.classList.add('hidden');
-    const txt = document.getElementById('voice-partial-text');
-    if (txt) txt.textContent = '';
-    if (evt.transcript?.trim()) voicePushBubble('user', evt.transcript.trim());
-  }
-
-  // Ana's spoken response transcript (gpt-realtime uses response.output_audio_transcript.done)
-  if (evt.type === 'response.output_audio_transcript.done' || evt.type === 'response.audio_transcript.done') {
-    if (evt.transcript?.trim()) voicePushBubble('assistant', evt.transcript.trim());
-  }
-
-  // Session lifecycle
-  if (evt.type === 'session.updated') {
-    voiceSetStatus('🟢 Connected — Ana will greet you shortly…', 'green');
-  }
-
-  // Speaking indicators
-  if (evt.type === 'output_audio_buffer.started' || evt.type === 'response.output_audio.delta') {
-    voiceSetStatus('🗣️ Ana is speaking…', 'green');
-  }
-  if (evt.type === 'output_audio_buffer.stopped' || evt.type === 'response.output_audio.done') {
-    voiceSetStatus('🟢 Connected — speak now. Ana is listening.', 'green');
-  }
-
-  // Errors
-  if (evt.type === 'error') {
-    voiceSetStatus(`Error: ${evt.error?.message || JSON.stringify(evt.error)}`, 'red');
-  }
+function voiceSendText() {
+  const inp = document.getElementById('voice-text-input');
+  const text = inp?.value.trim();
+  if (!text || !_voiceWs || _voiceWs.readyState !== 1) return;
+  inp.value = '';
+  voicePushBubble('user', text);
+  voiceSetStatus('⏳ Ana is thinking…', 'blue');
+  _voiceWs.send(JSON.stringify({ type: 'user_message', text }));
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

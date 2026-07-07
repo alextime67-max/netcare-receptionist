@@ -4,8 +4,6 @@ const basicAuth = require('express-basic-auth');
 const path      = require('path');
 const fs        = require('fs');
 
-const twilio = require('twilio');
-
 const Anthropic = require('@anthropic-ai/sdk');
 
 function makeAnthropicClient() {
@@ -67,13 +65,13 @@ router.get('/api/clinics', (_req, res) => {
     const appUrl  = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
     const result  = clinics.map(c => ({
       ...c,
-      twilio_token:  c.twilio_token  ? '••••••••' : null,
-      gmail_app_pass:c.gmail_app_pass? '••••••••' : null,
-      smtp_pass:     c.smtp_pass     ? '••••••••' : null,
-      admin_pass:    c.admin_pass    ? '••••••••' : null,
-      stats:         getStats(c.id),
-      dashboardUrl:  `${appUrl}/admin/${c.slug}`,
-      webhookUrl:    `${appUrl}/webhook/${c.slug}/voice`,
+      telnyx_api_key: c.telnyx_api_key ? '••••••••' : null,
+      gmail_app_pass: c.gmail_app_pass  ? '••••••••' : null,
+      smtp_pass:      c.smtp_pass       ? '••••••••' : null,
+      admin_pass:     c.admin_pass      ? '••••••••' : null,
+      stats:          getStats(c.id),
+      dashboardUrl:   `${appUrl}/admin/${c.slug}`,
+      webhookUrl:     `${appUrl}/telnyx/webhook`,
     }));
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -212,15 +210,12 @@ router.post('/api/clinics/:id/ai/test', async (req, res) => {
   }
 });
 
-// ── OpenAI Realtime ephemeral session (browser WebRTC Test Voice) ────────────
+// ── Live Voice session token (browser text-chat relay → Claude) ──────────────
 
 router.post('/api/clinics/:id/realtime/session', (req, res) => {
   const clinic = getClinicAiConfig(+req.params.id);
   if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-
-  const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-  if (!apiKey) return res.status(400).json({ error: 'OpenAI API key not configured for this clinic. Add it in AI Settings → OpenAI Realtime Voice.' });
-
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured on this server.' });
   const token = generateVoiceToken(+req.params.id);
   res.json({ ws_token: token });
 });
@@ -257,116 +252,6 @@ router.get('/api/calls/:id', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Voicemail recording proxy (fetches from Twilio with clinic credentials) ────
-
-router.get('/api/calls/:id/recording', async (req, res) => {
-  try {
-    const detail = getCallWithTranscript(+req.params.id);
-    if (!detail?.recording_url) return res.status(404).json({ error: 'No recording for this call' });
-
-    const clinic = getClinicById(detail.clinic_id);
-    if (!clinic?.twilio_sid || !clinic?.twilio_token)
-      return res.status(400).json({ error: 'Twilio credentials not configured for this clinic' });
-
-    // Ensure URL ends with .mp3 for audio streaming
-    const mp3Url = detail.recording_url.replace(/\.json$/, '').replace(/\/?$/, '.mp3');
-
-    const auth     = Buffer.from(`${clinic.twilio_sid}:${clinic.twilio_token}`).toString('base64');
-    const upstream = await fetch(mp3Url, { headers: { Authorization: `Basic ${auth}` } });
-
-    if (!upstream.ok) {
-      return res.status(upstream.status).json({ error: `Recording fetch failed: ${upstream.statusText}` });
-    }
-
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    res.setHeader('Content-Disposition', `inline; filename="voicemail-${detail.id}.mp3"`);
-    upstream.body.pipe(res);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── Twilio credential test ────────────────────────────────────────────────────
-
-router.post('/api/clinics/:id/twilio/test', async (req, res) => {
-  try {
-    const clinic = getClinicById(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-
-    const sid   = req.body.twilioSid   || clinic.twilio_sid;
-    const token = req.body.twilioToken || clinic.twilio_token;
-    const phone = req.body.twilioPhone || clinic.twilio_phone;
-
-    if (!sid || !token)
-      return res.status(400).json({ ok: false, error: 'Twilio SID and Auth Token are required' });
-
-    const client = twilio(sid, token);
-
-    // Validate account
-    const account = await client.api.accounts(sid).fetch();
-
-    // Look up the phone number in the account
-    let phoneInfo = null;
-    if (phone) {
-      try {
-        const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: phone, limit: 1 });
-        phoneInfo = numbers[0] || null;
-      } catch { /* phone not found in account */ }
-    }
-
-    res.json({
-      ok: true,
-      account: {
-        status:       account.status,
-        friendlyName: account.friendlyName,
-        type:         account.type,
-      },
-      phoneNumber: phoneInfo ? {
-        friendlyName:  phoneInfo.friendlyName,
-        phoneNumber:   phoneInfo.phoneNumber,
-        capabilities:  phoneInfo.capabilities,
-        voiceUrl:      phoneInfo.voiceUrl,
-      } : (phone ? { error: 'Phone number not found in this Twilio account' } : null),
-    });
-  } catch (e) {
-    const msg = e.message.includes('authenticate') || e.status === 401
-      ? 'Invalid Twilio credentials — check your Account SID and Auth Token'
-      : e.message;
-    res.status(400).json({ ok: false, error: msg });
-  }
-});
-
-// ── Initiate a real test call via Twilio ──────────────────────────────────────
-
-router.post('/api/clinics/:id/twilio/call', async (req, res) => {
-  try {
-    const { testPhone } = req.body;
-    if (!testPhone) return res.status(400).json({ error: 'testPhone is required' });
-
-    const clinic = getClinicById(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token || !clinic.twilio_phone)
-      return res.status(400).json({ error: 'Twilio credentials not fully configured for this clinic' });
-
-    const appUrl     = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-    const webhookUrl = `${appUrl}/webhook/${clinic.slug}/voice`;
-    const statusUrl  = `${appUrl}/webhook/${clinic.slug}/status`;
-
-    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
-    const call   = await client.calls.create({
-      to:                   testPhone,
-      from:                 clinic.twilio_phone,
-      url:                  webhookUrl,
-      statusCallback:       statusUrl,
-      statusCallbackMethod: 'POST',
-    });
-
-    res.json({ ok: true, callSid: call.sid, status: call.status });
-  } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
-  }
-});
 
 // ── Industry templates list ───────────────────────────────────────────────────
 
@@ -427,13 +312,14 @@ router.get('/api/health', async (req, res) => {
     value:  process.env.APP_URL || '(not set — using localhost)',
   };
 
-  // Twilio — count clinics fully configured
-  const clinics = getClinics();
-  const twilioReady = clinics.filter(c => c.twilio_sid && c.twilio_token && c.twilio_phone).length;
-  checks.twilio = {
-    status:            twilioReady > 0 ? 'ok' : 'warning',
-    clinicsConfigured: twilioReady,
+  // Telnyx — count clinics with a phone number configured
+  const clinics     = getClinics();
+  const telnyxReady = clinics.filter(c => c.telnyx_phone).length;
+  checks.telnyx = {
+    status:            process.env.TELNYX_API_KEY ? 'ok' : 'warning',
+    clinicsWithPhone:  telnyxReady,
     totalClinics:      clinics.length,
+    globalKeySet:      !!process.env.TELNYX_API_KEY,
   };
 
   // Portal secret
@@ -447,105 +333,6 @@ router.get('/api/health', async (req, res) => {
   });
 });
 
-// ── Twilio phone number provisioning ─────────────────────────────────────────
-
-router.get('/api/clinics/:id/twilio/numbers', async (req, res) => {
-  try {
-    const clinic = getClinicById(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token)
-      return res.status(400).json({ error: 'Twilio credentials not configured' });
-
-    const { areaCode, country = 'US', capabilities = 'voice' } = req.query;
-    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
-
-    const searchOpts = { limit: 20, voiceEnabled: true };
-    if (areaCode) searchOpts.areaCode = areaCode;
-    if (capabilities === 'sms') searchOpts.smsEnabled = true;
-
-    const numbers = await client.availablePhoneNumbers(country).local.list(searchOpts);
-
-    res.json({
-      numbers: numbers.map(n => ({
-        phoneNumber:  n.phoneNumber,
-        friendlyName: n.friendlyName,
-        locality:     n.locality,
-        region:       n.region,
-        postalCode:   n.postalCode,
-        capabilities: n.capabilities,
-      })),
-    });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
-router.post('/api/clinics/:id/twilio/provision', async (req, res) => {
-  try {
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) return res.status(400).json({ error: 'phoneNumber is required' });
-
-    const clinic = getClinicById(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token)
-      return res.status(400).json({ error: 'Twilio credentials not configured' });
-
-    const appUrl     = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-    const voiceUrl   = `${appUrl}/webhook/${clinic.slug}/voice`;
-    const statusUrl  = `${appUrl}/webhook/${clinic.slug}/status`;
-
-    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
-    const purchased = await client.incomingPhoneNumbers.create({
-      phoneNumber,
-      voiceUrl,
-      voiceMethod:          'POST',
-      statusCallback:       statusUrl,
-      statusCallbackMethod: 'POST',
-      friendlyName:         `NetCare — ${clinic.name}`,
-    });
-
-    // Persist the number on the clinic
-    updateClinic(+req.params.id, { twilioPhone: purchased.phoneNumber });
-
-    console.log(`[Provisioning] Purchased ${purchased.phoneNumber} for clinic ${clinic.slug}`);
-    res.json({
-      ok:          true,
-      phoneNumber: purchased.phoneNumber,
-      sid:         purchased.sid,
-      voiceUrl:    purchased.voiceUrl,
-    });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
-router.post('/api/clinics/:id/twilio/configure-webhook', async (req, res) => {
-  try {
-    const clinic = getClinicById(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token || !clinic.twilio_phone)
-      return res.status(400).json({ error: 'Twilio credentials and phone number required' });
-
-    const appUrl    = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-    const voiceUrl  = `${appUrl}/webhook/${clinic.slug}/voice`;
-    const statusUrl = `${appUrl}/webhook/${clinic.slug}/status`;
-
-    const client  = twilio(clinic.twilio_sid, clinic.twilio_token);
-    const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: clinic.twilio_phone, limit: 1 });
-    if (!numbers.length) return res.status(404).json({ error: 'Phone number not found in this Twilio account' });
-
-    await client.incomingPhoneNumbers(numbers[0].sid).update({
-      voiceUrl,
-      voiceMethod:          'POST',
-      statusCallback:       statusUrl,
-      statusCallbackMethod: 'POST',
-    });
-
-    res.json({ ok: true, voiceUrl, statusUrl });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 

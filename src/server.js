@@ -14,7 +14,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/webhook',     require('./routes/webhook'));
+app.use('/telnyx',      require('./routes/webhook'));
 app.use('/admin',       require('./routes/admin'));
 app.use('/superadmin',  require('./routes/superadmin'));
 app.use('/portal',      require('./routes/portal'));
@@ -37,31 +37,28 @@ initDb();
 const { startScheduler } = require('./services/scheduler');
 startScheduler();
 
-// Create HTTP server so we can attach WebSocket for Twilio Media Streams
+// Create HTTP server to handle WebSocket upgrades for Telnyx Media Streaming
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
-  const twilioMatch  = req.url?.match(/^\/realtime\/twilio\/([a-z0-9-]+)$/);
+  const telnyxMatch  = req.url?.match(/^\/realtime\/telnyx\/([a-z0-9-]+)$/);
   const browserMatch = req.url?.match(/^\/realtime\/browser\/([a-f0-9]{32})$/);
 
-  if (twilioMatch) {
+  if (telnyxMatch) {
     wss.handleUpgrade(req, socket, head, ws => {
       const { getClinicBySlug, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
-      const { createTwilioRelay } = require('./services/realtime');
+      const { createTelnyxRelay } = require('./services/realtime');
 
-      const clinic = getClinicBySlug(twilioMatch[1]);
+      const clinic = getClinicBySlug(telnyxMatch[1]);
       if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
-
-      const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-      if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
 
       // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
       const kb = getKnowledgeBase(clinic.id) || {};
       kb.businessRules = getBusinessRules(clinic.id);
       kb.trainingFaqs  = getTrainingFaqs(clinic.id);
 
-      createTwilioRelay(ws, apiKey, clinic, kb);
+      createTelnyxRelay(ws, clinic, kb);
     });
 
   } else if (browserMatch) {
@@ -75,15 +72,12 @@ server.on('upgrade', (req, socket, head) => {
       const clinic = getClinicAiConfig(clinicId);
       if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
 
-      const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-      if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
-
-      // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
+      // Enrich kb with Training Center data
       const kb = getKnowledgeBase(clinicId) || {};
       kb.businessRules = getBusinessRules(clinicId);
       kb.trainingFaqs  = getTrainingFaqs(clinicId);
 
-      createBrowserRelay(ws, apiKey, clinic, kb);
+      createBrowserRelay(ws, clinic, kb);
     });
 
   } else {
@@ -99,8 +93,8 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Super Admin     : ${base}/superadmin`);
   console.log(`  Clinic Admin    : ${base}/admin/:slug`);
   console.log(`  Client Portal   : ${base}/portal/:slug`);
-  console.log(`  Twilio webhook  : ${base}/webhook/:slug/voice`);
-  console.log(`  Realtime voice  : ${base}/webhook/:slug/realtime-voice`);
+  console.log(`  Telnyx webhook  : ${base}/telnyx/webhook`);
+  console.log(`  Realtime voice  : wss://${base.replace(/^https?:\/\//, '')}/realtime/telnyx/:slug`);
   console.log(`  Health check    : ${base}/`);
   console.log('');
 });

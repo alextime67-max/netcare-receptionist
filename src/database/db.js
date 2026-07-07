@@ -28,10 +28,8 @@ function initDb() {
       slug             TEXT UNIQUE NOT NULL,
       name             TEXT NOT NULL,
       phone_display    TEXT,
-      twilio_sid       TEXT,
-      twilio_token     TEXT,
-      twilio_phone     TEXT,
-      twilio_validate  INTEGER DEFAULT 0,
+      telnyx_api_key   TEXT,
+      telnyx_phone     TEXT,
       admin_user       TEXT DEFAULT 'admin',
       admin_pass       TEXT DEFAULT 'NetCare2024!',
       clinic_email     TEXT,
@@ -251,10 +249,10 @@ function initDb() {
   _addColumnIfMissing('training_faqs',   'sort_order',    'INTEGER DEFAULT 0');
   _addColumnIfMissing('training_sources','sort_order',    'INTEGER DEFAULT 0');
 
-  // ── Migrations: OpenAI Realtime Voice ────────────────────────────────────
-  _addColumnIfMissing('clinics', 'openai_api_key',  'TEXT');
-  _addColumnIfMissing('clinics', 'openai_voice',    "TEXT DEFAULT 'coral'");
-  _addColumnIfMissing('clinics', 'openai_language', "TEXT DEFAULT 'es'");
+  // ── Migrations: Telnyx telephony ─────────────────────────────────────────
+  _addColumnIfMissing('clinics', 'telnyx_api_key', 'TEXT');
+  _addColumnIfMissing('clinics', 'telnyx_phone',   'TEXT');
+  _addColumnIfMissing('clinics', 'ai_language',    "TEXT DEFAULT 'es'");
 
   // ── Migrations: Timezone for smart time-based greeting ───────────────────
   _addColumnIfMissing('clinics', 'timezone', "TEXT DEFAULT 'America/New_York'");
@@ -314,18 +312,16 @@ function initDb() {
   if (count === 0) {
     db.prepare(`
       INSERT INTO clinics
-        (slug, name, twilio_sid, twilio_token, twilio_phone, twilio_validate,
+        (slug, name, telnyx_api_key, telnyx_phone,
          admin_user, admin_pass, clinic_email, email_from,
          gmail_user, gmail_app_pass,
          smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       'netcare',
-      process.env.CLINIC_NAME    || 'NetCare Clinic',
-      process.env.TWILIO_ACCOUNT_SID  || null,
-      process.env.TWILIO_AUTH_TOKEN   || null,
-      process.env.TWILIO_PHONE_NUMBER || null,
-      process.env.TWILIO_VALIDATE === 'true' ? 1 : 0,
+      process.env.CLINIC_NAME       || 'NetCare Clinic',
+      process.env.TELNYX_API_KEY    || null,
+      process.env.TELNYX_PHONE_NUMBER || null,
       process.env.ADMIN_USER     || 'admin',
       process.env.ADMIN_PASS     || 'NetCare2024!',
       process.env.CLINIC_EMAIL   || null,
@@ -651,10 +647,10 @@ function createClinic(data) {
        contact_person, contact_phone, contact_email,
        business_type, monthly_plan, monthly_price, payment_status, status,
        support_notes, onboarded_at,
-       twilio_sid, twilio_token, twilio_phone, twilio_validate,
+       telnyx_api_key, telnyx_phone,
        admin_user, admin_pass, clinic_email, email_from,
        gmail_user, gmail_app_pass, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     data.slug, data.name, acctNum, data.phoneDisplay || null,
     data.contactPerson || null, data.contactPhone || null, data.contactEmail || null,
@@ -665,8 +661,7 @@ function createClinic(data) {
     data.status || 'active',
     data.supportNotes || null,
     data.status === 'active' ? new Date().toISOString() : null,
-    data.twilioSid || null, data.twilioToken || null, data.twilioPhone || null,
-    data.twilioValidate ? 1 : 0,
+    data.telnyxApiKey || null, data.telnyxPhone || null,
     data.adminUser || 'admin', data.adminPass || 'NetCare2024!',
     data.clinicEmail || null, data.emailFrom || null,
     data.gmailUser || null, data.gmailAppPass || null,
@@ -691,13 +686,18 @@ function getClinicById(id) {
   return db.prepare('SELECT * FROM clinics WHERE id = ?').get(id);
 }
 
+function getClinicByTelnyxPhone(phone) {
+  if (!phone) return null;
+  return db.prepare('SELECT * FROM clinics WHERE telnyx_phone = ?').get(phone) || null;
+}
+
 function updateClinic(id, data) {
   const allowed = [
     'name', 'phone_display',
     'contact_person', 'contact_phone', 'contact_email',
     'business_type', 'monthly_plan', 'monthly_price', 'payment_status',
     'status', 'support_notes', 'onboarded_at', 'suspended_at',
-    'twilio_sid', 'twilio_token', 'twilio_phone', 'twilio_validate',
+    'telnyx_api_key', 'telnyx_phone',
     'admin_user', 'admin_pass', 'clinic_email', 'email_from',
     'gmail_user', 'gmail_app_pass', 'smtp_host', 'smtp_port', 'smtp_secure',
     'smtp_user', 'smtp_pass', 'active', 'sms_follow_up_enabled',
@@ -712,9 +712,8 @@ function updateClinic(id, data) {
     payment_status: data.paymentStatus, status: data.status,
     support_notes: data.supportNotes,
     onboarded_at: data.onboardedAt, suspended_at: data.suspendedAt,
-    twilio_sid: data.twilioSid, twilio_token: data.twilioToken,
-    twilio_phone: data.twilioPhone,
-    twilio_validate: data.twilioValidate !== undefined ? (data.twilioValidate ? 1 : 0) : undefined,
+    telnyx_api_key: data.telnyxApiKey,
+    telnyx_phone:   data.telnyxPhone,
     admin_user: data.adminUser, admin_pass: data.adminPass,
     clinic_email: data.clinicEmail, email_from: data.emailFrom,
     gmail_user: data.gmailUser, gmail_app_pass: data.gmailAppPass,
@@ -893,7 +892,7 @@ function getAppointmentsDueForReminder(reminderType, windowStart, windowEnd) {
   const col = reminderType === '24h' ? 'reminder_24h_sent' : 'reminder_1h_sent';
   return db.prepare(`
     SELECT a.*, c.name AS clinic_name, c.slug AS clinic_slug,
-           c.twilio_sid, c.twilio_token, c.twilio_phone, c.sms_follow_up_enabled,
+           c.telnyx_api_key, c.telnyx_phone, c.sms_follow_up_enabled,
            ca.language
     FROM appointments a
     INNER JOIN clinics c ON a.clinic_id = c.id
@@ -988,8 +987,8 @@ function getClinicAiConfig(id) {
            ai_appointment_instructions, ai_transfer_rules,
            ai_office_hours, ai_after_hours_message, ai_emergency_instructions,
            ai_industry_template, ai_master_prompt,
-           ai_voice_es, ai_voice_en,
-           openai_api_key, openai_voice, openai_language,
+           ai_voice_es, ai_voice_en, ai_language,
+           telnyx_api_key,
            timezone
     FROM clinics WHERE id = ?
   `).get(id);
@@ -1002,8 +1001,8 @@ function updateClinicAiConfig(id, data) {
     'ai_appointment_instructions', 'ai_transfer_rules',
     'ai_office_hours', 'ai_after_hours_message', 'ai_emergency_instructions',
     'ai_industry_template', 'ai_master_prompt',
-    'ai_voice_es', 'ai_voice_en',
-    'openai_api_key', 'openai_voice', 'openai_language',
+    'ai_voice_es', 'ai_voice_en', 'ai_language',
+    'telnyx_api_key',
     'timezone',
   ];
   const map = {
@@ -1022,9 +1021,8 @@ function updateClinicAiConfig(id, data) {
     ai_master_prompt:            data.masterPrompt,
     ai_voice_es:                 data.voiceEs,
     ai_voice_en:                 data.voiceEn,
-    openai_api_key:              data.openaiApiKey,
-    openai_voice:                data.openaiVoice,
-    openai_language:             data.openaiLanguage,
+    ai_language:                 data.aiLanguage,
+    telnyx_api_key:              data.telnyxApiKey,
     timezone:                    data.timezone,
   };
   const filtered = Object.fromEntries(
@@ -1098,13 +1096,11 @@ function getCallAnalyticsSummary(clinicId) {
 
 // ── Portal helpers ────────────────────────────────────────────────────────────
 
-function updateClinicTwilio(id, data) {
-  const allowed = ['twilio_sid', 'twilio_token', 'twilio_phone', 'twilio_validate'];
+function updateClinicTelnyx(id, data) {
+  const allowed = ['telnyx_api_key', 'telnyx_phone'];
   const map = {
-    twilio_sid:      data.twilioSid,
-    twilio_token:    data.twilioToken,
-    twilio_phone:    data.twilioPhone,
-    twilio_validate: data.twilioValidate !== undefined ? (data.twilioValidate ? 1 : 0) : undefined,
+    telnyx_api_key: data.telnyxApiKey,
+    telnyx_phone:   data.telnyxPhone,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k]])
@@ -1381,8 +1377,9 @@ module.exports = {
   getClinics,
   getClinicBySlug,
   getClinicById,
+  getClinicByTelnyxPhone,
   updateClinic,
-  updateClinicTwilio,
+  updateClinicTelnyx,
   getClinicBilling,
   getClinicAiConfig,
   updateClinicAiConfig,

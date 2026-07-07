@@ -1,8 +1,10 @@
-const twilio     = require('twilio');
+'use strict';
+
 const nodemailer = require('nodemailer');
 const { getCostConfig, getClinics, logCostAlert, getLastAlertByType } = require('../database/db');
 const { getDashboardStats } = require('./costs');
 
+const TELNYX_API  = 'https://api.telnyx.com/v2';
 const COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours between repeat alerts
 
 function cooldownPassed(lastAlert) {
@@ -10,28 +12,26 @@ function cooldownPassed(lastAlert) {
   return Date.now() - new Date(lastAlert.created_at).getTime() > COOLDOWN_MS;
 }
 
-async function getTwilioBalance(clinic) {
-  if (!clinic.twilio_sid || !clinic.twilio_token) return null;
-  try {
-    const client  = twilio(clinic.twilio_sid, clinic.twilio_token);
-    const balance = await client.api.accounts(clinic.twilio_sid).balance.fetch();
-    return parseFloat(balance.balance);
-  } catch {
-    return null;
-  }
-}
-
 async function sendAlertSms(config, message, clinics) {
   if (!config.admin_phone) return false;
-  const sender = clinics.find(c => c.twilio_sid && c.twilio_token && c.twilio_phone);
+  const sender = clinics.find(c => c.telnyx_phone);
   if (!sender) return false;
+  const apiKey = sender.telnyx_api_key || process.env.TELNYX_API_KEY;
+  if (!apiKey) return false;
   try {
-    const client = twilio(sender.twilio_sid, sender.twilio_token);
-    await client.messages.create({
-      to:   config.admin_phone,
-      from: sender.twilio_phone,
-      body: `[NetCare Alert] ${message}`,
+    const r = await fetch(`${TELNYX_API}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        from: sender.telnyx_phone,
+        to:   config.admin_phone,
+        text: `[NetCare Alert] ${message}`,
+      }),
     });
+    if (!r.ok) throw new Error(`${r.status}`);
     return true;
   } catch (e) {
     console.error('[Alert] SMS send failed:', e.message);
@@ -79,8 +79,6 @@ async function checkAndSendAlerts() {
   const stats   = getDashboardStats();
   const results = [];
 
-  // ── AI budget alerts ────────────────────────────────────────────────────────
-
   const aiRemaining = stats.aiRemaining;
 
   if (aiRemaining <= (config.threshold_ai_critical || 2)) {
@@ -105,34 +103,13 @@ async function checkAndSendAlerts() {
     }
   }
 
-  // ── Twilio balance alerts (per clinic) ──────────────────────────────────────
-
-  for (const clinic of clinics) {
-    if (!clinic.twilio_sid || !clinic.twilio_token) continue;
-    const balance = await getTwilioBalance(clinic);
-    if (balance === null) continue;
-    if (balance <= (config.threshold_twilio_low || 10)) {
-      const type = `twilio_low_${clinic.id}`;
-      const msg  = `Twilio balance low for ${clinic.name}: $${balance.toFixed(2)} remaining (threshold: $${(config.threshold_twilio_low || 10).toFixed(2)}).`;
-      if (cooldownPassed(getLastAlertByType(type))) {
-        logCostAlert(type, msg, balance, config.threshold_twilio_low);
-        const sms   = await sendAlertSms(config, msg, clinics);
-        const email = await sendAlertEmail(config, msg);
-        results.push({ type, severity: 'warning', message: msg, value: balance, sms, email, clinicName: clinic.name });
-        console.log(`[Alert] twilio_low fired for ${clinic.name}`);
-      }
-    }
-  }
-
   return results;
 }
 
-// Returns current alert state for dashboard display (no notifications sent)
 async function getActiveAlerts() {
-  const config  = getCostConfig();
-  const clinics = getClinics();
-  const stats   = getDashboardStats();
-  const alerts  = [];
+  const config = getCostConfig();
+  const stats  = getDashboardStats();
+  const alerts = [];
 
   const aiRemaining = stats.aiRemaining;
   if (aiRemaining <= (config.threshold_ai_critical || 2)) {
@@ -143,16 +120,7 @@ async function getActiveAlerts() {
       message: `AI budget low — $${aiRemaining.toFixed(2)} remaining of $${(config.ai_monthly_budget || 200).toFixed(2)} budget.` });
   }
 
-  for (const clinic of clinics) {
-    if (!clinic.twilio_sid || !clinic.twilio_token) continue;
-    const balance = await getTwilioBalance(clinic);
-    if (balance !== null && balance <= (config.threshold_twilio_low || 10)) {
-      alerts.push({ type: `twilio_low_${clinic.id}`, severity: 'warning', clinicName: clinic.name,
-        message: `Twilio balance low for ${clinic.name}: $${balance.toFixed(2)}` });
-    }
-  }
-
   return alerts;
 }
 
-module.exports = { checkAndSendAlerts, getActiveAlerts, getTwilioBalance };
+module.exports = { checkAndSendAlerts, getActiveAlerts };

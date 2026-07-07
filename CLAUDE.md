@@ -9,9 +9,9 @@
 
 NetCare Phone AI es una **recepcionista médica virtual bilingüe (español / inglés)** que:
 
-- Atiende llamadas telefónicas entrantes de clínicas médicas vía Twilio.
-- Responde con voz natural generada por OpenAI Realtime (GPT-4o Realtime, voz `coral`).
-- Detecta automáticamente el idioma del paciente y responde en el mismo idioma.
+- Atiende llamadas telefónicas entrantes de clínicas médicas vía Telnyx.
+- Responde con voz natural usando Telnyx TTS (Adriana en español, Jacqueline en inglés) y Claude (Anthropic) como motor de IA.
+- Detecta automáticamente el idioma del paciente por turno y cambia de voz dinámicamente.
 - Recopila datos del paciente (nombre, teléfono, motivo de consulta).
 - Registra citas y mensajes en la base de datos.
 - Permite pruebas de voz en tiempo real desde el panel de administración (Live Voice).
@@ -31,8 +31,8 @@ NetCare Phone AI es una **recepcionista médica virtual bilingüe (español / in
 | Framework web | Express 4 |
 | Base de datos | SQLite via `better-sqlite3` |
 | WebSocket | `ws` library (HTTP server upgrade manual) |
-| Voz IA | OpenAI Realtime API (`gpt-realtime`) |
-| Telefonía | Twilio Media Streams (G.711 μ-law) |
+| IA | Claude (`claude-haiku-4-5-20251001` via Anthropic SDK) |
+| Telefonía | Telnyx Call Control API + Media Streaming |
 | Email | Nodemailer + SendGrid SMTP |
 | Proceso | PM2 (`netcare-phone`) |
 | Proxy | nginx (SSL termination → localhost:3000) |
@@ -48,17 +48,17 @@ netcare-receptionist/
 │   │   └── db.js              # SQLite. initDb, getters, setters. camelCase→snake_case mapping
 │   ├── routes/
 │   │   ├── superadmin.js      # Panel Super Admin (CRUD clínicas, AI config, KB, training)
-│   │   ├── webhook.js         # Twilio webhooks (voz legacy IVR + Realtime)
+│   │   ├── webhook.js         # Telnyx webhooks (Call Control events: transcription, speak.ended, etc.)
 │   │   ├── admin.js           # Panel clínica (citas, mensajes)
 │   │   ├── portal.js          # Portal paciente
 │   │   ├── api.js             # API pública
 │   │   └── public.js          # Recursos públicos
 │   ├── services/
-│   │   ├── realtime.js        # ★ Core IA: buildRealtimeInstructions, createTwilioRelay, createBrowserRelay
+│   │   ├── realtime.js        # ★ Core IA: buildRealtimeInstructions, createTelnyxRelay, createBrowserRelay
 │   │   ├── ai.js              # Anthropic SDK (Train Ana, análisis)
 │   │   ├── scheduler.js       # node-cron: recordatorios de citas
 │   │   ├── email.js           # Notificaciones email
-│   │   ├── sms.js             # SMS vía Twilio
+│   │   ├── sms.js             # SMS vía Telnyx
 │   │   ├── alerts.js          # Alertas internas
 │   │   ├── costs.js           # Seguimiento de costos IA
 │   │   └── tebra.js           # Integración Tebra EMR
@@ -89,27 +89,31 @@ Cada empresa (clínica) es un registro en la tabla `clinics` con un `slug` únic
 | `slug` | Identificador URL-safe (`mdcare`, `netcare`) |
 | `name` | Nombre para mostrar |
 | `ai_assistant_name` | Nombre de la IA (ej: `Ana de MDcare`) |
-| `openai_language` | Idioma primario: `es` o `en` |
-| `openai_voice` | Voz OpenAI Realtime (ej: `coral`) |
+| `ai_language` | Idioma primario: `es` o `en` |
+| `ai_voice_es` | Voice ID Telnyx en español (default: Adriana) |
+| `ai_voice_en` | Voice ID Telnyx en inglés (default: Jacqueline) |
 | `ai_greeting_es` | Saludo en español (configurable por cliente) |
 | `ai_greeting_en` | Saludo en inglés (configurable por cliente) |
 | `ai_master_prompt` | Instrucciones maestras (mayor prioridad en el prompt) |
-| `twilio_sid` / `twilio_token` | Credenciales Twilio por clínica |
-| `twilio_phone` | Número Twilio asociado |
-| `openai_api_key` | API key OpenAI por clínica (override del servidor) |
+| `telnyx_api_key` | API key Telnyx por clínica (override del servidor) |
+| `telnyx_phone` | Número Telnyx asociado |
 
 El Super Admin gestiona todas las clínicas. Cada clínica tiene su propio admin en `/admin/:slug`.
 
 ---
 
-## 4. OpenAI Realtime
+## 4. Claude IA + Telnyx
 
-### Cómo funciona
+### Flujo de llamada
 
-1. El servidor abre una conexión WebSocket a `wss://api.openai.com/v1/realtime?model=gpt-realtime`.
-2. Envía `session.update` con instrucciones, audio config y VAD.
-3. Escucha eventos: `session.created`, `session.updated`, `response.audio.delta`, `response.done`, etc.
-4. Reenvía audio hacia/desde el cliente (Twilio o browser).
+```
+Llamada entrante → Telnyx webhook POST /telnyx/webhook (event: call.initiated)
+  → answer() + startStreaming() + startTranscription()
+  → WebSocket Telnyx Media Stream → /realtime/telnyx/:slug
+  → createTelnyxRelay() en realtime.js
+  → speakToCall() → Telnyx TTS (REST POST /calls/:id/actions/speak)
+  → call.transcription event → onTranscription(text) → Claude → speakToCall()
+```
 
 ### Función central: `buildRealtimeInstructions(clinic, kb)`
 
@@ -119,68 +123,45 @@ Construye el system prompt completo con:
 - Identidad del asistente (`ai_assistant_name`, `name`)
 - **Saludo configurable** (`ai_greeting_es` / `ai_greeting_en`) — fallback genérico si está vacío
 - Reglas de detección automática de idioma
-- Estilo conversacional
-- Datos a recopilar del paciente
+- Estilo conversacional y datos a recopilar del paciente
 - KB (descripción, servicios, FAQ, reglas de negocio, Training FAQs, Training Sources)
 - `ai_master_prompt` al final (máxima prioridad)
+- **OUTPUT FORMAT** al final del prompt para llamadas telefónicas: `{"lang":"es","text":"..."}` — Claude retorna JSON por turno para detección dinámica de idioma/voz
 
-### Sesión OpenAI config
+### Voces Telnyx
 
-```javascript
-model: 'gpt-4o-realtime-preview-2024-12-17'
-voice: clinic.openai_voice || 'coral'       // NO cambiar sin instrucción
-input_audio_format:  'g711_ulaw'            // Twilio
-output_audio_format: 'g711_ulaw'            // Twilio
-turn_detection: { type: 'server_vad' }      // VAD automático
-```
+| Idioma | Voice ID | Nombre |
+|---|---|---|
+| Español | `Telnyx.Ultra.f4d6bb07-f876-4464-ba70-cd48d8701890` | Adriana |
+| Inglés  | `Telnyx.Ultra.9626c31c-bec5-4cca-baa8-f8ba9e84c8bc` | Jacqueline |
+
+Override por clínica: `ai_voice_es`, `ai_voice_en` en la tabla `clinics`.
 
 ### Regla crítica anti-double-response
 
-- `greetingDone` flag: el audio del paciente NO se envía a OpenAI hasta que Ana termina su saludo inicial.
-- El saludo se dispara con UN SOLO `response.create` en `session.updated`.
-- NUNCA agregar un segundo `response.create` automático.
+- `state` flag (GREETING/WAITING/RESPONDING): las transcripciones del paciente se ignoran hasta que Ana termina su saludo (`call.speak.ended` → WAITING).
+- NUNCA enviar texto a Claude mientras `state !== 'WAITING'`.
 
 ---
 
-## 5. Twilio — Configuración
+## 5. Telnyx — Configuración
 
-### Webhook URLs
+### Webhook URL (única para todas las clínicas)
 
-| Tipo | URL |
-|---|---|
-| OpenAI Realtime (activo) | `POST https://netcarephone.com/webhook/:slug/realtime-voice` |
-| Legacy IVR con Polly (antiguo) | `POST https://netcarephone.com/webhook/:slug/voice` |
+`POST https://netcarephone.com/telnyx/webhook`
 
-**El número de Twilio de MDcare debe apuntar a `/realtime-voice`.**
+La clínica se identifica por el número `to` del evento → `getClinicByTelnyxPhone(to)`.
 
-### Flujo de llamada Twilio Realtime
+### WebSocket Media Streaming
 
-```
-Llamada entrante → Twilio webhook → TwiML <Connect><Stream>
-  → wss://netcarephone.com/realtime/twilio/:slug
-  → createTwilioRelay() en realtime.js
-  → WebSocket a OpenAI Realtime
-  → Audio G.711 μ-law bidireccional
-```
-
-### TwiML generado
-
-```xml
-<Response>
-  <Connect>
-    <Stream url="wss://netcarephone.com/realtime/twilio/mdcare" />
-  </Connect>
-</Response>
-```
-
-### Número de producción
-
-- Número NetCare: `+18443145877` (variable `TWILIO_PHONE_NUMBER`)
+`wss://netcarephone.com/realtime/telnyx/:slug`
 
 ### Credenciales por clínica
 
-Guardadas en `clinics` tabla: `twilio_sid`, `twilio_token`, `twilio_phone`.
-API acepta camelCase: `twilioSid`, `twilioToken`, `twilioPhone`.
+Guardadas en `clinics` tabla: `telnyx_api_key`, `telnyx_phone`.
+API acepta camelCase: `telnyxApiKey`, `telnyxPhone`.
+
+Variable de entorno global de fallback: `TELNYX_API_KEY`.
 
 ---
 
@@ -195,17 +176,20 @@ SuperAdmin → POST /superadmin/api/clinics/:id/realtime/session
   → genera ws_token (UUID 32 chars, en memoria, 5 min TTL)
   → browser abre WebSocket wss://netcarephone.com/realtime/browser/:token
   → createBrowserRelay() en realtime.js
-  → audio PCM 24kHz bidireccional (browser nativo)
+  → protocolo texto: { type:'user_message', text } / { type:'assistant_message', text }
 ```
 
-### Diferencia con Twilio
+### Protocolo texto (Live Chat)
 
-| | Twilio | Live Voice |
-|---|---|---|
-| Audio format | G.711 μ-law (8kHz) | PCM 16-bit (24kHz) |
-| Input | `audio/pcmu` | `audio/pcm16` |
-| Output | `audio/pcmu` | `audio/pcm16` |
-| Token | slug en URL | UUID en memoria |
+| Mensaje (browser→server) | Descripción |
+|---|---|
+| `{ type: 'user_message', text }` | Mensaje del usuario |
+
+| Mensaje (server→browser) | Descripción |
+|---|---|
+| `{ type: 'assistant_message', text }` | Respuesta de Claude |
+| `{ type: 'thinking' }` | Claude procesando |
+| `{ type: 'error', message }` | Error |
 
 ### Importante
 
@@ -241,7 +225,7 @@ Cada clínica tiene su KB compuesta de:
 
 La API del SuperAdmin **acepta camelCase**. La DB usa **snake_case**. El mapeo está en:
 - `updateClinicAiConfig()` → `greetingEn` → `ai_greeting_en`, `assistantName` → `ai_assistant_name`, etc.
-- `updateClinic()` → `twilioSid` → `twilio_sid`, `twilioToken` → `twilio_token`, etc.
+- `updateClinic()` → `telnyxApiKey` → `telnyx_api_key`, `telnyxPhone` → `telnyx_phone`, etc.
 
 **Nunca pasar snake_case a la API** — el dato no se guarda aunque responda `ok: true`.
 
@@ -397,8 +381,8 @@ Hetzner:         <hash> online
 PM2:             netcare-phone — online
 Health Check:    HTTP 200
 SuperAdmin:      200 OK
-Live Voice:      ✅ session.created / Ana respondió
-Twilio:          ✅ sin errores nuevos
+Live Chat:       ✅ session creada / Ana respondió
+Telnyx:          ✅ sin errores nuevos
 Estado Final:    ✅ Producción actualizada correctamente.
 ========================================
 ```
@@ -421,8 +405,8 @@ Estado Final:    ✅ Producción actualizada correctamente.
 - Commitear `.env`, `data/netcare.db`, ni archivos con claves.
 - Editar código directamente en el servidor (`/root/netcare-receptionist/src/`).
 - Agregar `console.log` con API keys, tokens ni datos de pacientes.
-- Cambiar el modelo OpenAI sin instrucción explícita del usuario.
-- Cambiar la voz OpenAI (`coral`) sin instrucción explícita.
+- Cambiar el modelo Claude sin instrucción explícita del usuario.
+- Cambiar las voces Telnyx (Adriana/Jacqueline) sin instrucción explícita.
 - Modificar la Knowledge Base de producción sin aprobación.
 - Hacer `git add -A` sin revisar primero `git status`.
 
@@ -456,9 +440,9 @@ El servidor Hetzner es **solo lectura para código**. Todo cambio de código va 
 
 - **Base de datos de producción:** NUNCA sobrescribir sin aprobación explícita del usuario.
 - **Datos reales:** NUNCA borrar call logs, KB de clientes, AI configs existentes.
-- **Funcionalidad existente:** NUNCA romper Live Voice, Twilio Realtime, KB, ni Test Ana.
+- **Funcionalidad existente:** NUNCA romper Live Chat, llamadas Telnyx, KB, ni Test Ana.
 - **Commits:** NUNCA publicar con errores de sintaxis o errores críticos sin resolver.
-- **Claves:** NUNCA exponer OpenAI API key, Twilio credentials, SSH key en logs ni respuestas.
+- **Claves:** NUNCA exponer Anthropic API key, Telnyx credentials, SSH key en logs ni respuestas.
 - **Cambios funcionales:** NUNCA hacer commit hasta que el usuario pruebe y apruebe.
 - **Deploy con errores:** Si el health check falla, el workflow hace rollback automático.
 
@@ -466,9 +450,8 @@ El servidor Hetzner es **solo lectura para código**. Todo cambio de código va 
 
 | Variable | Dónde vive |
 |---|---|
-| `OPENAI_API_KEY` | `.env` en servidor (nunca en código) |
-| `TWILIO_ACCOUNT_SID` | `.env` en servidor |
-| `TWILIO_AUTH_TOKEN` | `.env` en servidor |
+| `ANTHROPIC_API_KEY` | `.env` en servidor (nunca en código) |
+| `TELNYX_API_KEY` | `.env` en servidor |
 | `SSH_PRIVATE_KEY` | GitHub Actions Secrets |
 | `SUPERADMIN_USER/PASS` | `.env` en servidor |
 
@@ -484,6 +467,6 @@ El servidor Hetzner es **solo lectura para código**. Todo cambio de código va 
 | GitHub repo | `https://github.com/alextime67-max/netcare-receptionist` |
 | GitHub Actions | `https://github.com/alextime67-max/netcare-receptionist/actions` |
 | Health check | `https://netcarephone.com/` |
-| Webhook MDcare (Realtime) | `https://netcarephone.com/webhook/mdcare/realtime-voice` |
-| WebSocket Twilio | `wss://netcarephone.com/realtime/twilio/:slug` |
-| WebSocket Live Voice | `wss://netcarephone.com/realtime/browser/:token` |
+| Webhook Telnyx (todas las clínicas) | `https://netcarephone.com/telnyx/webhook` |
+| WebSocket Telnyx Media | `wss://netcarephone.com/realtime/telnyx/:slug` |
+| WebSocket Live Chat | `wss://netcarephone.com/realtime/browser/:token` |

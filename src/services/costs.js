@@ -28,16 +28,16 @@ function computeClinicMonthStats(clinicId, month, config) {
   `).get(clinicId, start, end);
 
   const minutes    = (row.total_seconds || 0) / 60;
-  const twilioCost = minutes    * (config.twilio_rate_per_min || 0.0085);
+  const telnyxCost = minutes    * (config.telnyx_rate_per_min || config.twilio_rate_per_min || 0.0085);
   const aiCost     = (row.completed_calls || 0) * (config.ai_rate_per_call || 0.08);
 
   return {
     totalCalls:     row.total_calls     || 0,
     totalMinutes:   Math.round(minutes  * 10) / 10,
     completedCalls: row.completed_calls || 0,
-    twilioCost:     round2(twilioCost),
+    telnyxCost:     round2(telnyxCost),
     aiCost:         round2(aiCost),
-    totalCost:      round2(twilioCost + aiCost),
+    totalCost:      round2(telnyxCost + aiCost),
   };
 }
 
@@ -61,8 +61,8 @@ function getDashboardStats() {
 
   const minutes     = (monthRow.total_seconds || 0) / 60;
   const aiCost      = (monthRow.completed_calls || 0) * (config.ai_rate_per_call  || 0.08);
-  const twilioCost  = minutes * (config.twilio_rate_per_min || 0.0085);
-  const totalCost   = aiCost + twilioCost;
+  const telnyxCost  = minutes * (config.telnyx_rate_per_min || config.twilio_rate_per_min || 0.0085);
+  const totalCost   = aiCost + telnyxCost;
 
   const revenue = db.prepare(
     "SELECT COALESCE(SUM(monthly_price), 0) AS n FROM clinics WHERE status = 'active'"
@@ -75,7 +75,7 @@ function getDashboardStats() {
     callsToday,
     callsThisMonth:  monthRow.total_calls || 0,
     aiCostMonth:     round2(aiCost),
-    twilioCostMonth: round2(twilioCost),
+    telnyxCostMonth: round2(telnyxCost),
     totalCost:       round2(totalCost),
     monthlyRevenue:  round2(revenue),
     profit:          round2(profit),
