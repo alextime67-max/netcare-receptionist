@@ -727,17 +727,17 @@ async function finalizeCall(callSid, ai, clinic) {
   console.log(`[Webhook/${clinic.slug}] Call ${callSid} finalized — type=${collected.callType} lang=${ai.language}`);
 }
 
-// ── OpenAI Realtime Voice — Twilio Media Streams TwiML ───────────────────────
-// Point your Twilio number's Voice URL to: POST /webhook/:slug/realtime-voice
-// Requires APP_URL to be set to your public HTTPS/WSS domain (e.g. ngrok URL).
+// ── Telnyx Realtime Voice — Media Stream webhook ──────────────────────────────
+// Point your Telnyx Connection webhook URL to: POST /webhook/:slug/realtime-voice
+// Requires APP_URL to be set to your public HTTPS/WSS domain.
 
 router.post('/:slug/realtime-voice', clinicMiddleware, (req, res) => {
   const clinic = req.clinic;
   const { CallSid = '', From = 'anonymous' } = req.body;
 
-  const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
+  const apiKey = clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
   if (!apiKey) {
-    console.warn(`[Realtime:Twilio/${clinic.slug}] No OpenAI API key — rejecting  CallSid=${CallSid}`);
+    console.warn(`[Realtime:Telnyx/${clinic.slug}] No Telnyx API key — rejecting  CallSid=${CallSid}`);
     return res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>We're sorry, this service is temporarily unavailable. Please call back later.</Say>
@@ -749,7 +749,7 @@ router.post('/:slug/realtime-voice', clinicMiddleware, (req, res) => {
     .replace(/^https?:\/\//, '')
     .replace(/\/$/, '');
 
-  console.log(`[Realtime:Twilio/${clinic.slug}] Inbound call  CallSid=${CallSid}  From=${From}`);
+  console.log(`[Realtime:Telnyx/${clinic.slug}] Inbound call  CallSid=${CallSid}  From=${From}`);
 
   res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>

@@ -193,39 +193,6 @@ function buildRealtimeInstructions(clinic, kb) {
   return lines.join('\n');
 }
 
-// ── Create ephemeral session token (for browser WebRTC) ──────────────────────
-
-async function createEphemeralSession(apiKey, clinic, kb) {
-  const instructions = buildRealtimeInstructions(clinic, kb);
-  const voice        = clinic.openai_voice || 'coral';
-
-  const res = await fetch('https://api.openai.com/v1/realtime/sessions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type':  'application/json',
-      'OpenAI-Beta':   'realtime=v1',
-    },
-    body: JSON.stringify({
-      model: REALTIME_MODEL,
-      voice,
-      instructions,
-      input_audio_format:  'pcm16',
-      output_audio_format: 'pcm16',
-      input_audio_transcription: { model: 'whisper-1' },
-      turn_detection: {
-        type:                 'server_vad',
-        threshold:            0.5,
-        prefix_padding_ms:    300,
-        silence_duration_ms:  700,
-      },
-      temperature: 0.8,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || `OpenAI ${res.status}`);
-  return data;
-}
 
 // ── Twilio Media Streams → OpenAI Realtime relay (server-side WebSocket) ─────
 
@@ -496,161 +463,74 @@ function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
   twilioWs.on('error', e => console.error(`[Realtime:Twilio:${clinicName}] Twilio WS error:`, e.message));
 }
 
-// ── Browser relay — WebSocket proxy (browser → our server → OpenAI) ──────────
-// Browser connects to /realtime/browser/:token with a one-time voice token.
-// We proxy all Realtime API events bidirectionally so the browser handles
-// audio capture/playback via Web Audio API without ever seeing the API key.
+// ── Browser relay — text chat via Anthropic Claude ────────────────────────────
+// Browser connects to /realtime/browser/:token with a one-time token.
+// Messages: browser sends {type:'user_message', text} and receives
+// {type:'assistant_message', text} or {type:'session.created'}.
 
 function createBrowserRelay(browserWs, apiKey, clinic, kb) {
+  const Anthropic    = require('@anthropic-ai/sdk');
   const instructions = buildRealtimeInstructions(clinic, kb);
-  const voice        = clinic.openai_voice || 'coral';
   const clinicName   = clinic.name || 'the clinic';
+  const anthropic    = new Anthropic({ apiKey });
 
-  const openaiWs = new WebSocket(REALTIME_URL, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
+  const history = [];
+  let   closed  = false;
 
-  let greetingTriggered = false;
-  let greetingDone      = false; // blocks patient audio until Ana's opening is finished
-  let patientSpeaking   = false; // true while VAD reports active speech
-  let patientSpoke      = false; // true after confirmed speech in this turn (gate for response)
-  let speechStartTime   = null;  // timestamp of most recent speech_started
-  let silenceTimer      = null;  // re-arms every 30 s to clear accumulated noise
-
-  function sendToOpenAI(obj) {
-    if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
+  function send(obj) {
+    if (!closed && browserWs.readyState === WebSocket.OPEN) {
+      try { browserWs.send(JSON.stringify(obj)); } catch {}
+    }
   }
 
-  function clearBuffer() {
-    sendToOpenAI({ type: 'input_audio_buffer.clear' });
-  }
-
-  function armSilenceGuard() {
-    if (silenceTimer) clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => {
-      if (greetingDone && !patientSpeaking) {
-        console.log(`[Realtime:Browser:${clinicName}] 30 s silence — clearing buffer`);
-        clearBuffer();
-        armSilenceGuard();
-      }
-    }, 30_000);
-  }
-
-  function disarmSilenceGuard() {
-    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-  }
-
-  openaiWs.on('open', () => {
-    console.log(`[Realtime:Browser] Connected to OpenAI for ${clinicName}`);
-    sendToOpenAI({
-      type: 'session.update',
-      session: {
-        modalities:   ['text', 'audio'],
-        instructions,
-        voice,
-        // Browser uses PCM16 natively — keep defaults for audio format
-        turn_detection: {
-          type:                'server_vad',
-          threshold:           0.6,
-          prefix_padding_ms:   300,
-          silence_duration_ms: 800,
-        },
-      },
-    });
-  });
-
-  openaiWs.on('message', raw => {
-    let evt;
-    try { evt = JSON.parse(raw); } catch { return; }
-
-    if (evt.type === 'session.updated' && !greetingTriggered) {
-      greetingTriggered = true;
-      sendToOpenAI({ type: 'response.create' });
-    }
-
-    if (evt.type === 'response.done') {
-      if (greetingTriggered && !greetingDone) {
-        greetingDone = true;
-        clearBuffer();
-        armSilenceGuard();
-        console.log(`[Realtime:Browser:${clinicName}] Greeting done — buffer cleared, waiting for patient`);
-      } else if (greetingDone && !patientSpeaking) {
-        clearBuffer();
-        armSilenceGuard();
-      }
-    }
-
-    if (evt.type === 'input_audio_buffer.speech_started') {
-      patientSpeaking = true;
-      speechStartTime = Date.now();
-      disarmSilenceGuard();
-      console.log(`[Realtime:Browser:${clinicName}] Patient speech started`);
-    }
-
-    if (evt.type === 'input_audio_buffer.speech_stopped') {
-      const duration = speechStartTime ? (Date.now() - speechStartTime) : 0;
-      patientSpeaking = false;
-      speechStartTime = null;
-      if (duration >= 300) {
-        patientSpoke = true;
-        console.log(`[Realtime:Browser:${clinicName}] Patient speech confirmed (${duration} ms)`);
-      } else {
-        console.log(`[Realtime:Browser:${clinicName}] Noise suppressed (${duration} ms) — clearing buffer`);
-        clearBuffer();
-      }
-    }
-
-    if (evt.type === 'response.created' && greetingDone) {
-      if (patientSpoke) {
-        patientSpoke = false;
-        console.log(`[Realtime:Browser:${clinicName}] Response allowed — patient spoke`);
-      } else {
-        console.log(`[Realtime:Browser:${clinicName}] Blocking auto-response — no patient speech detected`);
-        sendToOpenAI({ type: 'response.cancel' });
-        clearBuffer();
-      }
-    }
-
-    if (evt.type === 'response.output_audio_transcript.done') {
-      console.log(`[Realtime:Browser:${clinicName}] Ana: ${evt.transcript}`);
-    }
-    if (evt.type === 'error') {
-      console.error(`[Realtime:Browser:${clinicName}] Error:`, evt.error?.message);
-    }
-
-    // Forward all OpenAI events to browser as UTF-8 text (not binary Blob)
-    try { if (browserWs.readyState === WebSocket.OPEN) browserWs.send(Buffer.isBuffer(raw) ? raw.toString('utf8') : raw); } catch {}
-  });
-
-  openaiWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] WS error:`, e.message));
-  openaiWs.on('close', () => {
-    disarmSilenceGuard();
-    console.log(`[Realtime:Browser:${clinicName}] OpenAI closed`);
-    try { browserWs.close(); } catch {}
-  });
-
-  browserWs.on('message', (raw, isBinary) => {
+  async function chat(userText) {
+    // Prime with a hidden trigger when no user text (opening greeting)
+    history.push({ role: 'user', content: userText || '[BEGIN CALL]' });
     try {
-      const str = !isBinary && Buffer.isBuffer(raw) ? raw.toString('utf8') : (Buffer.isBuffer(raw) ? raw : raw);
-      // Block input audio until Ana's greeting is complete
-      if (!greetingDone && !isBinary) {
-        const msg = JSON.parse(typeof str === 'string' ? str : str.toString('utf8'));
-        if (msg.type === 'input_audio_buffer.append') return;
+      const res = await anthropic.messages.create({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 512,
+        system:     instructions,
+        messages:   history,
+      });
+      const text = res.content?.[0]?.text?.trim() || '';
+      if (text) {
+        history.push({ role: 'assistant', content: text });
+        send({ type: 'assistant_message', text });
+        console.log(`[Realtime:Browser:${clinicName}] Ana: ${text.slice(0, 120)}`);
       }
-      if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(str);
+    } catch (e) {
+      console.error(`[Realtime:Browser:${clinicName}] Anthropic error:`, e.message);
+      send({ type: 'error', error: { message: e.message } });
+    }
+  }
+
+  // Notify browser session is ready, then generate opening greeting
+  send({ type: 'session.created' });
+  console.log(`[Realtime:Browser] Session created for ${clinicName}`);
+  chat(null);
+
+  browserWs.on('message', raw => {
+    if (closed) return;
+    try {
+      const msg = JSON.parse(Buffer.isBuffer(raw) ? raw.toString('utf8') : raw);
+      if (msg.type === 'user_message' && msg.text?.trim()) {
+        console.log(`[Realtime:Browser:${clinicName}] User: ${msg.text.slice(0, 100)}`);
+        chat(msg.text.trim());
+      }
     } catch {}
   });
+
   browserWs.on('close', () => {
-    disarmSilenceGuard();
+    closed = true;
     console.log(`[Realtime:Browser:${clinicName}] Browser disconnected`);
-    try { openaiWs.close(); } catch {}
   });
-  browserWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] Browser WS error:`, e.message));
+
+  browserWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] WS error:`, e.message));
 }
 
 module.exports = {
   buildRealtimeInstructions,
-  createEphemeralSession,
   createTwilioRelay,
   createBrowserRelay,
   generateVoiceToken,

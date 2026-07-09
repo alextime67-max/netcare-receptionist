@@ -4,8 +4,6 @@ const basicAuth = require('express-basic-auth');
 const path      = require('path');
 const fs        = require('fs');
 
-const twilio = require('twilio');
-
 const Anthropic = require('@anthropic-ai/sdk');
 
 function makeAnthropicClient() {
@@ -67,7 +65,8 @@ router.get('/api/clinics', (_req, res) => {
     const appUrl  = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
     const result  = clinics.map(c => ({
       ...c,
-      twilio_token:  c.twilio_token  ? '••••••••' : null,
+      twilio_token:     c.twilio_token     ? '••••••••' : null,
+      telnyx_api_key:   c.telnyx_api_key   ? '••••••••' : null,
       gmail_app_pass:c.gmail_app_pass? '••••••••' : null,
       smtp_pass:     c.smtp_pass     ? '••••••••' : null,
       admin_pass:    c.admin_pass    ? '••••••••' : null,
@@ -212,14 +211,13 @@ router.post('/api/clinics/:id/ai/test', async (req, res) => {
   }
 });
 
-// ── OpenAI Realtime ephemeral session (browser WebRTC Test Voice) ────────────
+// ── Browser Live Chat session token ──────────────────────────────────────────
 
 router.post('/api/clinics/:id/realtime/session', (req, res) => {
   const clinic = getClinicAiConfig(+req.params.id);
   if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
 
-  const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-  if (!apiKey) return res.status(400).json({ error: 'OpenAI API key not configured for this clinic. Add it in AI Settings → OpenAI Realtime Voice.' });
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'Anthropic API key not configured on this server.' });
 
   const token = generateVoiceToken(+req.params.id);
   res.json({ ws_token: token });
@@ -287,85 +285,40 @@ router.get('/api/calls/:id/recording', async (req, res) => {
   }
 });
 
-// ── Twilio credential test ────────────────────────────────────────────────────
+// ── Telnyx credential test ────────────────────────────────────────────────────
 
-router.post('/api/clinics/:id/twilio/test', async (req, res) => {
+router.post('/api/clinics/:id/telnyx/test', async (req, res) => {
   try {
     const clinic = getClinicById(+req.params.id);
     if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
 
-    const sid   = req.body.twilioSid   || clinic.twilio_sid;
-    const token = req.body.twilioToken || clinic.twilio_token;
-    const phone = req.body.twilioPhone || clinic.twilio_phone;
+    const apiKey = req.body.telnyxApiKey || clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
+    if (!apiKey)
+      return res.status(400).json({ ok: false, error: 'Telnyx API Key is required' });
 
-    if (!sid || !token)
-      return res.status(400).json({ ok: false, error: 'Twilio SID and Auth Token are required' });
-
-    const client = twilio(sid, token);
-
-    // Validate account
-    const account = await client.api.accounts(sid).fetch();
-
-    // Look up the phone number in the account
-    let phoneInfo = null;
-    if (phone) {
-      try {
-        const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: phone, limit: 1 });
-        phoneInfo = numbers[0] || null;
-      } catch { /* phone not found in account */ }
+    const balRes = await fetch('https://api.telnyx.com/v2/balance', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const balData = await balRes.json();
+    if (!balRes.ok) {
+      const msg = balData.errors?.[0]?.detail || `Telnyx ${balRes.status}`;
+      return res.status(400).json({ ok: false, error: msg });
     }
 
     res.json({
-      ok: true,
-      account: {
-        status:       account.status,
-        friendlyName: account.friendlyName,
-        type:         account.type,
-      },
-      phoneNumber: phoneInfo ? {
-        friendlyName:  phoneInfo.friendlyName,
-        phoneNumber:   phoneInfo.phoneNumber,
-        capabilities:  phoneInfo.capabilities,
-        voiceUrl:      phoneInfo.voiceUrl,
-      } : (phone ? { error: 'Phone number not found in this Twilio account' } : null),
+      ok:      true,
+      balance: balData.data?.balance,
+      currency: balData.data?.currency || 'USD',
     });
-  } catch (e) {
-    const msg = e.message.includes('authenticate') || e.status === 401
-      ? 'Invalid Twilio credentials — check your Account SID and Auth Token'
-      : e.message;
-    res.status(400).json({ ok: false, error: msg });
-  }
-});
-
-// ── Initiate a real test call via Twilio ──────────────────────────────────────
-
-router.post('/api/clinics/:id/twilio/call', async (req, res) => {
-  try {
-    const { testPhone } = req.body;
-    if (!testPhone) return res.status(400).json({ error: 'testPhone is required' });
-
-    const clinic = getClinicById(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token || !clinic.twilio_phone)
-      return res.status(400).json({ error: 'Twilio credentials not fully configured for this clinic' });
-
-    const appUrl     = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-    const webhookUrl = `${appUrl}/webhook/${clinic.slug}/voice`;
-    const statusUrl  = `${appUrl}/webhook/${clinic.slug}/status`;
-
-    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
-    const call   = await client.calls.create({
-      to:                   testPhone,
-      from:                 clinic.twilio_phone,
-      url:                  webhookUrl,
-      statusCallback:       statusUrl,
-      statusCallbackMethod: 'POST',
-    });
-
-    res.json({ ok: true, callSid: call.sid, status: call.status });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message });
   }
+});
+
+// ── Telnyx test call (stub — requires connection_id in full setup) ────────────
+
+router.post('/api/clinics/:id/telnyx/call', async (req, res) => {
+  res.status(501).json({ ok: false, error: 'Outbound test call via Telnyx requires a Connection ID — configure in the Telnyx portal.' });
 });
 
 // ── Industry templates list ───────────────────────────────────────────────────
@@ -427,12 +380,12 @@ router.get('/api/health', async (req, res) => {
     value:  process.env.APP_URL || '(not set — using localhost)',
   };
 
-  // Twilio — count clinics fully configured
+  // Telnyx — count clinics with API key configured
   const clinics = getClinics();
-  const twilioReady = clinics.filter(c => c.twilio_sid && c.twilio_token && c.twilio_phone).length;
-  checks.twilio = {
-    status:            twilioReady > 0 ? 'ok' : 'warning',
-    clinicsConfigured: twilioReady,
+  const telnyxReady = clinics.filter(c => c.telnyx_api_key || process.env.TELNYX_API_KEY).length;
+  checks.telnyx = {
+    status:            telnyxReady > 0 ? 'ok' : 'warning',
+    clinicsConfigured: telnyxReady,
     totalClinics:      clinics.length,
   };
 
@@ -447,32 +400,39 @@ router.get('/api/health', async (req, res) => {
   });
 });
 
-// ── Twilio phone number provisioning ─────────────────────────────────────────
+// ── Telnyx phone number search ────────────────────────────────────────────────
 
-router.get('/api/clinics/:id/twilio/numbers', async (req, res) => {
+router.get('/api/clinics/:id/telnyx/numbers', async (req, res) => {
   try {
     const clinic = getClinicById(+req.params.id);
     if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token)
-      return res.status(400).json({ error: 'Twilio credentials not configured' });
 
-    const { areaCode, country = 'US', capabilities = 'voice' } = req.query;
-    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
+    const apiKey = clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Telnyx API Key not configured' });
 
-    const searchOpts = { limit: 20, voiceEnabled: true };
-    if (areaCode) searchOpts.areaCode = areaCode;
-    if (capabilities === 'sms') searchOpts.smsEnabled = true;
+    const { areaCode } = req.query;
+    const params = new URLSearchParams({
+      'filter[country_code]':       'US',
+      'filter[number_type]':        'local',
+      'filter[features][]':         'voice',
+      'filter[limit]':              '20',
+    });
+    if (areaCode) params.set('filter[national_destination_code]', areaCode);
 
-    const numbers = await client.availablePhoneNumbers(country).local.list(searchOpts);
+    const r = await fetch(`https://api.telnyx.com/v2/available_phone_numbers?${params}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(400).json({ error: data.errors?.[0]?.detail || `Telnyx ${r.status}` });
 
     res.json({
-      numbers: numbers.map(n => ({
-        phoneNumber:  n.phoneNumber,
-        friendlyName: n.friendlyName,
-        locality:     n.locality,
-        region:       n.region,
-        postalCode:   n.postalCode,
-        capabilities: n.capabilities,
+      numbers: (data.data || []).map(n => ({
+        phoneNumber:  n.phone_number,
+        friendlyName: n.phone_number,
+        locality:     n.locality || '',
+        region:       n.region_code || '',
+        postalCode:   '',
+        capabilities: n.features?.map(f => f.name) || [],
       })),
     });
   } catch (e) {
@@ -480,71 +440,40 @@ router.get('/api/clinics/:id/twilio/numbers', async (req, res) => {
   }
 });
 
-router.post('/api/clinics/:id/twilio/provision', async (req, res) => {
+router.post('/api/clinics/:id/telnyx/provision', async (req, res) => {
   try {
     const { phoneNumber } = req.body;
     if (!phoneNumber) return res.status(400).json({ error: 'phoneNumber is required' });
 
     const clinic = getClinicById(+req.params.id);
     if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token)
-      return res.status(400).json({ error: 'Twilio credentials not configured' });
 
-    const appUrl     = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-    const voiceUrl   = `${appUrl}/webhook/${clinic.slug}/voice`;
-    const statusUrl  = `${appUrl}/webhook/${clinic.slug}/status`;
+    const apiKey = clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Telnyx API Key not configured' });
 
-    const client = twilio(clinic.twilio_sid, clinic.twilio_token);
-    const purchased = await client.incomingPhoneNumbers.create({
-      phoneNumber,
-      voiceUrl,
-      voiceMethod:          'POST',
-      statusCallback:       statusUrl,
-      statusCallbackMethod: 'POST',
-      friendlyName:         `NetCare — ${clinic.name}`,
+    const r = await fetch('https://api.telnyx.com/v2/phone_numbers/orders', {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ phone_numbers: [{ phone_number: phoneNumber }] }),
     });
+    const data = await r.json();
+    if (!r.ok) return res.status(400).json({ error: data.errors?.[0]?.detail || `Telnyx ${r.status}` });
 
-    // Persist the number on the clinic
-    updateClinic(+req.params.id, { twilioPhone: purchased.phoneNumber });
-
-    console.log(`[Provisioning] Purchased ${purchased.phoneNumber} for clinic ${clinic.slug}`);
-    res.json({
-      ok:          true,
-      phoneNumber: purchased.phoneNumber,
-      sid:         purchased.sid,
-      voiceUrl:    purchased.voiceUrl,
-    });
+    const purchased = data.data?.phone_numbers?.[0]?.phone_number || phoneNumber;
+    updateClinic(+req.params.id, { telnyxPhone: purchased });
+    console.log(`[Telnyx] Purchased ${purchased} for clinic ${clinic.slug}`);
+    res.json({ ok: true, phoneNumber: purchased });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-router.post('/api/clinics/:id/twilio/configure-webhook', async (req, res) => {
-  try {
-    const clinic = getClinicById(+req.params.id);
-    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-    if (!clinic.twilio_sid || !clinic.twilio_token || !clinic.twilio_phone)
-      return res.status(400).json({ error: 'Twilio credentials and phone number required' });
-
-    const appUrl    = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-    const voiceUrl  = `${appUrl}/webhook/${clinic.slug}/voice`;
-    const statusUrl = `${appUrl}/webhook/${clinic.slug}/status`;
-
-    const client  = twilio(clinic.twilio_sid, clinic.twilio_token);
-    const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: clinic.twilio_phone, limit: 1 });
-    if (!numbers.length) return res.status(404).json({ error: 'Phone number not found in this Twilio account' });
-
-    await client.incomingPhoneNumbers(numbers[0].sid).update({
-      voiceUrl,
-      voiceMethod:          'POST',
-      statusCallback:       statusUrl,
-      statusCallbackMethod: 'POST',
-    });
-
-    res.json({ ok: true, voiceUrl, statusUrl });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
+router.post('/api/clinics/:id/telnyx/configure-webhook', async (req, res) => {
+  const appUrl   = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+  const clinic   = getClinicById(+req.params.id);
+  if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+  const voiceUrl = `${appUrl}/webhook/${clinic.slug}/telnyx-voice`;
+  res.json({ ok: true, voiceUrl, note: 'Set this URL as the webhook in your Telnyx TeXML App or Connection.' });
 });
 
 // ── Delete ────────────────────────────────────────────────────────────────────

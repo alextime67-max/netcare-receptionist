@@ -1,26 +1,29 @@
-const twilio = require('twilio');
+const TELNYX_MESSAGES_URL = 'https://api.telnyx.com/v2/messages';
 
-function getTwilioClient(clinic) {
-  if (!clinic?.twilio_sid || !clinic?.twilio_token) return null;
-  return twilio(clinic.twilio_sid, clinic.twilio_token);
+function _getTelnyxKey(clinic) {
+  return clinic?.telnyx_api_key || process.env.TELNYX_API_KEY || null;
+}
+
+async function _sendSms(apiKey, from, to, body) {
+  const res = await fetch(TELNYX_MESSAGES_URL, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to, text: body }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.errors?.[0]?.detail || `Telnyx ${res.status}`);
+  return data.data?.id;
 }
 
 async function sendSmsFollowUp(clinic, toPhone, message) {
   if (!clinic?.sms_follow_up_enabled) return null;
-  if (!clinic.twilio_phone || !clinic.twilio_sid || !clinic.twilio_token) return null;
+  const apiKey = _getTelnyxKey(clinic);
+  if (!apiKey || !clinic.telnyx_phone) return null;
   if (!toPhone || !toPhone.trim() || toPhone === 'anonymous') return null;
-
-  const client = getTwilioClient(clinic);
-  if (!client) return null;
-
   try {
-    const msg = await client.messages.create({
-      body: message,
-      from: clinic.twilio_phone,
-      to:   toPhone,
-    });
-    console.log(`[SMS] Sent to ${toPhone} — SID=${msg.sid}`);
-    return msg.sid;
+    const id = await _sendSms(apiKey, clinic.telnyx_phone, toPhone, message);
+    console.log(`[SMS] Sent to ${toPhone} — ID=${id}`);
+    return id;
   } catch (err) {
     console.error(`[SMS] Failed to ${toPhone}: ${err.message}`);
     return null;
@@ -28,9 +31,8 @@ async function sendSmsFollowUp(clinic, toPhone, message) {
 }
 
 async function sendAppointmentConfirmationSms(clinic, toPhone, patientName, location, date, time, language) {
-  // Appointment confirmations bypass the sms_follow_up_enabled toggle — they are
-  // always sent when Twilio is configured, because the patient expects this message.
-  if (!clinic?.twilio_phone || !clinic?.twilio_sid || !clinic?.twilio_token) return null;
+  const apiKey = _getTelnyxKey(clinic);
+  if (!apiKey || !clinic.telnyx_phone) return null;
   if (!toPhone || !toPhone.trim() || toPhone === 'anonymous') return null;
 
   const name = patientName || 'there';
@@ -38,22 +40,20 @@ async function sendAppointmentConfirmationSms(clinic, toPhone, patientName, loca
   let message;
 
   if (language === 'es') {
-    const locPart  = loc  ? ` para ${loc}`              : '';
-    const datePart = date ? ` para el ${date}`           : '';
-    const timePart = time ? ` a las ${time}`             : '';
+    const locPart  = loc  ? ` para ${loc}`    : '';
+    const datePart = date ? ` para el ${date}` : '';
+    const timePart = time ? ` a las ${time}`   : '';
     message = `MDcare Medical Centers: Hola ${name}, su solicitud de cita${locPart} fue recibida${datePart}${timePart}. Nuestro equipo le confirmará la cita. Gracias.`;
   } else {
-    const locPart  = loc  ? ` for ${loc}`               : '';
-    const datePart = date ? ` for ${date}`               : '';
-    const timePart = time ? ` at ${time}`                : '';
+    const locPart  = loc  ? ` for ${loc}`  : '';
+    const datePart = date ? ` for ${date}` : '';
+    const timePart = time ? ` at ${time}`  : '';
     message = `MDcare Medical Centers: Hi ${name}, your appointment request${locPart} was received${datePart}${timePart}. Our team will confirm your appointment. Thank you.`;
   }
 
-  // Let Twilio errors propagate so the caller can record a failed status.
-  const client = getTwilioClient(clinic);
-  const msg = await client.messages.create({ body: message, from: clinic.twilio_phone, to: toPhone });
-  console.log(`[SMS] Appointment confirmation sent to ${toPhone} — SID=${msg.sid}`);
-  return msg.sid;
+  const id = await _sendSms(apiKey, clinic.telnyx_phone, toPhone, message);
+  console.log(`[SMS] Appointment confirmation sent to ${toPhone} — ID=${id}`);
+  return id;
 }
 
 async function sendMessageReceiptSms(clinic, toPhone, patientName) {
@@ -65,7 +65,7 @@ async function sendMessageReceiptSms(clinic, toPhone, patientName) {
 }
 
 async function sendMissedCallSms(clinic, toPhone) {
-  const callBackAt = clinic.phone_display || clinic.twilio_phone || 'our office';
+  const callBackAt = clinic.phone_display || clinic.telnyx_phone || 'our office';
   const message =
     `You recently missed a call from ${clinic.name}. ` +
     `Please call us back at ${callBackAt} when you get a chance. Reply STOP to opt out.`;

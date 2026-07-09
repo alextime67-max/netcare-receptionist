@@ -259,6 +259,20 @@ function initDb() {
   // ── Migrations: Timezone for smart time-based greeting ───────────────────
   _addColumnIfMissing('clinics', 'timezone', "TEXT DEFAULT 'America/New_York'");
 
+  // ── Migrations: Telnyx Integration ──────────────────────────────────────────
+
+  _addColumnIfMissing('clinics', 'telnyx_api_key', 'TEXT');
+  _addColumnIfMissing('clinics', 'telnyx_phone',   'TEXT');
+
+  // cost_config: add telnyx columns, migrate data from legacy twilio_ columns
+  const _hasTelnyxRate = db.prepare("PRAGMA table_info(cost_config)").all().map(c => c.name).includes('telnyx_rate_per_min');
+  _addColumnIfMissing('cost_config', 'telnyx_rate_per_min',  'REAL DEFAULT 0.0085');
+  _addColumnIfMissing('cost_config', 'threshold_telnyx_low', 'REAL DEFAULT 10.0');
+  if (!_hasTelnyxRate) {
+    db.prepare("UPDATE cost_config SET telnyx_rate_per_min = COALESCE(twilio_rate_per_min, 0.0085), threshold_telnyx_low = COALESCE(threshold_twilio_low, 10.0)").run();
+    console.log('[DB] Migration: cost_config telnyx columns populated from twilio fields');
+  }
+
   // Back-fill account numbers for any clinic that doesn't have one yet
   const noAcct = db.prepare("SELECT id FROM clinics WHERE account_number IS NULL OR account_number = ''").all();
   for (const row of noAcct) {
@@ -698,6 +712,7 @@ function updateClinic(id, data) {
     'business_type', 'monthly_plan', 'monthly_price', 'payment_status',
     'status', 'support_notes', 'onboarded_at', 'suspended_at',
     'twilio_sid', 'twilio_token', 'twilio_phone', 'twilio_validate',
+    'telnyx_api_key', 'telnyx_phone',
     'admin_user', 'admin_pass', 'clinic_email', 'email_from',
     'gmail_user', 'gmail_app_pass', 'smtp_host', 'smtp_port', 'smtp_secure',
     'smtp_user', 'smtp_pass', 'active', 'sms_follow_up_enabled',
@@ -715,6 +730,8 @@ function updateClinic(id, data) {
     twilio_sid: data.twilioSid, twilio_token: data.twilioToken,
     twilio_phone: data.twilioPhone,
     twilio_validate: data.twilioValidate !== undefined ? (data.twilioValidate ? 1 : 0) : undefined,
+    telnyx_api_key: data.telnyxApiKey,
+    telnyx_phone:   data.telnyxPhone,
     admin_user: data.adminUser, admin_pass: data.adminPass,
     clinic_email: data.clinicEmail, email_from: data.emailFrom,
     gmail_user: data.gmailUser, gmail_app_pass: data.gmailAppPass,
@@ -1098,13 +1115,11 @@ function getCallAnalyticsSummary(clinicId) {
 
 // ── Portal helpers ────────────────────────────────────────────────────────────
 
-function updateClinicTwilio(id, data) {
-  const allowed = ['twilio_sid', 'twilio_token', 'twilio_phone', 'twilio_validate'];
+function updateClinicTelnyx(id, data) {
+  const allowed = ['telnyx_api_key', 'telnyx_phone'];
   const map = {
-    twilio_sid:      data.twilioSid,
-    twilio_token:    data.twilioToken,
-    twilio_phone:    data.twilioPhone,
-    twilio_validate: data.twilioValidate !== undefined ? (data.twilioValidate ? 1 : 0) : undefined,
+    telnyx_api_key: data.telnyxApiKey,
+    telnyx_phone:   data.telnyxPhone,
   };
   const filtered = Object.fromEntries(
     allowed.filter(k => map[k] !== undefined).map(k => [k, map[k]])
@@ -1314,9 +1329,9 @@ function getUnansweredQuestions(clinicId, limit = 50, offset = 0) {
 
 const COST_CONFIG_DEFAULTS = {
   admin_phone: null, admin_email: null,
-  twilio_rate_per_min: 0.0085, ai_rate_per_call: 0.08,
+  telnyx_rate_per_min: 0.0085, ai_rate_per_call: 0.08,
   ai_monthly_budget: 200.0,
-  threshold_ai_low: 5.0, threshold_ai_critical: 2.0, threshold_twilio_low: 10.0,
+  threshold_ai_low: 5.0, threshold_ai_critical: 2.0, threshold_telnyx_low: 10.0,
   alerts_enabled: 1,
 };
 
@@ -1328,26 +1343,26 @@ function saveCostConfig(data) {
   const d = { ...COST_CONFIG_DEFAULTS, ...data };
   db.prepare(`
     INSERT INTO cost_config
-      (id, admin_phone, admin_email, twilio_rate_per_min, ai_rate_per_call,
+      (id, admin_phone, admin_email, telnyx_rate_per_min, ai_rate_per_call,
        ai_monthly_budget, threshold_ai_low, threshold_ai_critical,
-       threshold_twilio_low, alerts_enabled, updated_at)
+       threshold_telnyx_low, alerts_enabled, updated_at)
     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(id) DO UPDATE SET
       admin_phone           = excluded.admin_phone,
       admin_email           = excluded.admin_email,
-      twilio_rate_per_min   = excluded.twilio_rate_per_min,
+      telnyx_rate_per_min   = excluded.telnyx_rate_per_min,
       ai_rate_per_call      = excluded.ai_rate_per_call,
       ai_monthly_budget     = excluded.ai_monthly_budget,
       threshold_ai_low      = excluded.threshold_ai_low,
       threshold_ai_critical = excluded.threshold_ai_critical,
-      threshold_twilio_low  = excluded.threshold_twilio_low,
+      threshold_telnyx_low  = excluded.threshold_telnyx_low,
       alerts_enabled        = excluded.alerts_enabled,
       updated_at            = CURRENT_TIMESTAMP
   `).run(
     d.admin_phone || null, d.admin_email || null,
-    +d.twilio_rate_per_min, +d.ai_rate_per_call,
+    +d.telnyx_rate_per_min, +d.ai_rate_per_call,
     +d.ai_monthly_budget,
-    +d.threshold_ai_low, +d.threshold_ai_critical, +d.threshold_twilio_low,
+    +d.threshold_ai_low, +d.threshold_ai_critical, +d.threshold_telnyx_low,
     d.alerts_enabled ? 1 : 0,
   );
 }
@@ -1382,7 +1397,7 @@ module.exports = {
   getClinicBySlug,
   getClinicById,
   updateClinic,
-  updateClinicTwilio,
+  updateClinicTelnyx,
   getClinicBilling,
   getClinicAiConfig,
   updateClinicAiConfig,

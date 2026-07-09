@@ -37,7 +37,7 @@ initDb();
 const { startScheduler } = require('./services/scheduler');
 startScheduler();
 
-// Create HTTP server so we can attach WebSocket for Twilio Media Streams
+// Create HTTP server so we can attach WebSocket for Telnyx media relay
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ noServer: true });
 
@@ -75,8 +75,8 @@ server.on('upgrade', (req, socket, head) => {
       const clinic = getClinicAiConfig(clinicId);
       if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
 
-      const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-      if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) { ws.close(1008, 'Anthropic API key not configured'); return; }
 
       // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
       const kb = getKnowledgeBase(clinicId) || {};
@@ -99,8 +99,8 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Super Admin     : ${base}/superadmin`);
   console.log(`  Clinic Admin    : ${base}/admin/:slug`);
   console.log(`  Client Portal   : ${base}/portal/:slug`);
-  console.log(`  Twilio webhook  : ${base}/webhook/:slug/voice`);
-  console.log(`  Realtime voice  : ${base}/webhook/:slug/realtime-voice`);
+  console.log(`  Telnyx webhook  : ${base}/webhook/:slug/realtime-voice`);
+  console.log(`  Legacy IVR      : ${base}/webhook/:slug/voice  (deprecated)`);
   console.log(`  Health check    : ${base}/`);
   console.log('');
 });
