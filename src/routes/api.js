@@ -1,8 +1,6 @@
 const express   = require('express');
 const router    = express.Router();
 const basicAuth = require('express-basic-auth');
-const twilio    = require('twilio');
-
 const {
   getClinicBySlug,
   getCalls, getCallWithTranscript, getStats,
@@ -136,27 +134,8 @@ router.get('/:slug/config/twilio', clinicAuth, (req, res) => {
   });
 });
 
-router.post('/:slug/config/test-twilio', clinicAuth, async (req, res) => {
-  const c = req.clinic;
-  if (!c.twilio_sid || !c.twilio_token) {
-    return res.json({ ok: false, error: 'Twilio credentials not set for this clinic' });
-  }
-  try {
-    const client  = twilio(c.twilio_sid, c.twilio_token);
-    const account = await client.api.accounts(c.twilio_sid).fetch();
-
-    let phoneInfo = null;
-    if (c.twilio_phone) {
-      const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: c.twilio_phone, limit: 1 });
-      phoneInfo = numbers.length
-        ? { found: true, friendlyName: numbers[0].friendlyName, voiceUrl: numbers[0].voiceUrl || null, statusUrl: numbers[0].statusCallback || null, capabilities: numbers[0].capabilities }
-        : { found: false };
-    }
-
-    res.json({ ok: true, accountName: account.friendlyName, accountStatus: account.status, phoneInfo });
-  } catch (err) {
-    res.json({ ok: false, error: err.message });
-  }
+router.post('/:slug/config/test-twilio', clinicAuth, async (_req, res) => {
+  res.json({ ok: false, error: 'Twilio has been replaced by Telnyx. Configure Telnyx in the Super Admin panel.' });
 });
 
 module.exports = router;

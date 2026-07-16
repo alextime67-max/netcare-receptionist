@@ -472,8 +472,8 @@ router.post('/api/clinics/:id/telnyx/configure-webhook', async (req, res) => {
   const appUrl   = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
   const clinic   = getClinicById(+req.params.id);
   if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-  const voiceUrl = `${appUrl}/webhook/${clinic.slug}/telnyx-voice`;
-  res.json({ ok: true, voiceUrl, note: 'Set this URL as the webhook in your Telnyx TeXML App or Connection.' });
+  const voiceUrl = `${appUrl}/telnyx/webhook`;
+  res.json({ ok: true, voiceUrl, note: 'Set this URL as the webhook in your Telnyx Voice API Application.' });
 });
 
 // ── Delete ────────────────────────────────────────────────────────────────────

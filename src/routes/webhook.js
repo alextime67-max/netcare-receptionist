@@ -1,6 +1,5 @@
 const express = require('express');
 const router  = express.Router();
-const twilio  = require('twilio');
 
 const {
   initSession, getSession, setSessionDbId, endSession,
@@ -193,20 +192,6 @@ function clinicMiddleware(req, res, next) {
     );
   }
   req.clinic = clinic;
-
-  // Optional per-clinic Twilio signature validation
-  if (clinic.twilio_validate && clinic.twilio_token) {
-    const appUrl    = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
-    const signature = req.headers['x-twilio-signature'] || '';
-    const url       = `${appUrl.replace(/\/$/, '')}${req.originalUrl}`;
-    if (!twilio.validateRequest(clinic.twilio_token, signature, url, req.body)) {
-      console.warn(`[Webhook/${clinic.slug}] Rejected invalid Twilio signature`);
-      return res.status(403).type('text/xml').send(
-        '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Unauthorized</Say></Response>'
-      );
-    }
-  }
-
   next();
 }
 
@@ -726,40 +711,5 @@ async function finalizeCall(callSid, ai, clinic) {
   endSession(callSid);
   console.log(`[Webhook/${clinic.slug}] Call ${callSid} finalized — type=${collected.callType} lang=${ai.language}`);
 }
-
-// ── Telnyx Realtime Voice — Media Stream webhook ──────────────────────────────
-// Point your Telnyx Connection webhook URL to: POST /webhook/:slug/realtime-voice
-// Requires APP_URL to be set to your public HTTPS/WSS domain.
-
-router.post('/:slug/realtime-voice', clinicMiddleware, (req, res) => {
-  const clinic = req.clinic;
-  const { CallSid = '', From = 'anonymous' } = req.body;
-
-  const apiKey = clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
-  if (!apiKey) {
-    console.warn(`[Realtime:Telnyx/${clinic.slug}] No Telnyx API key — rejecting  CallSid=${CallSid}`);
-    return res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>We're sorry, this service is temporarily unavailable. Please call back later.</Say>
-  <Hangup/>
-</Response>`);
-  }
-
-  const appUrl = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`)
-    .replace(/^https?:\/\//, '')
-    .replace(/\/$/, '');
-
-  console.log(`[Realtime:Telnyx/${clinic.slug}] Inbound call  CallSid=${CallSid}  From=${From}`);
-
-  res.type('text/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Connect>
-    <Stream url="wss://${appUrl}/realtime/twilio/${clinic.slug}">
-      <Parameter name="from" value="${From}"/>
-      <Parameter name="callSid" value="${CallSid}"/>
-    </Stream>
-  </Connect>
-</Response>`);
-});
 
 module.exports = router;

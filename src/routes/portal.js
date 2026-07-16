@@ -2,11 +2,9 @@ const express = require('express');
 const router  = express.Router();
 const jwt     = require('jsonwebtoken');
 const path    = require('path');
-const twilio  = require('twilio');
-
 const {
   getClinicBySlug, getClinicById,
-  updateClinicTwilio, getClinicBilling,
+  updateClinic, getClinicBilling,
   getStats, getCalls, getCallWithTranscript,
   getAppointments, updateAppointmentStatus,
   getDoctorMessages, updateDoctorMessageStatus,
@@ -194,32 +192,13 @@ router.get('/:slug/api/twilio', portalAuth, (req, res) => {
 router.put('/:slug/api/twilio', portalAuth, (req, res) => {
   const { twilioSid, twilioToken, twilioPhone, twilioValidate } = req.body;
   try {
-    updateClinicTwilio(req.clinic.id, { twilioSid, twilioToken, twilioPhone, twilioValidate });
+    updateClinic(req.clinic.id, { twilioSid, twilioToken, twilioPhone, twilioValidate });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/:slug/api/twilio/test', portalAuth, async (req, res) => {
-  const c = req.clinic;
-  if (!c.twilio_sid || !c.twilio_token) {
-    return res.json({ ok: false, error: 'Twilio credentials not configured for this clinic' });
-  }
-  try {
-    const client  = twilio(c.twilio_sid, c.twilio_token);
-    const account = await client.api.accounts(c.twilio_sid).fetch();
-
-    let phoneInfo = null;
-    if (c.twilio_phone) {
-      const numbers = await client.incomingPhoneNumbers.list({ phoneNumber: c.twilio_phone, limit: 1 });
-      phoneInfo = numbers.length
-        ? { found: true, friendlyName: numbers[0].friendlyName, voiceUrl: numbers[0].voiceUrl || null, capabilities: numbers[0].capabilities }
-        : { found: false };
-    }
-
-    res.json({ ok: true, accountName: account.friendlyName, accountStatus: account.status, phoneInfo });
-  } catch (err) {
-    res.json({ ok: false, error: err.message });
-  }
+router.post('/:slug/api/twilio/test', portalAuth, async (_req, res) => {
+  res.json({ ok: false, error: 'Twilio has been replaced by Telnyx. Configure Telnyx in the Super Admin panel.' });
 });
 
 // ── Billing ───────────────────────────────────────────────────────────────────

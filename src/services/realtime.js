@@ -1,9 +1,13 @@
+'use strict';
 const crypto    = require('crypto');
 const WebSocket = require('ws');
+const Anthropic = require('@anthropic-ai/sdk');
 const { createCall, updateCall, addTranscript } = require('../database/db');
 
-const REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
-const REALTIME_URL   = `wss://api.openai.com/v1/realtime?model=${REALTIME_MODEL}`;
+// ── Anthropic client (shared across all relay instances) ──────────────────────
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const TELNYX_API = 'https://api.telnyx.com/v2';
 
 // ── One-time voice tokens for browser WebSocket auth ─────────────────────────
 
@@ -23,13 +27,11 @@ function consumeVoiceToken(token) {
   return data.expires > Date.now() ? data.clinicId : null;
 }
 
-// ── System prompt for Realtime API ───────────────────────────────────────────
+// ── Time-based greeting ───────────────────────────────────────────────────────
 
-// Returns "Buenos días." / "Buenas tardes." / "Buenas noches." (or English equivalents)
-// based on the current hour in the clinic's configured timezone.
 function getTimeBasedGreeting(clinic) {
   const tz   = clinic.timezone || 'America/New_York';
-  const lang = clinic.openai_language || 'es';
+  const lang = clinic.ai_language || 'es';
   const hour = parseInt(
     new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
     10
@@ -44,20 +46,16 @@ function getTimeBasedGreeting(clinic) {
   return 'Good evening.';
 }
 
+// ── System prompt builder ─────────────────────────────────────────────────────
+
 function buildRealtimeInstructions(clinic, kb) {
   const name     = clinic.name || 'the clinic';
   const asstName = clinic.ai_assistant_name || 'Ana';
-  const lang     = clinic.openai_language || 'es';
+  const lang     = clinic.ai_language || 'es';
 
-  // Time-based greeting prepended automatically — clinic does NOT write it manually.
   const timeGreeting = getTimeBasedGreeting(clinic);
-
-  // Body of greeting configured in SuperAdmin → AI Settings → Greeting.
-  // Falls back to a generic phrase if not set.
-  const greetingEs = clinic.ai_greeting_es?.trim()
-    || `Gracias por llamar. ¿En qué puedo ayudarle hoy?`;
-  const greetingEn = clinic.ai_greeting_en?.trim()
-    || `Thank you for calling. How may I help you today?`;
+  const greetingEs   = clinic.ai_greeting_es?.trim() || `Gracias por llamar. ¿En qué puedo ayudarle hoy?`;
+  const greetingEn   = clinic.ai_greeting_en?.trim() || `Thank you for calling. How may I help you today?`;
   const openingGreeting = `${timeGreeting} ${lang === 'es' ? greetingEs : greetingEn}`;
 
   const lines = [
@@ -119,7 +117,6 @@ function buildRealtimeInstructions(clinic, kb) {
       : `"All set! We'll be in touch soon. Have a wonderful day. Goodbye!"`,
   ];
 
-  // Inject KB knowledge if available
   if (kb) {
     const kbFields = [
       ['SERVICES',            kb.services],
@@ -144,7 +141,6 @@ function buildRealtimeInstructions(clinic, kb) {
     }
   }
 
-  // Inject AI config knowledge (legacy fields)
   const cfgFields = [
     ['ABOUT THIS BUSINESS', clinic.ai_business_description],
     ['SERVICES',            clinic.ai_services],
@@ -158,7 +154,6 @@ function buildRealtimeInstructions(clinic, kb) {
   const cfgBody = cfgFields.filter(([, v]) => v && v.trim()).map(([k, v]) => `${k}:\n${v.trim()}`).join('\n\n');
   if (cfgBody) lines.push('', cfgBody);
 
-  // Business rules from Training Center
   const rules = kb?.businessRules || [];
   if (rules.length) {
     lines.push(
@@ -169,7 +164,6 @@ function buildRealtimeInstructions(clinic, kb) {
     );
   }
 
-  // Trained FAQs from Training Center
   const trainingFaqs = kb?.trainingFaqs || [];
   if (trainingFaqs.length) {
     lines.push(
@@ -180,7 +174,6 @@ function buildRealtimeInstructions(clinic, kb) {
     );
   }
 
-  // Master prompt override — placed last so it always takes effect
   if (clinic.ai_master_prompt?.trim()) {
     lines.push(
       '', '════════════════════',
@@ -193,286 +186,177 @@ function buildRealtimeInstructions(clinic, kb) {
   return lines.join('\n');
 }
 
+// ── Telnyx relay registry ─────────────────────────────────────────────────────
+// Maps callControlId → relay object. Webhook routes call.transcription and
+// call.speak.ended to the active relay for that call.
 
-// ── Twilio Media Streams → OpenAI Realtime relay (server-side WebSocket) ─────
+const _telnyxRelays = new Map();
 
-function createTwilioRelay(twilioWs, apiKey, clinic, kb) {
-  const instructions = buildRealtimeInstructions(clinic, kb);
-  const voice        = clinic.openai_voice || 'coral';
-  const clinicName   = clinic.name || 'the clinic';
-
-  const openaiWs = new WebSocket(REALTIME_URL, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-
-  let streamSid         = null;
-  let callSid           = null;
-  let dbId              = null;
-  let greetingDone      = false; // true after first response.done (greeting complete)
-  let greetingTriggered = false;
-
-  // ── State machine ─────────────────────────────────────────────────────────
-  // GREETING   — greeting playing; Ana's audio → Twilio; patient audio discarded
-  // WAITING    — silence; NO audio to OpenAI; local energy detection only; Ana SILENT
-  // FORWARDING — patient audio → OpenAI; accumulating; Ana SILENT
-  // COMMITTED  — buffer committed; awaiting Whisper transcript; Ana SILENT
-  // RESPONDING — Ana generating reply; Ana's audio → Twilio; patient audio discarded
-  //
-  // The ABSOLUTE rule: response.output_audio.delta is forwarded ONLY in GREETING or RESPONDING.
-  // All other states: Ana's audio is silently discarded regardless of what OpenAI sends.
-  let twilioState  = 'GREETING';
-  let activeFrames = 0;   // consecutive high-energy frames (WAITING → FORWARDING onset)
-  let silentFrames = 0;   // consecutive low-energy frames (FORWARDING → commit offset)
-  let blockedCount = 0;   // throttle for periodic WAITING log
-  let guardTimer   = null; // COMMITTED safety timeout — reset if no transcript arrives
-
-  const SPEECH_ON_FRAMES  = 3;    //  3 × 20 ms = 60 ms sustained energy to start forwarding
-  const SPEECH_OFF_FRAMES = 40;   // 40 × 20 ms = 800 ms silence to commit buffer
-  const COMMITTED_TIMEOUT = 8000; // ms — safety reset if Whisper never responds
-
-  function sendToOpenAI(obj) {
-    if (openaiWs.readyState === WebSocket.OPEN) openaiWs.send(JSON.stringify(obj));
-  }
-
-  function clearBuffer() {
-    sendToOpenAI({ type: 'input_audio_buffer.clear' });
-  }
-
-  function resetToWaiting(reason) {
-    if (guardTimer) { clearTimeout(guardTimer); guardTimer = null; }
-    twilioState  = 'WAITING';
-    activeFrames = 0;
-    silentFrames = 0;
-    clearBuffer();
-    console.log(`[${clinicName}] twilio_waiting_for_user — ${reason}`);
-  }
-
-  // Variance-based G.711/PCMU speech detector — encoding-agnostic.
-  // Silence: bytes cluster near one value (low variance ≈ 0–150).
-  // Speech:  bytes span a wide range (high variance ≈ 800+).
-  // This avoids wrong assumptions about whether silence is near 0x00 or 0xFF.
-  function g711HasSpeech(base64Chunk) {
-    const buf = Buffer.from(base64Chunk, 'base64');
-    const n   = buf.length;
-    if (n === 0) return false;
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += buf[i];
-    const mean = sum / n;
-    let v = 0;
-    for (let i = 0; i < n; i++) { const d = buf[i] - mean; v += d * d; }
-    v /= n;
-    return v > 300;
-  }
-
-  // ── OpenAI WebSocket handlers ─────────────────────────────────────────────
-
-  openaiWs.on('open', () => {
-    console.log(`[${clinicName}] Twilio → OpenAI connected`);
-    sendToOpenAI({
-      type: 'session.update',
-      session: {
-        instructions,
-        voice,
-        input_audio_format:        'g711_ulaw',
-        output_audio_format:       'g711_ulaw',
-        input_audio_transcription: { model: 'whisper-1' },
-        turn_detection:            null, // VAD completely disabled; we manage commits manually
-      },
-    });
-  });
-
-  openaiWs.on('message', raw => {
-    let evt;
-    try { evt = JSON.parse(raw); } catch { return; }
-
-    if (evt.type === 'session.created') {
-      console.log(`[${clinicName}] session.created`);
-    }
-
-    if (evt.type === 'session.updated') {
-      console.log(`[${clinicName}] session.updated  vad=${evt.session?.turn_detection?.type || 'none'}  voice=${evt.session?.voice || voice}`);
-      if (!greetingTriggered) {
-        greetingTriggered = true;
-        sendToOpenAI({ type: 'response.create' });
-      }
-    }
-
-    // ── ABSOLUTE gate: Ana's audio only reaches Twilio in GREETING or RESPONDING ─
-    // Any audio event in WAITING / FORWARDING / COMMITTED is silently discarded.
-    // This is the last line of defense — even if OpenAI generates audio unexpectedly,
-    // the patient never hears it unless we deliberately entered RESPONDING state.
-    if ((evt.type === 'response.output_audio.delta' || evt.type === 'response.audio.delta') && evt.delta && streamSid) {
-      if (twilioState === 'GREETING' || twilioState === 'RESPONDING') {
-        try {
-          if (twilioWs.readyState === WebSocket.OPEN)
-            twilioWs.send(JSON.stringify({ event: 'media', streamSid, media: { payload: evt.delta } }));
-        } catch { }
-      }
-      return;
-    }
-
-    // ── Ana finished a response ───────────────────────────────────────────────
-    if (evt.type === 'response.done') {
-      if (!greetingDone) {
-        // First response.done ever = greeting complete
-        greetingDone = true;
-        console.log(`[${clinicName}] twilio_greeting_done`);
-        resetToWaiting('greeting complete');
-      } else if (twilioState === 'RESPONDING') {
-        resetToWaiting('Ana response complete');
-      }
-      // response.done in other states (e.g. stray cancelled response) → ignore
-    }
-
-    // ── Authoritative gate: transcript required before any response ───────────
-    // With VAD disabled, this event fires only after our manual input_audio_buffer.commit.
-    // Whisper transcribes what the patient actually said. If the transcript is empty or
-    // too short to be real speech (noise/echo committed by mistake), we reset silently.
-    if (evt.type === 'conversation.item.input_audio_transcription.completed') {
-      if (guardTimer) { clearTimeout(guardTimer); guardTimer = null; }
-
-      const transcript = (evt.transcript || '').trim();
-      const words      = transcript.split(/\s+/).filter(w => w.length > 1);
-      console.log(`[${clinicName}] twilio_user_transcript_received: "${transcript}"  (${words.length} real words)`);
-
-      if (words.length >= 2 && twilioState === 'COMMITTED') {
-        // Real patient speech confirmed → generate Ana's response
-        twilioState = 'RESPONDING';
-        sendToOpenAI({ type: 'response.create' });
-        console.log(`[${clinicName}] twilio_response_allowed`);
-      } else {
-        resetToWaiting(
-          words.length < 2
-            ? `transcript too short or noise: "${transcript}"`
-            : `unexpected state ${twilioState} on transcript`
-        );
-      }
-    }
-
-    if (evt.type === 'response.output_audio_transcript.done') {
-      const text = evt.transcript;
-      console.log(`[${clinicName}] Ana: ${text}`);
-      if (dbId && text) {
-        try { addTranscript(dbId, 'assistant', text); } catch (e) {
-          console.error(`[${clinicName}] transcript log error:`, e.message);
-        }
-      }
-    }
-
-    if (evt.type === 'error') {
-      console.error(`[${clinicName}] OpenAI error:`, evt.error?.message, `(${evt.error?.code})`);
-    }
-  });
-
-  openaiWs.on('error', e => console.error(`[Realtime:Twilio:${clinicName}] WS error:`, e.message));
-
-  openaiWs.on('close', () => {
-    if (guardTimer) clearTimeout(guardTimer);
-    console.log(`[Realtime:Twilio:${clinicName}] OpenAI WS closed  callSid=${callSid || 'none'}`);
-    if (callSid) {
-      try { updateCall(callSid, { status: 'completed' }); } catch {}
-    }
-    try { twilioWs.close(); } catch {}
-  });
-
-  // ── Twilio WebSocket handlers ─────────────────────────────────────────────
-
-  twilioWs.on('message', raw => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
-
-    if (msg.event === 'start') {
-      streamSid         = msg.start?.streamSid || msg.streamSid;
-      callSid           = msg.start?.callSid;
-      const callerPhone = msg.start?.customParameters?.from || 'anonymous';
-      console.log(`[Realtime:Twilio:${clinicName}] Stream started  callSid=${callSid}  from=${callerPhone}`);
-      if (callSid) {
-        try {
-          dbId = createCall(callSid, callerPhone, clinic.id);
-        } catch (e) {
-          console.error(`[Realtime:Twilio:${clinicName}] createCall error:`, e.message);
-        }
-      }
-    }
-
-    if (msg.event === 'media') {
-      const audio = msg.media?.payload;
-      if (!audio) return;
-
-      // GREETING / RESPONDING / COMMITTED: discard all patient audio
-      if (twilioState !== 'WAITING' && twilioState !== 'FORWARDING') return;
-
-      if (twilioState === 'WAITING') {
-        // Local energy detection. Audio is NEVER sent to OpenAI in this state.
-        if (g711HasSpeech(audio)) {
-          activeFrames++;
-          if (activeFrames >= SPEECH_ON_FRAMES) {
-            twilioState  = 'FORWARDING';
-            activeFrames = 0;
-            silentFrames = 0;
-            blockedCount = 0;
-            console.log(`[${clinicName}] twilio_user_activity_detected — forwarding audio to OpenAI`);
-          }
-        } else {
-          activeFrames = 0;
-          blockedCount++;
-          if (blockedCount % 100 === 1) {
-            console.log(`[${clinicName}] twilio_audio_blocked_waiting — ${blockedCount} frames suppressed`);
-          }
-        }
-        return; // NEVER forward in WAITING
-      }
-
-      if (twilioState === 'FORWARDING') {
-        sendToOpenAI({ type: 'input_audio_buffer.append', audio });
-
-        if (g711HasSpeech(audio)) {
-          silentFrames = 0;  // patient still speaking — reset silence counter
-        } else {
-          silentFrames++;
-          if (silentFrames === SPEECH_OFF_FRAMES) {
-            // 800 ms of silence after speech → commit buffer; wait for transcript
-            twilioState  = 'COMMITTED';
-            silentFrames = 0;
-            sendToOpenAI({ type: 'input_audio_buffer.commit' });
-            console.log(`[${clinicName}] twilio_buffer_committed — awaiting Whisper transcript`);
-            guardTimer = setTimeout(() => {
-              guardTimer = null;
-              if (twilioState === 'COMMITTED') resetToWaiting('transcript timeout 8 s');
-            }, COMMITTED_TIMEOUT);
-          }
-        }
-      }
-    }
-
-    if (msg.event === 'stop') {
-      console.log(`[Realtime:Twilio:${clinicName}] Twilio stream stopped  callSid=${callSid}`);
-      try { openaiWs.close(); } catch {}
-    }
-  });
-
-  twilioWs.on('close', () => {
-    if (guardTimer) clearTimeout(guardTimer);
-    console.log(`[Realtime:Twilio:${clinicName}] Twilio WS disconnected  callSid=${callSid || 'none'}`);
-    if (callSid) {
-      try { updateCall(callSid, { status: 'completed' }); } catch {}
-    }
-    try { openaiWs.close(); } catch {}
-  });
-
-  twilioWs.on('error', e => console.error(`[Realtime:Twilio:${clinicName}] Twilio WS error:`, e.message));
+function getTelnyxRelay(callControlId) {
+  return _telnyxRelays.get(callControlId) || null;
 }
 
-// ── Browser relay — text chat via Anthropic Claude ────────────────────────────
-// Browser connects to /realtime/browser/:token with a one-time token.
-// Messages: browser sends {type:'user_message', text} and receives
-// {type:'assistant_message', text} or {type:'session.created'}.
+// ── Telnyx Call Control relay — pure REST, no WebSocket ──────────────────────
+//
+// State machine:
+//   GREETING   — greeting TTS is playing; incoming transcripts are discarded
+//   WAITING    — silent; accepts final transcripts from Telnyx STT
+//   RESPONDING — Claude is processing + TTS is playing; transcripts discarded
+//
+// Created in call.answered. Webhook routes events here via getTelnyxRelay().
+
+function createTelnyxRelay(callControlId, callerPhone, clinic, kb, apiKey) {
+  const clinicName = clinic.name || 'the clinic';
+  const lang       = clinic.ai_language || 'es';
+  // Full Telnyx Ultra voice IDs — override via clinic.ai_voice_es / ai_voice_en
+  const voiceEs    = clinic.ai_voice_es || 'Telnyx.Ultra.f4d6bb07-f876-4464-ba70-cd48d8701890'; // Adriana
+  const voiceEn    = clinic.ai_voice_en || 'Telnyx.Ultra.9626c31c-bec5-4cca-baa8-f8ba9e84c8bc'; // Jacqueline
+  const voiceId    = lang === 'es' ? voiceEs : voiceEn;
+
+  // JSON output format appended so Claude reports reply language for bilingual voice switching
+  const instructions = buildRealtimeInstructions(clinic, kb) + `
+
+════════════════════
+OUTPUT FORMAT — MANDATORY (phone relay only):
+Every reply MUST be a single-line JSON object — nothing before it, nothing after it:
+  {"lang":"es","text":"Tu respuesta aquí"}
+  {"lang":"en","text":"Your response here"}
+"lang" : the language you are replying in — "es" or "en".
+"text" : the exact words to speak — plain text, no markdown, no extra keys.
+Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
+
+  let state     = 'GREETING';
+  let dbId      = null;
+  let callStart = Date.now();
+  const history = [];
+
+  async function speak(text, activeVoice, activeLang) {
+    const language = activeLang === 'es' ? 'es-MX' : 'en-US';
+    const r = await fetch(
+      `${TELNYX_API}/calls/${encodeURIComponent(callControlId)}/actions/speak`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body:    JSON.stringify({ payload: text, voice: activeVoice, language, payload_type: 'text' }),
+      }
+    );
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      console.error(`[Telnyx/${clinicName}] speak failed: ${r.status} ${t}`);
+    }
+  }
+
+  const relay = {
+    // Called after call.answered + transcription_start — plays the opening greeting
+    async onCallAnswered() {
+      const timeGreeting = getTimeBasedGreeting(clinic);
+      const greetingEs   = clinic.ai_greeting_es?.trim() || 'Gracias por llamar. ¿En qué puedo ayudarle hoy?';
+      const greetingEn   = clinic.ai_greeting_en?.trim() || 'Thank you for calling. How may I help you today?';
+      const greeting     = `${timeGreeting} ${lang === 'es' ? greetingEs : greetingEn}`;
+
+      history.push({ role: 'assistant', content: greeting });
+      if (dbId) try { addTranscript(dbId, 'assistant', greeting); } catch {}
+
+      console.log(`[Telnyx/${clinicName}] Greeting: "${greeting}"`);
+      await speak(greeting, voiceId, lang);
+    },
+
+    // Called when Telnyx sends call.transcription with is_final=true
+    async onTranscription(text) {
+      if (state !== 'WAITING') {
+        console.log(`[Telnyx/${clinicName}] transcript discarded (state=${state}): "${text.slice(0, 40)}"`);
+        return;
+      }
+      const words = text.trim().split(/\s+/).filter(w => w.length > 1);
+      if (words.length < 2) {
+        console.log(`[Telnyx/${clinicName}] transcript too short, ignoring: "${text}"`);
+        return;
+      }
+
+      console.log(`[Telnyx/${clinicName}] Patient: "${text}"`);
+      if (dbId) try { addTranscript(dbId, 'patient', text); } catch {}
+
+      state = 'RESPONDING';
+      history.push({ role: 'user', content: text });
+
+      try {
+        const msg = await anthropic.messages.create({
+          model:      'claude-haiku-4-5-20251001',
+          max_tokens: 350,
+          system:     instructions,
+          messages:   history,
+        });
+
+        const raw        = msg.content?.[0]?.text?.trim() || '';
+        let reply        = raw;
+        let detectedLang = lang;
+
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.text && typeof parsed.text === 'string') {
+            reply        = parsed.text.trim();
+            detectedLang = parsed.lang === 'en' ? 'en' : 'es';
+          }
+        } catch {
+          console.warn(`[Telnyx/${clinicName}] JSON parse failed, using raw reply`);
+        }
+
+        if (!reply) {
+          console.warn(`[Telnyx/${clinicName}] Claude returned empty reply`);
+          state = 'WAITING';
+          return;
+        }
+
+        const activeVoice = detectedLang === 'es' ? voiceEs : voiceEn;
+        console.log(`[Telnyx/${clinicName}] Ana (${detectedLang}): "${reply}"`);
+        history.push({ role: 'assistant', content: reply });
+        if (dbId) try { addTranscript(dbId, 'assistant', reply); } catch {}
+
+        await speak(reply, activeVoice, detectedLang);
+      } catch (err) {
+        console.error(`[Telnyx/${clinicName}] Claude/speak error:`, err.message);
+        state = 'WAITING';
+      }
+    },
+
+    // Called when call.speak.ended fires — transitions to WAITING so next transcript is processed
+    onSpeakEnded() {
+      if (state === 'GREETING' || state === 'RESPONDING') {
+        state = 'WAITING';
+        console.log(`[Telnyx/${clinicName}] speak.ended → WAITING`);
+      }
+    },
+
+    // Called on call.hangup — saves duration + final status, unregisters relay
+    cleanup() {
+      const duration = Math.round((Date.now() - callStart) / 1000);
+      if (dbId) try { updateCall(callControlId, { status: 'completed', duration }); } catch {}
+      _telnyxRelays.delete(callControlId);
+      console.log(`[Telnyx/${clinicName}] Call ended  duration=${duration}s  turns=${history.length}`);
+    },
+  };
+
+  // Register before returning so webhook can route events immediately
+  _telnyxRelays.set(callControlId, relay);
+
+  // Create DB call record (synchronous via better-sqlite3)
+  try { dbId = createCall(callControlId, callerPhone, clinic.id); } catch (e) {
+    console.error(`[Telnyx/${clinicName}] createCall error:`, e.message);
+  }
+
+  return relay;
+}
+
+// ── Browser relay — Claude text chat (SuperAdmin Live Voice / Test Ana) ───────
+// Browser connects to /realtime/browser/:token via WebSocket.
+// Protocol: browser → { type:'user_message', text }
+//           server  → { type:'assistant_message', text } | { type:'session.created' }
 
 function createBrowserRelay(browserWs, apiKey, clinic, kb) {
-  const Anthropic    = require('@anthropic-ai/sdk');
-  const instructions = buildRealtimeInstructions(clinic, kb);
-  const clinicName   = clinic.name || 'the clinic';
-  const anthropic    = new Anthropic({ apiKey });
+  const AnthropicLocal = require('@anthropic-ai/sdk');
+  const instructions   = buildRealtimeInstructions(clinic, kb);
+  const clinicName     = clinic.name || 'the clinic';
+  const localAnthropic = new AnthropicLocal({ apiKey });
 
   const history = [];
   let   closed  = false;
@@ -484,10 +368,9 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
   }
 
   async function chat(userText) {
-    // Prime with a hidden trigger when no user text (opening greeting)
     history.push({ role: 'user', content: userText || '[BEGIN CALL]' });
     try {
-      const res = await anthropic.messages.create({
+      const res = await localAnthropic.messages.create({
         model:      'claude-sonnet-4-6',
         max_tokens: 512,
         system:     instructions,
@@ -505,7 +388,6 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
     }
   }
 
-  // Notify browser session is ready, then generate opening greeting
   send({ type: 'session.created' });
   console.log(`[Realtime:Browser] Session created for ${clinicName}`);
   chat(null);
@@ -531,7 +413,8 @@ function createBrowserRelay(browserWs, apiKey, clinic, kb) {
 
 module.exports = {
   buildRealtimeInstructions,
-  createTwilioRelay,
+  createTelnyxRelay,
+  getTelnyxRelay,
   createBrowserRelay,
   generateVoiceToken,
   consumeVoiceToken,

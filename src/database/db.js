@@ -263,6 +263,7 @@ function initDb() {
 
   _addColumnIfMissing('clinics', 'telnyx_api_key', 'TEXT');
   _addColumnIfMissing('clinics', 'telnyx_phone',   'TEXT');
+  _addColumnIfMissing('clinics', 'telnyx_voice',   'TEXT');
 
   // cost_config: add telnyx columns, migrate data from legacy twilio_ columns
   const _hasTelnyxRate = db.prepare("PRAGMA table_info(cost_config)").all().map(c => c.name).includes('telnyx_rate_per_min');
@@ -705,6 +706,12 @@ function getClinicById(id) {
   return db.prepare('SELECT * FROM clinics WHERE id = ?').get(id);
 }
 
+function getClinicByTelnyxPhone(phone) {
+  return db.prepare(
+    "SELECT * FROM clinics WHERE telnyx_phone = ? AND status NOT IN ('suspended','cancelled')"
+  ).get(phone);
+}
+
 function updateClinic(id, data) {
   const allowed = [
     'name', 'phone_display',
@@ -1007,6 +1014,7 @@ function getClinicAiConfig(id) {
            ai_industry_template, ai_master_prompt,
            ai_voice_es, ai_voice_en,
            openai_api_key, openai_voice, openai_language,
+           telnyx_voice,
            timezone
     FROM clinics WHERE id = ?
   `).get(id);
@@ -1021,6 +1029,7 @@ function updateClinicAiConfig(id, data) {
     'ai_industry_template', 'ai_master_prompt',
     'ai_voice_es', 'ai_voice_en',
     'openai_api_key', 'openai_voice', 'openai_language',
+    'telnyx_voice',
     'timezone',
   ];
   const map = {
@@ -1042,6 +1051,7 @@ function updateClinicAiConfig(id, data) {
     openai_api_key:              data.openaiApiKey,
     openai_voice:                data.openaiVoice,
     openai_language:             data.openaiLanguage,
+    telnyx_voice:                data.telnyxVoice,
     timezone:                    data.timezone,
   };
   const filtered = Object.fromEntries(
@@ -1396,6 +1406,7 @@ module.exports = {
   getClinics,
   getClinicBySlug,
   getClinicById,
+  getClinicByTelnyxPhone,
   updateClinic,
   updateClinicTelnyx,
   getClinicBilling,

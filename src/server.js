@@ -14,6 +14,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+app.use('/telnyx',      require('./routes/telnyx'));
 app.use('/webhook',     require('./routes/webhook'));
 app.use('/admin',       require('./routes/admin'));
 app.use('/superadmin',  require('./routes/superadmin'));
@@ -42,29 +43,9 @@ const server = http.createServer(app);
 const wss    = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
-  const twilioMatch  = req.url?.match(/^\/realtime\/twilio\/([a-z0-9-]+)$/);
   const browserMatch = req.url?.match(/^\/realtime\/browser\/([a-f0-9]{32})$/);
 
-  if (twilioMatch) {
-    wss.handleUpgrade(req, socket, head, ws => {
-      const { getClinicBySlug, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
-      const { createTwilioRelay } = require('./services/realtime');
-
-      const clinic = getClinicBySlug(twilioMatch[1]);
-      if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
-
-      const apiKey = clinic.openai_api_key || process.env.OPENAI_API_KEY;
-      if (!apiKey) { ws.close(1008, 'OpenAI API key not configured'); return; }
-
-      // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
-      const kb = getKnowledgeBase(clinic.id) || {};
-      kb.businessRules = getBusinessRules(clinic.id);
-      kb.trainingFaqs  = getTrainingFaqs(clinic.id);
-
-      createTwilioRelay(ws, apiKey, clinic, kb);
-    });
-
-  } else if (browserMatch) {
+  if (browserMatch) {
     wss.handleUpgrade(req, socket, head, ws => {
       const { getClinicAiConfig, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
       const { consumeVoiceToken, createBrowserRelay } = require('./services/realtime');
@@ -99,8 +80,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Super Admin     : ${base}/superadmin`);
   console.log(`  Clinic Admin    : ${base}/admin/:slug`);
   console.log(`  Client Portal   : ${base}/portal/:slug`);
-  console.log(`  Telnyx webhook  : ${base}/webhook/:slug/realtime-voice`);
-  console.log(`  Legacy IVR      : ${base}/webhook/:slug/voice  (deprecated)`);
+  console.log(`  Telnyx webhook  : ${base}/telnyx/webhook`);
   console.log(`  Health check    : ${base}/`);
   console.log('');
 });
