@@ -28,7 +28,7 @@ function computeClinicMonthStats(clinicId, month, config) {
   `).get(clinicId, start, end);
 
   const minutes    = (row.total_seconds || 0) / 60;
-  const telnyxCost = minutes    * (config.telnyx_rate_per_min || config.twilio_rate_per_min || 0.0085);
+  const telnyxCost = minutes    * (config.telnyx_rate_per_min || 0.0085);
   const aiCost     = (row.completed_calls || 0) * (config.ai_rate_per_call || 0.08);
 
   return {
@@ -61,7 +61,7 @@ function getDashboardStats() {
 
   const minutes     = (monthRow.total_seconds || 0) / 60;
   const aiCost      = (monthRow.completed_calls || 0) * (config.ai_rate_per_call  || 0.08);
-  const telnyxCost  = minutes * (config.telnyx_rate_per_min || config.twilio_rate_per_min || 0.0085);
+  const telnyxCost  = minutes * (config.telnyx_rate_per_min || 0.0085);
   const totalCost   = aiCost + telnyxCost;
 
   const revenue = db.prepare(

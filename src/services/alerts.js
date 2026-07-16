@@ -1,5 +1,3 @@
-'use strict';
-
 const nodemailer = require('nodemailer');
 const { getCostConfig, getClinics, logCostAlert, getLastAlertByType } = require('../database/db');
 const { getDashboardStats } = require('./costs');
@@ -12,27 +10,32 @@ function cooldownPassed(lastAlert) {
   return Date.now() - new Date(lastAlert.created_at).getTime() > COOLDOWN_MS;
 }
 
+async function getTelnyxBalance(clinic) {
+  const apiKey = clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch('https://api.telnyx.com/v2/balance', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return parseFloat(data.data?.balance ?? null);
+  } catch { return null; }
+}
+
 async function sendAlertSms(config, message, clinics) {
   if (!config.admin_phone) return false;
-  const sender = clinics.find(c => c.telnyx_phone);
+  const apiKey  = process.env.TELNYX_API_KEY;
+  const sender  = clinics.find(c => (c.telnyx_api_key || apiKey) && c.telnyx_phone);
   if (!sender) return false;
-  const apiKey = sender.telnyx_api_key || process.env.TELNYX_API_KEY;
-  if (!apiKey) return false;
+  const key  = sender.telnyx_api_key || apiKey;
   try {
-    const r = await fetch(`${TELNYX_API}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        from: sender.telnyx_phone,
-        to:   config.admin_phone,
-        text: `[NetCare Alert] ${message}`,
-      }),
+    const res = await fetch('https://api.telnyx.com/v2/messages', {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ from: sender.telnyx_phone, to: config.admin_phone, text: `[NetCare Alert] ${message}` }),
     });
-    if (!r.ok) throw new Error(`${r.status}`);
-    return true;
+    return res.ok;
   } catch (e) {
     console.error('[Alert] SMS send failed:', e.message);
     return false;
@@ -103,6 +106,25 @@ async function checkAndSendAlerts() {
     }
   }
 
+  // ── Telnyx balance alerts (per clinic) ──────────────────────────────────────
+
+  for (const clinic of clinics) {
+    if (!clinic.telnyx_api_key && !process.env.TELNYX_API_KEY) continue;
+    const balance = await getTelnyxBalance(clinic);
+    if (balance === null) continue;
+    if (balance <= (config.threshold_telnyx_low || 10)) {
+      const type = `telnyx_low_${clinic.id}`;
+      const msg  = `Telnyx balance low for ${clinic.name}: $${balance.toFixed(2)} remaining (threshold: $${(config.threshold_telnyx_low || 10).toFixed(2)}).`;
+      if (cooldownPassed(getLastAlertByType(type))) {
+        logCostAlert(type, msg, balance, config.threshold_telnyx_low);
+        const sms   = await sendAlertSms(config, msg, clinics);
+        const email = await sendAlertEmail(config, msg);
+        results.push({ type, severity: 'warning', message: msg, value: balance, sms, email, clinicName: clinic.name });
+        console.log(`[Alert] telnyx_low fired for ${clinic.name}`);
+      }
+    }
+  }
+
   return results;
 }
 
@@ -120,7 +142,16 @@ async function getActiveAlerts() {
       message: `AI budget low — $${aiRemaining.toFixed(2)} remaining of $${(config.ai_monthly_budget || 200).toFixed(2)} budget.` });
   }
 
+  for (const clinic of clinics) {
+    if (!clinic.telnyx_api_key && !process.env.TELNYX_API_KEY) continue;
+    const balance = await getTelnyxBalance(clinic);
+    if (balance !== null && balance <= (config.threshold_telnyx_low || 10)) {
+      alerts.push({ type: `telnyx_low_${clinic.id}`, severity: 'warning', clinicName: clinic.name,
+        message: `Telnyx balance low for ${clinic.name}: $${balance.toFixed(2)}` });
+    }
+  }
+
   return alerts;
 }
 
-module.exports = { checkAndSendAlerts, getActiveAlerts };
+module.exports = { checkAndSendAlerts, getActiveAlerts, getTelnyxBalance };

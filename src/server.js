@@ -14,7 +14,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/telnyx',      require('./routes/webhook'));
+app.use('/telnyx',      require('./routes/telnyx'));
+app.use('/webhook',     require('./routes/webhook'));
 app.use('/admin',       require('./routes/admin'));
 app.use('/superadmin',  require('./routes/superadmin'));
 app.use('/portal',      require('./routes/portal'));
@@ -37,31 +38,14 @@ initDb();
 const { startScheduler } = require('./services/scheduler');
 startScheduler();
 
-// Create HTTP server to handle WebSocket upgrades for Telnyx Media Streaming
+// Create HTTP server so we can attach WebSocket for Telnyx media relay
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
-  const telnyxMatch  = req.url?.match(/^\/realtime\/telnyx\/([a-z0-9-]+)$/);
   const browserMatch = req.url?.match(/^\/realtime\/browser\/([a-f0-9]{32})$/);
 
-  if (telnyxMatch) {
-    wss.handleUpgrade(req, socket, head, ws => {
-      const { getClinicBySlug, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
-      const { createTelnyxRelay } = require('./services/realtime');
-
-      const clinic = getClinicBySlug(telnyxMatch[1]);
-      if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
-
-      // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
-      const kb = getKnowledgeBase(clinic.id) || {};
-      kb.businessRules = getBusinessRules(clinic.id);
-      kb.trainingFaqs  = getTrainingFaqs(clinic.id);
-
-      createTelnyxRelay(ws, clinic, kb);
-    });
-
-  } else if (browserMatch) {
+  if (browserMatch) {
     wss.handleUpgrade(req, socket, head, ws => {
       const { getClinicAiConfig, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
       const { consumeVoiceToken, createBrowserRelay } = require('./services/realtime');
@@ -72,7 +56,10 @@ server.on('upgrade', (req, socket, head) => {
       const clinic = getClinicAiConfig(clinicId);
       if (!clinic) { ws.close(1008, 'Clinic not found'); return; }
 
-      // Enrich kb with Training Center data
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) { ws.close(1008, 'Anthropic API key not configured'); return; }
+
+      // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
       const kb = getKnowledgeBase(clinicId) || {};
       kb.businessRules = getBusinessRules(clinicId);
       kb.trainingFaqs  = getTrainingFaqs(clinicId);
@@ -94,7 +81,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Clinic Admin    : ${base}/admin/:slug`);
   console.log(`  Client Portal   : ${base}/portal/:slug`);
   console.log(`  Telnyx webhook  : ${base}/telnyx/webhook`);
-  console.log(`  Realtime voice  : wss://${base.replace(/^https?:\/\//, '')}/realtime/telnyx/:slug`);
   console.log(`  Health check    : ${base}/`);
   console.log('');
 });

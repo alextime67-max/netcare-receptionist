@@ -1,51 +1,13 @@
 'use strict';
-
 const crypto    = require('crypto');
 const WebSocket = require('ws');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createCall, updateCall, addTranscript } = require('../database/db');
 
-// ── Anthropic client ──────────────────────────────────────────────────────────
+// ── Anthropic client (shared across all relay instances) ──────────────────────
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ── Telnyx API helper ─────────────────────────────────────────────────────────
 const TELNYX_API = 'https://api.telnyx.com/v2';
-
-async function telnyxPost(path, body) {
-  const r = await fetch(`${TELNYX_API}${path}`, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${process.env.TELNYX_API_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) {
-    const text = await r.text().catch(() => '');
-    console.error(`[Telnyx] POST ${path} failed: ${r.status} ${text}`);
-  }
-  return r;
-}
-
-async function speakToCall(callControlId, text, voiceId, lang) {
-  const language = lang === 'es' ? 'es-MX' : 'en-US';
-  await telnyxPost(`/calls/${callControlId}/actions/speak`, {
-    payload:      text,
-    voice:        voiceId,
-    language,
-    payload_type: 'text',
-  });
-}
-
-// ── Telnyx relay registry ─────────────────────────────────────────────────────
-// Maps call_control_id → relay object so webhook.js can route
-// call.transcription and call.speak.ended events to the active relay.
-
-const _telnyxRelays = new Map();
-
-function getTelnyxRelay(callControlId) {
-  return _telnyxRelays.get(callControlId) || null;
-}
 
 // ── One-time voice tokens for browser WebSocket auth ─────────────────────────
 
@@ -65,7 +27,7 @@ function consumeVoiceToken(token) {
   return data.expires > Date.now() ? data.clinicId : null;
 }
 
-// ── System prompt builder ─────────────────────────────────────────────────────
+// ── Time-based greeting ───────────────────────────────────────────────────────
 
 function getTimeBasedGreeting(clinic) {
   const tz   = clinic.timezone || 'America/New_York';
@@ -83,6 +45,8 @@ function getTimeBasedGreeting(clinic) {
   if (hour >= 12 && hour < 18) return 'Good afternoon.';
   return 'Good evening.';
 }
+
+// ── System prompt builder ─────────────────────────────────────────────────────
 
 function buildRealtimeInstructions(clinic, kb) {
   const name     = clinic.name || 'the clinic';
@@ -222,25 +186,34 @@ function buildRealtimeInstructions(clinic, kb) {
   return lines.join('\n');
 }
 
-// ── Telnyx Media Streams → Claude relay ──────────────────────────────────────
+// ── Telnyx relay registry ─────────────────────────────────────────────────────
+// Maps callControlId → relay object. Webhook routes call.transcription and
+// call.speak.ended to the active relay for that call.
+
+const _telnyxRelays = new Map();
+
+function getTelnyxRelay(callControlId) {
+  return _telnyxRelays.get(callControlId) || null;
+}
+
+// ── Telnyx Call Control relay — pure REST, no WebSocket ──────────────────────
 //
 // State machine:
-//   GREETING   — Ana's opening TTS is playing; transcriptions discarded
-//   WAITING    — Ana is silent; listening for patient to speak
-//   RESPONDING — Claude is processing + TTS is playing; transcriptions discarded
+//   GREETING   — greeting TTS is playing; incoming transcripts are discarded
+//   WAITING    — silent; accepts final transcripts from Telnyx STT
+//   RESPONDING — Claude is processing + TTS is playing; transcripts discarded
 //
-// Webhook.js routes call.transcription and call.speak.ended events here
-// via getTelnyxRelay(callControlId).
+// Created in call.answered. Webhook routes events here via getTelnyxRelay().
 
-function createTelnyxRelay(telnyxWs, clinic, kb) {
+function createTelnyxRelay(callControlId, callerPhone, clinic, kb, apiKey) {
   const clinicName = clinic.name || 'the clinic';
   const lang       = clinic.ai_language || 'es';
+  // Full Telnyx Ultra voice IDs — override via clinic.ai_voice_es / ai_voice_en
   const voiceEs    = clinic.ai_voice_es || 'Telnyx.Ultra.f4d6bb07-f876-4464-ba70-cd48d8701890'; // Adriana
   const voiceEn    = clinic.ai_voice_en || 'Telnyx.Ultra.9626c31c-bec5-4cca-baa8-f8ba9e84c8bc'; // Jacqueline
-  const voiceId    = lang === 'es' ? voiceEs : voiceEn; // used only for the greeting
+  const voiceId    = lang === 'es' ? voiceEs : voiceEn;
 
-  // Append JSON output format so we can detect the language Claude is replying in
-  // and switch TTS voice mid-call (es → Adriana, en → Jacqueline).
+  // JSON output format appended so Claude reports reply language for bilingual voice switching
   const instructions = buildRealtimeInstructions(clinic, kb) + `
 
 ════════════════════
@@ -252,46 +225,71 @@ Every reply MUST be a single-line JSON object — nothing before it, nothing aft
 "text" : the exact words to speak — plain text, no markdown, no extra keys.
 Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
 
-  let state               = 'GREETING';
-  let callControlId       = null;
-  let dbId                = null;
-  const conversationHistory = [];
+  let state     = 'GREETING';
+  let dbId      = null;
+  let callStart = Date.now();
+  const history = [];
+
+  async function speak(text, activeVoice, activeLang) {
+    const language = activeLang === 'es' ? 'es-MX' : 'en-US';
+    const r = await fetch(
+      `${TELNYX_API}/calls/${encodeURIComponent(callControlId)}/actions/speak`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body:    JSON.stringify({ payload: text, voice: activeVoice, language, payload_type: 'text' }),
+      }
+    );
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      console.error(`[Telnyx/${clinicName}] speak failed: ${r.status} ${t}`);
+    }
+  }
 
   const relay = {
-    // Called by webhook.js when call.transcription arrives with is_final=true
+    // Called after call.answered + transcription_start — plays the opening greeting
+    async onCallAnswered() {
+      const timeGreeting = getTimeBasedGreeting(clinic);
+      const greetingEs   = clinic.ai_greeting_es?.trim() || 'Gracias por llamar. ¿En qué puedo ayudarle hoy?';
+      const greetingEn   = clinic.ai_greeting_en?.trim() || 'Thank you for calling. How may I help you today?';
+      const greeting     = `${timeGreeting} ${lang === 'es' ? greetingEs : greetingEn}`;
+
+      history.push({ role: 'assistant', content: greeting });
+      if (dbId) try { addTranscript(dbId, 'assistant', greeting); } catch {}
+
+      console.log(`[Telnyx/${clinicName}] Greeting: "${greeting}"`);
+      await speak(greeting, voiceId, lang);
+    },
+
+    // Called when Telnyx sends call.transcription with is_final=true
     async onTranscription(text) {
       if (state !== 'WAITING') {
-        console.log(`[${clinicName}] transcript discarded (state=${state}): "${text}"`);
+        console.log(`[Telnyx/${clinicName}] transcript discarded (state=${state}): "${text.slice(0, 40)}"`);
         return;
       }
       const words = text.trim().split(/\s+/).filter(w => w.length > 1);
       if (words.length < 2) {
-        console.log(`[${clinicName}] transcript too short, ignoring: "${text}"`);
+        console.log(`[Telnyx/${clinicName}] transcript too short, ignoring: "${text}"`);
         return;
       }
 
-      console.log(`[${clinicName}] Patient: "${text}"`);
-      if (dbId) {
-        try { addTranscript(dbId, 'patient', text); } catch (e) {
-          console.error(`[${clinicName}] transcript log error:`, e.message);
-        }
-      }
+      console.log(`[Telnyx/${clinicName}] Patient: "${text}"`);
+      if (dbId) try { addTranscript(dbId, 'patient', text); } catch {}
 
       state = 'RESPONDING';
-      conversationHistory.push({ role: 'user', content: text });
+      history.push({ role: 'user', content: text });
 
       try {
         const msg = await anthropic.messages.create({
           model:      'claude-haiku-4-5-20251001',
           max_tokens: 350,
           system:     instructions,
-          messages:   conversationHistory,
+          messages:   history,
         });
 
-        // Claude returns {"lang":"es","text":"..."} — parse to get detected language
-        const raw         = msg.content?.[0]?.text?.trim() || '';
-        let reply         = raw;
-        let detectedLang  = lang; // fallback to clinic primary lang
+        const raw        = msg.content?.[0]?.text?.trim() || '';
+        let reply        = raw;
+        let detectedLang = lang;
 
         try {
           const parsed = JSON.parse(raw);
@@ -300,206 +298,123 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
             detectedLang = parsed.lang === 'en' ? 'en' : 'es';
           }
         } catch {
-          // Claude didn't return valid JSON — use raw text, keep primary lang
-          console.warn(`[${clinicName}] JSON parse failed, using raw reply`);
+          console.warn(`[Telnyx/${clinicName}] JSON parse failed, using raw reply`);
         }
 
         if (!reply) {
-          console.warn(`[${clinicName}] Claude returned empty reply`);
+          console.warn(`[Telnyx/${clinicName}] Claude returned empty reply`);
           state = 'WAITING';
           return;
         }
 
-        // Select Adriana for Spanish turns, Jacqueline for English turns
         const activeVoice = detectedLang === 'es' ? voiceEs : voiceEn;
-        console.log(`[${clinicName}] Ana (${detectedLang}): "${reply}"`);
+        console.log(`[Telnyx/${clinicName}] Ana (${detectedLang}): "${reply}"`);
+        history.push({ role: 'assistant', content: reply });
+        if (dbId) try { addTranscript(dbId, 'assistant', reply); } catch {}
 
-        conversationHistory.push({ role: 'assistant', content: reply }); // plain text, not JSON
-
-        if (dbId) {
-          try { addTranscript(dbId, 'assistant', reply); } catch (e) {
-            console.error(`[${clinicName}] transcript log error:`, e.message);
-          }
-        }
-
-        if (callControlId) {
-          await speakToCall(callControlId, reply, activeVoice, detectedLang);
-        }
+        await speak(reply, activeVoice, detectedLang);
       } catch (err) {
-        console.error(`[${clinicName}] Claude/speak error:`, err.message);
+        console.error(`[Telnyx/${clinicName}] Claude/speak error:`, err.message);
         state = 'WAITING';
       }
     },
 
-    // Called by webhook.js when call.speak.ended arrives for this call
+    // Called when call.speak.ended fires — transitions to WAITING so next transcript is processed
     onSpeakEnded() {
       if (state === 'GREETING' || state === 'RESPONDING') {
         state = 'WAITING';
-        console.log(`[${clinicName}] speak.ended — WAITING for patient`);
+        console.log(`[Telnyx/${clinicName}] speak.ended → WAITING`);
       }
     },
 
+    // Called on call.hangup — saves duration + final status, unregisters relay
     cleanup() {
-      if (callControlId) {
-        _telnyxRelays.delete(callControlId);
-        try { updateCall(callControlId, { status: 'completed' }); } catch {}
-      }
+      const duration = Math.round((Date.now() - callStart) / 1000);
+      if (dbId) try { updateCall(callControlId, { status: 'completed', duration }); } catch {}
+      _telnyxRelays.delete(callControlId);
+      console.log(`[Telnyx/${clinicName}] Call ended  duration=${duration}s  turns=${history.length}`);
     },
   };
 
-  // ── Telnyx WebSocket event handlers ────────────────────────────────────────
+  // Register before returning so webhook can route events immediately
+  _telnyxRelays.set(callControlId, relay);
 
-  telnyxWs.on('message', raw => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+  // Create DB call record (synchronous via better-sqlite3)
+  try { dbId = createCall(callControlId, callerPhone, clinic.id); } catch (e) {
+    console.error(`[Telnyx/${clinicName}] createCall error:`, e.message);
+  }
 
-    if (msg.event === 'connected') {
-      console.log(`[${clinicName}] Telnyx media stream connected`);
-    }
-
-    if (msg.event === 'start') {
-      // Extract call_control_id from the start payload
-      callControlId = msg.start?.call_control_id || null;
-      const callerPhone = msg.start?.from || 'anonymous';
-      console.log(`[${clinicName}] stream.start  ccid=${callControlId}  from=${callerPhone}`);
-
-      if (!callControlId) {
-        console.error(`[${clinicName}] No call_control_id in start event — cannot proceed`);
-        return;
-      }
-
-      // Register relay so webhook.js can route events back here
-      _telnyxRelays.set(callControlId, relay);
-
-      // Create DB record
-      try { dbId = createCall(callControlId, callerPhone, clinic.id); } catch (e) {
-        console.error(`[${clinicName}] createCall error:`, e.message);
-      }
-
-      // Trigger opening greeting via Telnyx TTS
-      const timeGreeting = getTimeBasedGreeting(clinic);
-      const greetingEs   = clinic.ai_greeting_es?.trim() || 'Gracias por llamar. ¿En qué puedo ayudarle hoy?';
-      const greetingEn   = clinic.ai_greeting_en?.trim() || 'Thank you for calling. How may I help you today?';
-      const greeting     = `${timeGreeting} ${lang === 'es' ? greetingEs : greetingEn}`;
-      conversationHistory.push({ role: 'assistant', content: greeting });
-
-      speakToCall(callControlId, greeting, voiceId, lang)
-        .then(() => console.log(`[${clinicName}] greeting dispatched to Telnyx TTS`))
-        .catch(e  => {
-          console.error(`[${clinicName}] greeting speak error:`, e.message);
-          // Fall through to WAITING so the call isn't stuck if TTS fails
-          state = 'WAITING';
-        });
-    }
-
-    // Telnyx sends inbound audio frames here but transcription arrives via
-    // webhook (call.transcription) — nothing to process on media events.
-    if (msg.event === 'media') { /* handled via webhook transcription events */ }
-
-    if (msg.event === 'stop') {
-      console.log(`[${clinicName}] stream.stop  ccid=${callControlId}`);
-      relay.cleanup();
-      try { telnyxWs.close(); } catch {}
-    }
-  });
-
-  telnyxWs.on('close', () => {
-    console.log(`[${clinicName}] Telnyx WS closed  ccid=${callControlId}`);
-    relay.cleanup();
-  });
-
-  telnyxWs.on('error', e => {
-    console.error(`[${clinicName}] Telnyx WS error:`, e.message);
-  });
+  return relay;
 }
 
 // ── Browser relay — Claude text chat (SuperAdmin Live Voice / Test Ana) ───────
-//
-// Protocol:
-//   Browser → server: { type: 'user_message', text: '...' }
-//   Server → browser: { type: 'assistant_message', text: '...', done: true }
-//                     { type: 'thinking' }          (while Claude processes)
-//                     { type: 'voice_id', voiceId } (after greeting, for TTS hint)
-//                     { type: 'error', message }
-//
-// NOTE: superadmin.html needs Phase 4 update to use this text protocol.
-// The old OpenAI Realtime binary audio protocol is no longer supported here.
+// Browser connects to /realtime/browser/:token via WebSocket.
+// Protocol: browser → { type:'user_message', text }
+//           server  → { type:'assistant_message', text } | { type:'session.created' }
 
-function createBrowserRelay(browserWs, clinic, kb) {
-  const instructions = buildRealtimeInstructions(clinic, kb);
-  const clinicName   = clinic.name || 'the clinic';
-  const lang         = clinic.ai_language || 'es';
-  const voiceId      = lang === 'es'
-    ? (clinic.ai_voice_es || 'Telnyx.Ultra.f4d6bb07-f876-4464-ba70-cd48d8701890')
-    : (clinic.ai_voice_en || 'Telnyx.Ultra.9626c31c-bec5-4cca-baa8-f8ba9e84c8bc');
+function createBrowserRelay(browserWs, apiKey, clinic, kb) {
+  const AnthropicLocal = require('@anthropic-ai/sdk');
+  const instructions   = buildRealtimeInstructions(clinic, kb);
+  const clinicName     = clinic.name || 'the clinic';
+  const localAnthropic = new AnthropicLocal({ apiKey });
 
-  const conversationHistory = [];
+  const history = [];
+  let   closed  = false;
 
-  function sendToBrowser(obj) {
-    if (browserWs.readyState === WebSocket.OPEN) {
+  function send(obj) {
+    if (!closed && browserWs.readyState === WebSocket.OPEN) {
       try { browserWs.send(JSON.stringify(obj)); } catch {}
     }
   }
 
-  // Send greeting immediately on connection
-  (async () => {
-    const timeGreeting = getTimeBasedGreeting(clinic);
-    const greetingEs   = clinic.ai_greeting_es?.trim() || 'Gracias por llamar. ¿En qué puedo ayudarle hoy?';
-    const greetingEn   = clinic.ai_greeting_en?.trim() || 'Thank you for calling. How may I help you today?';
-    const greeting     = `${timeGreeting} ${lang === 'es' ? greetingEs : greetingEn}`;
-    conversationHistory.push({ role: 'assistant', content: greeting });
-    sendToBrowser({ type: 'assistant_message', text: greeting, done: true });
-    sendToBrowser({ type: 'voice_id', voiceId });
-    console.log(`[Realtime:Browser:${clinicName}] Greeting: "${greeting}"`);
-  })();
-
-  browserWs.on('message', async raw => {
-    let msg;
-    try { msg = JSON.parse(raw.toString()); } catch { return; }
-
-    if (msg.type === 'user_message' && msg.text?.trim()) {
-      const text = msg.text.trim();
-      console.log(`[Realtime:Browser:${clinicName}] User: "${text}"`);
-      conversationHistory.push({ role: 'user', content: text });
-      sendToBrowser({ type: 'thinking' });
-
-      try {
-        const response = await anthropic.messages.create({
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 400,
-          system:     instructions,
-          messages:   conversationHistory,
-        });
-        const reply = response.content?.[0]?.text?.trim() || '';
-        console.log(`[Realtime:Browser:${clinicName}] Ana: "${reply}"`);
-        conversationHistory.push({ role: 'assistant', content: reply });
-        sendToBrowser({ type: 'assistant_message', text: reply, done: true });
-      } catch (err) {
-        console.error(`[Realtime:Browser:${clinicName}] Claude error:`, err.message);
-        sendToBrowser({ type: 'error', message: 'AI error — please retry' });
-        // Roll back the optimistic push so conversation stays consistent
-        conversationHistory.pop();
+  async function chat(userText) {
+    history.push({ role: 'user', content: userText || '[BEGIN CALL]' });
+    try {
+      const res = await localAnthropic.messages.create({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 512,
+        system:     instructions,
+        messages:   history,
+      });
+      const text = res.content?.[0]?.text?.trim() || '';
+      if (text) {
+        history.push({ role: 'assistant', content: text });
+        send({ type: 'assistant_message', text });
+        console.log(`[Realtime:Browser:${clinicName}] Ana: ${text.slice(0, 120)}`);
       }
+    } catch (e) {
+      console.error(`[Realtime:Browser:${clinicName}] Anthropic error:`, e.message);
+      send({ type: 'error', error: { message: e.message } });
     }
+  }
 
-    // Legacy compatibility: browsers that send session.update get an ack
-    if (msg.type === 'session.update') {
-      sendToBrowser({ type: 'session.updated', session: {} });
-    }
+  send({ type: 'session.created' });
+  console.log(`[Realtime:Browser] Session created for ${clinicName}`);
+  chat(null);
+
+  browserWs.on('message', raw => {
+    if (closed) return;
+    try {
+      const msg = JSON.parse(Buffer.isBuffer(raw) ? raw.toString('utf8') : raw);
+      if (msg.type === 'user_message' && msg.text?.trim()) {
+        console.log(`[Realtime:Browser:${clinicName}] User: ${msg.text.slice(0, 100)}`);
+        chat(msg.text.trim());
+      }
+    } catch {}
   });
 
   browserWs.on('close', () => {
+    closed = true;
     console.log(`[Realtime:Browser:${clinicName}] Browser disconnected`);
   });
 
-  browserWs.on('error', e => {
-    console.error(`[Realtime:Browser:${clinicName}] Browser WS error:`, e.message);
-  });
+  browserWs.on('error', e => console.error(`[Realtime:Browser:${clinicName}] WS error:`, e.message));
 }
 
 module.exports = {
   buildRealtimeInstructions,
   createTelnyxRelay,
+  getTelnyxRelay,
   createBrowserRelay,
   generateVoiceToken,
   consumeVoiceToken,

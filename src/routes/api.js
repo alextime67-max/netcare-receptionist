@@ -1,7 +1,6 @@
 const express   = require('express');
 const router    = express.Router();
 const basicAuth = require('express-basic-auth');
-
 const {
   getClinicBySlug,
   getCalls, getCallWithTranscript, getStats,
@@ -132,19 +131,8 @@ router.get('/:slug/config/telnyx', clinicAuth, (req, res) => {
   });
 });
 
-router.post('/:slug/config/test-telnyx', clinicAuth, async (req, res) => {
-  const c      = req.clinic;
-  const apiKey = c.telnyx_api_key || process.env.TELNYX_API_KEY;
-  if (!apiKey) return res.json({ ok: false, error: 'Telnyx API key not configured' });
-  try {
-    const r = await fetch('https://api.telnyx.com/v2/phone_numbers?page[size]=1', {
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
-    });
-    if (!r.ok) throw new Error(`Telnyx API returned ${r.status}`);
-    res.json({ ok: true, message: 'Telnyx API key is valid' });
-  } catch (err) {
-    res.json({ ok: false, error: err.message });
-  }
+router.post('/:slug/config/test-twilio', clinicAuth, async (_req, res) => {
+  res.json({ ok: false, error: 'Twilio has been replaced by Telnyx. Configure Telnyx in the Super Admin panel.' });
 });
 
 module.exports = router;

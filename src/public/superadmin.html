@@ -299,7 +299,7 @@
                 <th class="px-4 py-3 font-semibold">Status</th>
                 <th class="px-4 py-3 font-semibold text-center">Calls</th>
                 <th class="px-4 py-3 font-semibold text-center">Appts</th>
-                <th class="px-4 py-3 font-semibold">Phone #</th>
+                <th class="px-4 py-3 font-semibold">Telnyx #</th>
                 <th class="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -1040,15 +1040,15 @@
 
       </div><!-- /tsec-practice -->
 
-      <!-- ── SECTION: Live Chat Test (Claude text relay) ─────────────────── -->
+      <!-- ── SECTION: Live Chat Test (Telnyx AI) ──────────────────────────── -->
       <div id="tsec-voice" class="hidden space-y-4">
 
         <!-- Status bar -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-sm font-semibold text-slate-800">Live Chat Test — Claude AI</h3>
-              <p class="text-xs text-slate-400 mt-0.5">Chat with Ana using the same Claude AI and clinic knowledge base as live calls.</p>
+              <h3 class="text-sm font-semibold text-slate-800">Live Chat Test — Telnyx AI</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Chat directly with Ana using text messages. Uses the clinic knowledge base.</p>
             </div>
             <div id="voice-status-dot" class="w-3 h-3 rounded-full bg-slate-300" title="Disconnected"></div>
           </div>
@@ -1093,24 +1093,24 @@
           </div>
 
           <!-- Text input -->
-          <div id="voice-input-row" class="hidden flex gap-2">
-            <input type="text" id="voice-text-input" placeholder="Type your message…"
-              class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();voiceSendText();}">
-            <button onclick="voiceSendText()"
-              class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 whitespace-nowrap">
+          <div class="flex gap-2 mt-3">
+            <input type="text" id="voice-text-input" placeholder="Type a message to Ana…" disabled
+              class="form-input flex-1 text-sm"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();voiceSend();}">
+            <button id="voice-send-btn" onclick="voiceSend()" disabled
+              class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg opacity-40 transition-colors">
               Send
             </button>
           </div>
         </div>
 
         <!-- Instructions -->
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700 space-y-1">
-          <p class="font-semibold">How to use Live Chat:</p>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 space-y-1">
+          <p class="font-semibold">Before using Live Chat:</p>
           <p>1. Select a clinic from the dropdown above.</p>
-          <p>2. Press Start Chat — Ana will greet you automatically.</p>
-          <p>3. Type your messages to test how Ana responds with the clinic knowledge base.</p>
-          <p>4. Press Stop when done.</p>
+          <p>2. Press Start Chat to connect to Ana.</p>
+          <p>3. Type your message and press Enter or Send.</p>
+          <p>4. Ana will respond using the clinic's configured knowledge base.</p>
         </div>
 
       </div><!-- /tsec-voice -->
@@ -1204,7 +1204,7 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="form-label">Telnyx Rate ($ / minute)</label>
-              <input type="number" id="cfg-twilio-rate" step="0.0001" min="0" placeholder="0.0085" class="form-input">
+              <input type="number" id="cfg-telnyx-rate" step="0.0001" min="0" placeholder="0.0085" class="form-input">
             </div>
             <div>
               <label class="form-label">AI Rate ($ / completed call)</label>
@@ -1236,8 +1236,8 @@
             </div>
             <div class="flex items-center gap-4 p-3 bg-slate-50 border border-slate-100 rounded-lg">
               <div class="flex-1">
-                <label class="form-label text-slate-500">Legacy Telnyx Balance Threshold ($) <span class="font-normal normal-case text-slate-400">— reserved for future use</span></label>
-                <input type="number" id="cfg-twilio-low" step="1" min="0" placeholder="10" class="form-input" disabled>
+                <label class="form-label text-amber-700">Telnyx Balance Warning — alert when Telnyx account balance drops below ($)</label>
+                <input type="number" id="cfg-telnyx-low" step="1" min="0" placeholder="10" class="form-input">
               </div>
             </div>
           </div>
@@ -1364,16 +1364,16 @@
         <div class="border-t border-slate-100 pt-4">
           <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Telnyx Configuration</p>
           <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="form-label">Telnyx API Key <span class="normal-case font-normal text-slate-400">— overrides server env key</span></label>
-              <input type="text" id="f-telnyx-api-key" placeholder="KEY..." class="form-input font-mono">
+            <div class="col-span-2">
+              <label class="form-label">API Key</label>
+              <input type="password" id="f-telnyx-api-key" placeholder="KEY…" autocomplete="off" class="form-input font-mono text-sm">
             </div>
             <div>
-              <label class="form-label">Telnyx Phone Number</label>
+              <label class="form-label">Phone Number</label>
               <input type="text" id="f-telnyx-phone" placeholder="+1XXXXXXXXXX" class="form-input font-mono">
             </div>
-            <div class="col-span-2">
-              <label class="form-label">Transfer Phone Number <span class="normal-case font-normal text-slate-400">— when AI signals a live transfer</span></label>
+            <div>
+              <label class="form-label">Transfer Phone Number <span class="normal-case font-normal text-slate-400">— when AI signals a live transfer, Telnyx dials this number</span></label>
               <input type="text" id="f-transfer-phone" placeholder="+1XXXXXXXXXX" class="form-input font-mono">
             </div>
           </div>
@@ -1383,7 +1383,7 @@
             <div class="flex items-center justify-between mb-3">
               <div>
                 <p class="text-sm font-semibold text-indigo-800">Provision a New Number</p>
-                <p class="text-xs text-indigo-500 mt-0.5">Search &amp; buy a Twilio number — auto-configures the webhook</p>
+                <p class="text-xs text-indigo-500 mt-0.5">Search &amp; buy a Telnyx number — auto-configures the webhook</p>
               </div>
             </div>
             <div class="flex gap-2">
@@ -1395,7 +1395,7 @@
               </button>
               <button type="button" onclick="configureWebhook()" id="provision-webhook-btn"
                 class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded-lg whitespace-nowrap transition-colors">
-                Set Webhook URLs
+                Get Webhook URL
               </button>
             </div>
             <div id="provision-results" class="hidden mt-3"></div>
@@ -1406,7 +1406,11 @@
           <div class="mt-4 space-y-3">
             <div class="flex flex-wrap gap-3">
               <div class="flex-1 min-w-56">
-                <p class="text-xs text-slate-400">Save the clinic first, then test by making a real call to the Telnyx number configured above.</p>
+                <button type="button" onclick="testTelnyxCredentials()" id="telnyx-test-btn"
+                  class="w-full px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors">
+                  Validate Credentials
+                </button>
+                <div id="telnyx-test-result" class="hidden mt-2 text-xs rounded-lg p-3 border"></div>
               </div>
             </div>
             <!-- Webhook Call Simulator -->
@@ -1468,7 +1472,7 @@
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">SMS Follow-up</p>
-              <p class="text-xs text-slate-400 mt-1">Send confirmation SMS to patients after appointments, messages, voicemails, and missed calls. Requires a Twilio phone number with SMS capability.</p>
+              <p class="text-xs text-slate-400 mt-1">Send confirmation SMS to patients after appointments, messages, voicemails, and missed calls. Requires a Telnyx phone number with SMS capability.</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-0.5">
               <input type="checkbox" id="f-sms-follow-up" class="sr-only peer">
@@ -1734,20 +1738,13 @@
         </div>
       </div>
 
-      <!-- Claude AI + Telnyx Voice -->
+      <!-- Telnyx AI Settings -->
       <div class="border-t border-slate-100 pt-5">
         <div class="flex items-center gap-2 mb-3">
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Claude AI + Telnyx Voice</p>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Telnyx AI — Voice &amp; Language</p>
         </div>
-        <p class="text-xs text-slate-400 mb-4">Ana uses Claude (Anthropic) for conversation and Telnyx TTS for voice. The AI language sets the primary language and default TTS voice.</p>
+        <p class="text-xs text-slate-400 mb-4">Powers the AI voice for inbound calls via Telnyx. Configure the voice persona and default language for each clinic.</p>
         <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="form-label">Default Language</label>
-            <select id="f-ai-language" class="form-input bg-white">
-              <option value="es">Español — Latin American Spanish</option>
-              <option value="en">English — US English</option>
-            </select>
-          </div>
           <div>
             <label class="form-label">Placeholder</label>
             <select id="f-openai-voice" class="form-input bg-white hidden">
@@ -1761,7 +1758,7 @@
           </div>
           </div>
         </div>
-        <p class="text-xs text-slate-400 mt-3">Telnyx webhook: <code class="bg-slate-100 px-1 rounded">/telnyx/webhook</code> — configure this URL in the Telnyx Voice API Application portal.</p>
+        <p class="text-xs text-slate-400 mt-3">Telnyx webhook: <code class="bg-slate-100 px-1 rounded">/telnyx/webhook</code> — configure this URL in your Telnyx Voice API Application.</p>
       </div>
 
       <!-- Business Context -->
@@ -2239,8 +2236,8 @@ async function openEditModal(id) {
     document.getElementById('f-admin-user').value    = c.admin_user || 'admin';
     document.getElementById('f-admin-pass').value    = c.admin_pass || '';
     document.getElementById('f-telnyx-api-key').value = c.telnyx_api_key || '';
-    document.getElementById('f-telnyx-phone').value   = c.telnyx_phone || '';
-    document.getElementById('f-transfer-phone').value = c.transfer_phone || '';
+    document.getElementById('f-telnyx-phone').value   = c.telnyx_phone   || '';
+    document.getElementById('f-transfer-phone').value = c.transfer_phone  || '';
     document.getElementById('f-sms-follow-up').checked = !!c.sms_follow_up_enabled;
     // IVR
     document.getElementById('f-ivr-enabled').checked = !!c.ivr_enabled;
@@ -2529,7 +2526,8 @@ async function loadAiConfig(clinicId) {
     document.getElementById('ai-master-prompt').value  = c.ai_master_prompt            || '';
     document.getElementById('f-ai-voice-es').value     = c.ai_voice_es                 || '';
     document.getElementById('f-ai-voice-en').value     = c.ai_voice_en                 || '';
-    document.getElementById('f-ai-language').value     = c.ai_language                 || 'es';
+    document.getElementById('f-openai-voice').value    = c.openai_voice    || 'coral';
+    document.getElementById('f-openai-language').value = c.openai_language || 'es';
     document.getElementById('ai-timezone').value       = c.timezone                    || 'America/New_York';
     onTemplateChange();
     // Rebuild FAQ list
@@ -2576,7 +2574,8 @@ async function saveAiConfig() {
     masterPrompt:            document.getElementById('ai-master-prompt').value.trim(),
     voiceEs:                 document.getElementById('f-ai-voice-es').value || null,
     voiceEn:                 document.getElementById('f-ai-voice-en').value || null,
-    aiLanguage:              document.getElementById('f-ai-language').value || 'es',
+    openaiVoice:    document.getElementById('f-openai-voice').value    || 'coral',
+    openaiLanguage: document.getElementById('f-openai-language').value || 'es',
     timezone:                document.getElementById('ai-timezone').value || 'America/New_York',
   };
 
@@ -2992,6 +2991,40 @@ function populateCallClinicFilter() {
     allClients.map(c => '<option value="' + c.id + '">' + escHtml(c.name) + '</option>').join('');
 }
 
+// ── Twilio credential test ────────────────────────────────────────────────────
+
+async function testTelnyxCredentials() {
+  const id = document.getElementById('edit-id').value;
+  if (!id) { alert('Save the clinic first before testing credentials.'); return; }
+  const btn = document.getElementById('telnyx-test-btn');
+  const res = document.getElementById('telnyx-test-result');
+  btn.disabled = true; btn.textContent = 'Validating…';
+  res.className = 'hidden mt-2 text-xs rounded-lg p-3 border';
+  try {
+    const r    = await fetch('/superadmin/api/clinics/' + id + '/telnyx/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telnyxApiKey: document.getElementById('f-telnyx-api-key').value.trim() }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      res.innerHTML = '<strong>✓ Valid!</strong> Balance: $' + (data.balance || '—') + ' ' + (data.currency || 'USD');
+      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-emerald-50 text-emerald-700 border-emerald-200';
+    } else {
+      res.textContent = '✗ ' + (data.error || 'Invalid credentials');
+      res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
+    }
+  } catch(e) {
+    res.textContent = '✗ ' + e.message;
+    res.className = 'mt-2 text-xs rounded-lg p-3 border bg-red-50 text-red-700 border-red-200';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Validate Credentials';
+  }
+}
+
+function makeTestCall() {
+  alert('Outbound test call via Telnyx requires a Connection ID — configure in the Telnyx portal.');
+}
+
 // ── Webhook Call Simulator ────────────────────────────────────────────────────
 
 let wsimCallSid = null;
@@ -3147,7 +3180,7 @@ async function loadHealth() {
       const st  = v.status || 'ok';
       const cls = statusColor[st] || statusColor.warning;
       const ico = statusIcon[st]  || '?';
-      const label = { database:'Database', anthropicKey:'AI (Anthropic)', appUrl:'App URL', twilio:'Twilio', portalSecret:'Portal Secret' }[key] || key;
+      const label = { database:'Database', anthropicKey:'AI (Anthropic)', appUrl:'App URL', telnyx:'Telnyx', portalSecret:'Portal Secret' }[key] || key;
       const detail = v.message || v.value || (v.clinicsConfigured != null ? `${v.clinicsConfigured}/${v.totalClinics} clinics` : '');
       return `<div class="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
         <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${cls}">${ico}</span>
@@ -3272,7 +3305,7 @@ async function searchNumbers() {
 
   try {
     const params = areaCode ? `?areaCode=${encodeURIComponent(areaCode)}` : '';
-    const data   = await (await fetch(`/superadmin/api/clinics/${id}/twilio/numbers${params}`)).json();
+    const data   = await (await fetch(`/superadmin/api/clinics/${id}/telnyx/numbers${params}`)).json();
     if (!data.numbers?.length) {
       status.textContent = 'No available numbers found. Try a different area code.';
       return;
@@ -3300,7 +3333,7 @@ async function searchNumbers() {
 async function purchaseNumber(phoneNumber) {
   const id = document.getElementById('edit-id').value;
   if (!id) return;
-  if (!confirm(`Purchase ${phoneNumber}? This will charge your Twilio account.`)) return;
+  if (!confirm(`Purchase ${phoneNumber}? This will charge your Telnyx account.`)) return;
 
   const status = document.getElementById('provision-status');
   status.className = 'mt-2 text-xs rounded-lg p-2 border border-slate-200 bg-slate-50 text-slate-600';
@@ -3308,15 +3341,15 @@ async function purchaseNumber(phoneNumber) {
   status.classList.remove('hidden');
 
   try {
-    const r    = await fetch(`/superadmin/api/clinics/${id}/twilio/provision`, {
+    const r    = await fetch(`/superadmin/api/clinics/${id}/telnyx/provision`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ phoneNumber }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error);
     status.className = 'mt-2 text-xs rounded-lg p-2 border border-emerald-200 bg-emerald-50 text-emerald-700';
-    status.textContent = `Purchased ${data.phoneNumber}! Webhook auto-configured. Refresh the form to see the new number.`;
-    document.getElementById('f-twilio-phone').value = data.phoneNumber;
+    status.textContent = `Purchased ${data.phoneNumber}! Refresh the form to see the new number.`;
+    document.getElementById('f-telnyx-phone').value = data.phoneNumber;
     document.getElementById('provision-results').classList.add('hidden');
   } catch (e) {
     status.className = 'mt-2 text-xs rounded-lg p-2 border border-red-200 bg-red-50 text-red-700';
@@ -3334,11 +3367,11 @@ async function configureWebhook() {
   status.classList.remove('hidden');
 
   try {
-    const r    = await fetch(`/superadmin/api/clinics/${id}/twilio/configure-webhook`, { method:'POST' });
+    const r    = await fetch(`/superadmin/api/clinics/${id}/telnyx/configure-webhook`, { method:'POST' });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error);
     status.className = 'mt-2 text-xs rounded-lg p-2 border border-emerald-200 bg-emerald-50 text-emerald-700';
-    status.textContent = `Webhook URLs set! Voice: ${data.voiceUrl}`;
+    status.textContent = `Webhook URL: ${data.voiceUrl} — ${data.note || 'Configure in Telnyx portal.'}`;
   } catch (e) {
     status.className = 'mt-2 text-xs rounded-lg p-2 border border-red-200 bg-red-50 text-red-700';
     status.textContent = 'Error: ' + e.message;
@@ -4794,12 +4827,12 @@ async function loadCostConfig() {
     const c = await fetch('/superadmin/api/costs/config').then(r => r.json());
     document.getElementById('cfg-admin-phone').value   = c.admin_phone    || '';
     document.getElementById('cfg-admin-email').value   = c.admin_email    || '';
-    document.getElementById('cfg-twilio-rate').value   = c.twilio_rate_per_min  ?? 0.0085;
+    document.getElementById('cfg-telnyx-rate').value   = c.telnyx_rate_per_min  ?? 0.0085;
     document.getElementById('cfg-ai-rate').value       = c.ai_rate_per_call     ?? 0.08;
     document.getElementById('cfg-ai-budget').value     = c.ai_monthly_budget    ?? 200;
     document.getElementById('cfg-ai-low').value        = c.threshold_ai_low     ?? 5;
     document.getElementById('cfg-ai-critical').value   = c.threshold_ai_critical ?? 2;
-    document.getElementById('cfg-twilio-low').value    = c.threshold_twilio_low  ?? 10;
+    document.getElementById('cfg-telnyx-low').value    = c.threshold_telnyx_low  ?? 10;
     document.getElementById('cfg-alerts-enabled').checked = !!c.alerts_enabled;
   } catch(e) { console.error('loadCostConfig:', e); }
 }
@@ -4813,12 +4846,12 @@ async function saveCostConfig() {
     const body = {
       admin_phone:           document.getElementById('cfg-admin-phone').value.trim() || null,
       admin_email:           document.getElementById('cfg-admin-email').value.trim() || null,
-      twilio_rate_per_min:   parseFloat(document.getElementById('cfg-twilio-rate').value)   || 0.0085,
+      telnyx_rate_per_min:   parseFloat(document.getElementById('cfg-telnyx-rate').value)   || 0.0085,
       ai_rate_per_call:      parseFloat(document.getElementById('cfg-ai-rate').value)        || 0.08,
       ai_monthly_budget:     parseFloat(document.getElementById('cfg-ai-budget').value)      || 200,
       threshold_ai_low:      parseFloat(document.getElementById('cfg-ai-low').value)         || 5,
       threshold_ai_critical: parseFloat(document.getElementById('cfg-ai-critical').value)    || 2,
-      threshold_twilio_low:  parseFloat(document.getElementById('cfg-twilio-low').value)     || 10,
+      threshold_telnyx_low:  parseFloat(document.getElementById('cfg-telnyx-low').value)     || 10,
       alerts_enabled:        document.getElementById('cfg-alerts-enabled').checked ? 1 : 0,
     };
     const r = await fetch('/superadmin/api/costs/config', {
@@ -4890,11 +4923,11 @@ async function voiceStart() {
   const startBtn = document.getElementById('voice-start-btn');
   const stopBtn  = document.getElementById('voice-stop-btn');
   startBtn.disabled = true;
-  startBtn.innerHTML = '<span>⏳</span> Connecting…';
+  startBtn.innerHTML = '<span class="animate-spin">⏳</span> Connecting…';
   voiceSetStatus('Connecting to Ana…', 'blue');
 
   try {
-    const tokenRes  = await fetch(`/superadmin/api/clinics/${clinicId}/realtime/session`, {
+    const tokenRes = await fetch(`/superadmin/api/clinics/${clinicId}/realtime/session`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
     });
     const tokenData = await tokenRes.json();
@@ -4907,15 +4940,15 @@ async function voiceStart() {
 
     _voiceWs.onopen = () => {
       _voiceConnected = true;
-      voiceSetStatus('🟢 Connected — Ana will greet you shortly…', 'green');
+      voiceSetStatus('⏳ Connected — Ana is preparing a greeting…', 'blue');
       startBtn.innerHTML = '💬 Start Chat';
       startBtn.disabled  = false;
       stopBtn.disabled   = false;
       stopBtn.classList.remove('opacity-40');
-      const row = document.getElementById('voice-input-row');
-      if (row) row.classList.remove('hidden');
-      const inp = document.getElementById('voice-text-input');
-      if (inp) inp.focus();
+      const input   = document.getElementById('voice-text-input');
+      const sendBtn = document.getElementById('voice-send-btn');
+      if (input)   { input.disabled = false; }
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.remove('opacity-40'); }
     };
 
     _voiceWs.onmessage = e => {
@@ -4947,8 +4980,10 @@ async function voiceStart() {
         voiceSetStatus('Disconnected.', 'slate');
         const sb = document.getElementById('voice-stop-btn');
         if (sb) { sb.disabled = true; sb.classList.add('opacity-40'); }
-        const row = document.getElementById('voice-input-row');
-        if (row) row.classList.add('hidden');
+        const input   = document.getElementById('voice-text-input');
+        const sendBtn = document.getElementById('voice-send-btn');
+        if (input)   { input.disabled = true; }
+        if (sendBtn) { sendBtn.disabled = true; sendBtn.classList.add('opacity-40'); }
       }
     };
 
@@ -4963,21 +4998,37 @@ async function voiceStart() {
 function voiceStop(clearStatus = true) {
   if (_voiceWs) { try { _voiceWs.close(); } catch {} _voiceWs = null; }
   _voiceConnected = false;
+
   const stopBtn = document.getElementById('voice-stop-btn');
   if (stopBtn) { stopBtn.disabled = true; stopBtn.classList.add('opacity-40'); }
-  const row = document.getElementById('voice-input-row');
-  if (row) row.classList.add('hidden');
+  const input   = document.getElementById('voice-text-input');
+  const sendBtn = document.getElementById('voice-send-btn');
+  if (input)   { input.disabled = true; }
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.classList.add('opacity-40'); }
   if (clearStatus) voiceSetStatus('Disconnected.', 'slate');
 }
 
-function voiceSendText() {
-  const inp = document.getElementById('voice-text-input');
-  const text = inp?.value.trim();
+function voiceSend() {
+  const input = document.getElementById('voice-text-input');
+  const text  = input?.value?.trim();
   if (!text || !_voiceWs || _voiceWs.readyState !== 1) return;
-  inp.value = '';
   voicePushBubble('user', text);
-  voiceSetStatus('⏳ Ana is thinking…', 'blue');
   _voiceWs.send(JSON.stringify({ type: 'user_message', text }));
+  input.value = '';
+  voiceSetStatus('🟢 Waiting for Ana…', 'green');
+}
+
+function voiceHandleEvent(evt) {
+  if (evt.type === 'assistant_message' && evt.text) {
+    voicePushBubble('assistant', evt.text);
+    voiceSetStatus('🟢 Connected — type a message to Ana', 'green');
+  }
+  if (evt.type === 'session.created' || evt.type === 'session.updated') {
+    voiceSetStatus('🟢 Connected — Ana is ready. Type a message to start.', 'green');
+  }
+  if (evt.type === 'error') {
+    voiceSetStatus(`Error: ${evt.error?.message || JSON.stringify(evt.error)}`, 'red');
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

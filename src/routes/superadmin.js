@@ -65,13 +65,14 @@ router.get('/api/clinics', (_req, res) => {
     const appUrl  = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
     const result  = clinics.map(c => ({
       ...c,
-      telnyx_api_key: c.telnyx_api_key ? '••••••••' : null,
-      gmail_app_pass: c.gmail_app_pass  ? '••••••••' : null,
-      smtp_pass:      c.smtp_pass       ? '••••••••' : null,
-      admin_pass:     c.admin_pass      ? '••••••••' : null,
-      stats:          getStats(c.id),
-      dashboardUrl:   `${appUrl}/admin/${c.slug}`,
-      webhookUrl:     `${appUrl}/telnyx/webhook`,
+      twilio_token:     c.twilio_token     ? '••••••••' : null,
+      telnyx_api_key:   c.telnyx_api_key   ? '••••••••' : null,
+      gmail_app_pass:c.gmail_app_pass? '••••••••' : null,
+      smtp_pass:     c.smtp_pass     ? '••••••••' : null,
+      admin_pass:    c.admin_pass    ? '••••••••' : null,
+      stats:         getStats(c.id),
+      dashboardUrl:  `${appUrl}/admin/${c.slug}`,
+      webhookUrl:    `${appUrl}/webhook/${c.slug}/voice`,
     }));
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -210,12 +211,14 @@ router.post('/api/clinics/:id/ai/test', async (req, res) => {
   }
 });
 
-// ── Live Voice session token (browser text-chat relay → Claude) ──────────────
+// ── Browser Live Chat session token ──────────────────────────────────────────
 
 router.post('/api/clinics/:id/realtime/session', (req, res) => {
   const clinic = getClinicAiConfig(+req.params.id);
   if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured on this server.' });
+
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'Anthropic API key not configured on this server.' });
+
   const token = generateVoiceToken(+req.params.id);
   res.json({ ws_token: token });
 });
@@ -252,6 +255,71 @@ router.get('/api/calls/:id', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Voicemail recording proxy (fetches from Twilio with clinic credentials) ────
+
+router.get('/api/calls/:id/recording', async (req, res) => {
+  try {
+    const detail = getCallWithTranscript(+req.params.id);
+    if (!detail?.recording_url) return res.status(404).json({ error: 'No recording for this call' });
+
+    const clinic = getClinicById(detail.clinic_id);
+    if (!clinic?.twilio_sid || !clinic?.twilio_token)
+      return res.status(400).json({ error: 'Twilio credentials not configured for this clinic' });
+
+    // Ensure URL ends with .mp3 for audio streaming
+    const mp3Url = detail.recording_url.replace(/\.json$/, '').replace(/\/?$/, '.mp3');
+
+    const auth     = Buffer.from(`${clinic.twilio_sid}:${clinic.twilio_token}`).toString('base64');
+    const upstream = await fetch(mp3Url, { headers: { Authorization: `Basic ${auth}` } });
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: `Recording fetch failed: ${upstream.statusText}` });
+    }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Content-Disposition', `inline; filename="voicemail-${detail.id}.mp3"`);
+    upstream.body.pipe(res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Telnyx credential test ────────────────────────────────────────────────────
+
+router.post('/api/clinics/:id/telnyx/test', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const apiKey = req.body.telnyxApiKey || clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
+    if (!apiKey)
+      return res.status(400).json({ ok: false, error: 'Telnyx API Key is required' });
+
+    const balRes = await fetch('https://api.telnyx.com/v2/balance', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const balData = await balRes.json();
+    if (!balRes.ok) {
+      const msg = balData.errors?.[0]?.detail || `Telnyx ${balRes.status}`;
+      return res.status(400).json({ ok: false, error: msg });
+    }
+
+    res.json({
+      ok:      true,
+      balance: balData.data?.balance,
+      currency: balData.data?.currency || 'USD',
+    });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// ── Telnyx test call (stub — requires connection_id in full setup) ────────────
+
+router.post('/api/clinics/:id/telnyx/call', async (req, res) => {
+  res.status(501).json({ ok: false, error: 'Outbound test call via Telnyx requires a Connection ID — configure in the Telnyx portal.' });
+});
 
 // ── Industry templates list ───────────────────────────────────────────────────
 
@@ -312,12 +380,12 @@ router.get('/api/health', async (req, res) => {
     value:  process.env.APP_URL || '(not set — using localhost)',
   };
 
-  // Telnyx — count clinics with a phone number configured
-  const clinics     = getClinics();
-  const telnyxReady = clinics.filter(c => c.telnyx_phone).length;
+  // Telnyx — count clinics with API key configured
+  const clinics = getClinics();
+  const telnyxReady = clinics.filter(c => c.telnyx_api_key || process.env.TELNYX_API_KEY).length;
   checks.telnyx = {
-    status:            process.env.TELNYX_API_KEY ? 'ok' : 'warning',
-    clinicsWithPhone:  telnyxReady,
+    status:            telnyxReady > 0 ? 'ok' : 'warning',
+    clinicsConfigured: telnyxReady,
     totalClinics:      clinics.length,
     globalKeySet:      !!process.env.TELNYX_API_KEY,
   };
@@ -333,6 +401,81 @@ router.get('/api/health', async (req, res) => {
   });
 });
 
+// ── Telnyx phone number search ────────────────────────────────────────────────
+
+router.get('/api/clinics/:id/telnyx/numbers', async (req, res) => {
+  try {
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const apiKey = clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Telnyx API Key not configured' });
+
+    const { areaCode } = req.query;
+    const params = new URLSearchParams({
+      'filter[country_code]':       'US',
+      'filter[number_type]':        'local',
+      'filter[features][]':         'voice',
+      'filter[limit]':              '20',
+    });
+    if (areaCode) params.set('filter[national_destination_code]', areaCode);
+
+    const r = await fetch(`https://api.telnyx.com/v2/available_phone_numbers?${params}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(400).json({ error: data.errors?.[0]?.detail || `Telnyx ${r.status}` });
+
+    res.json({
+      numbers: (data.data || []).map(n => ({
+        phoneNumber:  n.phone_number,
+        friendlyName: n.phone_number,
+        locality:     n.locality || '',
+        region:       n.region_code || '',
+        postalCode:   '',
+        capabilities: n.features?.map(f => f.name) || [],
+      })),
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/api/clinics/:id/telnyx/provision', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) return res.status(400).json({ error: 'phoneNumber is required' });
+
+    const clinic = getClinicById(+req.params.id);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    const apiKey = clinic.telnyx_api_key || process.env.TELNYX_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Telnyx API Key not configured' });
+
+    const r = await fetch('https://api.telnyx.com/v2/phone_numbers/orders', {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ phone_numbers: [{ phone_number: phoneNumber }] }),
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(400).json({ error: data.errors?.[0]?.detail || `Telnyx ${r.status}` });
+
+    const purchased = data.data?.phone_numbers?.[0]?.phone_number || phoneNumber;
+    updateClinic(+req.params.id, { telnyxPhone: purchased });
+    console.log(`[Telnyx] Purchased ${purchased} for clinic ${clinic.slug}`);
+    res.json({ ok: true, phoneNumber: purchased });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/api/clinics/:id/telnyx/configure-webhook', async (req, res) => {
+  const appUrl   = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+  const clinic   = getClinicById(+req.params.id);
+  if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+  const voiceUrl = `${appUrl}/telnyx/webhook`;
+  res.json({ ok: true, voiceUrl, note: 'Set this URL as the webhook in your Telnyx Voice API Application.' });
+});
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 
