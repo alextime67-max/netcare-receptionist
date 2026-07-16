@@ -1,65 +1,132 @@
-'use strict';
 const express = require('express');
 const router  = express.Router();
 
-const { getClinicByTelnyxPhone } = require('../database/db');
-const { getTelnyxRelay }         = require('../services/realtime');
+const {
+  initSession, getSession, setSessionDbId, endSession,
+  setSelectedCenter, setSessionLanguage, incrementIvrTimeouts,
+  processMessage, prewarmSession,
+  getInitialGreeting, getNoInputMessage, getTimeoutGoodbye,
+} = require('../services/ai');
 
-// ── Telnyx Call Control helpers ───────────────────────────────────────────────
+const {
+  createCall, updateCall, addTranscript,
+  createAppointment, updateAppointmentSmsStatus, createDoctorMessage, getCallByCallSid,
+  getClinicBySlug, getKnowledgeBase, logUnansweredQuestion,
+} = require('../database/db');
 
-const TELNYX_API = 'https://api.telnyx.com/v2';
+const { sendAppointmentNotification, sendDoctorMessageNotification, sendEmergencyAlert } = require('../services/email');
+const {
+  sendAppointmentConfirmationSms,
+  sendMessageReceiptSms,
+  sendMissedCallSms,
+  sendVoicemailAckSms,
+} = require('../services/sms');
 
-function telnyxPost(path, body) {
-  return fetch(`${TELNYX_API}${path}`, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${process.env.TELNYX_API_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
+// ── TwiML helpers ─────────────────────────────────────────────────────────────
+
+function esc(text) {
+  return String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
-async function answerCall(callControlId) {
-  const r = await telnyxPost(`/calls/${callControlId}/actions/answer`, {});
-  if (!r.ok) console.error(`[Telnyx] answer failed: ${r.status} ${await r.text().catch(() => '')}`);
+function gatherTwiml(speakText, lang, slug, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
+  const hints    = lang === 'es'
+    ? 'cita,doctor,mensaje,sí,no,urgente,nombre,apellido,teléfono,fecha,hora'
+    : 'appointment,doctor,message,yes,no,urgent,name,phone,date,time,morning,afternoon';
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="speech" action="/webhook/${slug}/gather" method="POST"
+          speechTimeout="4" speechModel="phone_call"
+          language="${langCode}" hints="${esc(hints)}">
+    <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
+  </Gather>
+  <Redirect method="POST">/webhook/${slug}/no-input</Redirect>
+</Response>`;
 }
 
-async function startStreaming(callControlId, streamUrl) {
-  const r = await telnyxPost(`/calls/${callControlId}/actions/streaming_start`, {
-    stream_url:   streamUrl,
-    stream_track: 'both_tracks',
-  });
-  if (!r.ok) console.error(`[Telnyx] streaming_start failed: ${r.status} ${await r.text().catch(() => '')}`);
+function endTwiml(speakText, lang, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
+  <Hangup/>
+</Response>`;
 }
 
-async function hangupCall(callControlId) {
-  await telnyxPost(`/calls/${callControlId}/actions/hangup`, {}).catch(() => {});
+function transferTwiml(speakText, lang, transferPhone, callerPhone, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
+  <Dial timeout="30" callerId="${esc(callerPhone || '')}">${esc(transferPhone)}</Dial>
+</Response>`;
 }
 
-async function startTranscription(callControlId) {
-  const r = await telnyxPost(`/calls/${callControlId}/actions/transcription_start`, {
-    transcription_engine: 'A',
-    transcription_tracks: 'inbound_track',
-  });
-  if (!r.ok) console.error(`[Telnyx] transcription_start failed: ${r.status} ${await r.text().catch(() => '')}`);
+function voicemailTwiml(speakText, lang, slug, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${langCode}">${esc(speakText)}</Say>
+  <Record action="/webhook/${slug}/recording-complete" method="POST"
+          maxLength="120" finishOnKey="#" playBeep="true" timeout="5"/>
+  <Say voice="${voice}" language="${langCode}">${esc(
+    lang === 'es' ? 'No recibimos grabación. ¡Adiós!' : 'No recording received. Goodbye!'
+  )}</Say>
+  <Hangup/>
+</Response>`;
 }
 
-// ── Telnyx webhook entry point ────────────────────────────────────────────────
-// Configured in Telnyx portal as: POST https://netcarephone.com/telnyx/webhook
+// Waiting prompt: plays while AI is processing, then redirects to /gather-resume
+function waitingTwiml(text, lang, slug, clinic) {
+  const voice    = lang === 'es'
+    ? (clinic?.ai_voice_es || 'Polly.Lupe-Neural')
+    : (clinic?.ai_voice_en || 'Polly.Joanna');
+  const langCode = lang === 'es' ? 'es-US' : 'en-US';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voice}" language="${langCode}">${esc(text)}</Say>
+  <Redirect method="POST">/webhook/${slug}/gather-resume</Redirect>
+</Response>`;
+}
 
-router.post('/webhook', async (req, res) => {
-  // Always respond 200 immediately — Telnyx retries if it doesn't get a fast 2xx
-  res.sendStatus(200);
+const WAITING_PROMPTS = {
+  es: [
+    'Con mucho gusto, un momento por favor.',
+    'Permítame un momento.',
+    'Claro que sí, enseguida le atiendo.',
+    'Gracias por su paciencia.',
+  ],
+  en: [
+    'Absolutely, just one moment please.',
+    'Of course, let me check that for you.',
+    'Sure, one moment.',
+    'Thank you for your patience.',
+  ],
+};
 
-  const payload = req.body?.data;
-  if (!payload) return;
+function pickWaitingPrompt(lang) {
+  const list = WAITING_PROMPTS[lang] || WAITING_PROMPTS.en;
+  return list[Math.floor(Math.random() * list.length)];
+}
 
-  const eventType     = payload.event_type;
-  const p             = payload.payload || {};
-  const callControlId = p.call_control_id;
-  const from          = p.from;
-  const to            = p.to;
+// In-flight AI promises awaiting /gather-resume pickup
+// callSid → { promise, result, speechResult }
+const pendingResponses = new Map();
 
 function ivrLanguageMenuTwiml(clinic, slug) {
   let cfg = null;
@@ -368,82 +435,157 @@ router.post('/:slug/gather', clinicMiddleware, async (req, res) => {
   let timedOut = false;
 
   try {
-    // ── Inbound call: answer + start media streaming ──────────────────────────
-    if (eventType === 'call.initiated' && p.direction === 'incoming') {
-      if (!process.env.TELNYX_API_KEY) {
-        console.error('[Telnyx] TELNYX_API_KEY not configured — cannot handle call');
-        return;
-      }
+    ai = await Promise.race([
+      aiPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => { const e = new Error('threshold'); e.code = 'THRESHOLD'; reject(e); }, WAIT_THRESHOLD_MS)
+      ),
+    ]);
+  } catch (err) {
+    if (err.code === 'THRESHOLD') {
+      timedOut = true;
+    } else {
+      // Real AI error — surface to caller
+      console.error(`[Webhook/${clinic.slug}] gather AI error:`, err);
+      const lang = session.language || 'es';
+      return res.type('text/xml').send(gatherTwiml(
+        lang === 'es'
+          ? 'Disculpe, tuve un pequeño problema técnico. ¿Podría repetir eso?'
+          : "I apologize, I had a small technical issue. Could you please repeat that?",
+        lang, clinic.slug, clinic
+      ));
+    }
+  }
 
-      const clinic = getClinicByTelnyxPhone(to);
-      if (!clinic) {
-        console.warn(`[Telnyx] No clinic configured for number ${to} — hanging up`);
-        await hangupCall(callControlId);
-        return;
-      }
-      if (clinic.status === 'suspended' || clinic.status === 'cancelled') {
-        console.warn(`[Telnyx] Clinic ${clinic.slug} is ${clinic.status} — hanging up`);
-        await hangupCall(callControlId);
-        return;
-      }
+  if (timedOut) {
+    // AI is still processing — play waiting prompt and hand off to /gather-resume
+    const lang = session.language || 'es';
+    pendingResponses.set(CallSid, { promise: aiPromise, result: null, speechResult: SpeechResult });
+    // Resolve the result into the entry as soon as it arrives
+    aiPromise
+      .then(result => { const e = pendingResponses.get(CallSid); if (e) e.result = result; })
+      .catch(() => { /* handled in /gather-resume */ });
+    const prompt = pickWaitingPrompt(lang);
+    console.log(`[Latency] gather→waiting prompt  pre-ai=${Date.now()-t0}ms  CallSid=${CallSid}`);
+    return res.type('text/xml').send(waitingTwiml(prompt, lang, clinic.slug, clinic));
+  }
 
-      console.log(`[Telnyx] Inbound call → clinic=${clinic.slug}  from=${from}`);
+  // AI responded within threshold — send immediately, no waiting prompt
+  const tAiDone = Date.now();
+  res.on('finish', () =>
+    console.log(`[Latency] gather total=${Date.now()-t0}ms ai=${tAiDone-tAiStart}ms post-ai=${Date.now()-tAiDone}ms  CallSid=${CallSid}`)
+  );
+  return sendAiResponse(ai, session, clinic, CallSid, SpeechResult, res);
+});
 
-      await answerCall(callControlId);
+// ── Route: waiting-prompt resume ──────────────────────────────────────────────
 
-      const appUrl = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`)
-        .replace(/^https?:\/\//, '')
-        .replace(/\/$/, '');
-      const streamUrl = `wss://${appUrl}/realtime/telnyx/${clinic.slug}`;
+router.post('/:slug/gather-resume', clinicMiddleware, async (req, res) => {
+  const t0 = Date.now();
+  const { CallSid } = req.body;
+  const clinic  = req.clinic;
+  const session = getSession(CallSid);
 
-      await startStreaming(callControlId, streamUrl);
-      console.log(`[Telnyx] Streaming started → ${streamUrl}`);
+  if (!session) {
+    return res.type('text/xml').send(
+      endTwiml(`Perdimos su sesión. Por favor llame nuevamente. Gracias por llamar a ${clinic.name}.`, 'es', clinic)
+    );
+  }
 
-      // Start Telnyx server-side transcription for inbound audio
-      await startTranscription(callControlId);
-      console.log(`[Telnyx] Transcription started  ccid=${callControlId}`);
+  const entry = pendingResponses.get(CallSid);
+  if (!entry) {
+    // Entry missing — recover gracefully
+    const lang = session.language || 'es';
+    return res.type('text/xml').send(gatherTwiml(
+      lang === 'es' ? '¿Cómo puedo ayudarle?' : 'How may I assist you?',
+      lang, clinic.slug, clinic
+    ));
+  }
 
-    // ── Call ended ────────────────────────────────────────────────────────────
-    } else if (eventType === 'call.hangup') {
-      console.log(`[Telnyx] Hangup  ccid=${callControlId}  cause=${p.hangup_cause || 'unknown'}`);
-      // Relay cleanup is handled via WebSocket close event in createTelnyxRelay
+  let ai;
+  try {
+    // By now the waiting prompt has played (~3–5 s); the AI is almost always done
+    ai = entry.result || await entry.promise;
+    pendingResponses.delete(CallSid);
+  } catch (err) {
+    pendingResponses.delete(CallSid);
+    console.error(`[Webhook/${clinic.slug}] gather-resume error:`, err);
+    const lang = session.language || 'es';
+    return res.type('text/xml').send(gatherTwiml(
+      lang === 'es'
+        ? 'Disculpe, tuve un pequeño problema técnico. ¿Podría repetir eso?'
+        : "I apologize, I had a small technical issue. Could you please repeat that?",
+      lang, clinic.slug, clinic
+    ));
+  }
 
-    // ── Transcription result — route to relay ─────────────────────────────────
-    } else if (eventType === 'call.transcription') {
-      const td         = p.transcription_data || {};
-      const transcript = (td.transcript || '').trim();
-      const isFinal    = td.is_final === true;
-      console.log(`[Telnyx] transcription  final=${isFinal}  text="${transcript}"`);
-      if (isFinal && transcript) {
-        const relay = getTelnyxRelay(callControlId);
-        if (relay) {
-          relay.onTranscription(transcript).catch(e =>
-            console.error(`[Telnyx] onTranscription error:`, e.message)
-          );
-        } else {
-          console.warn(`[Telnyx] No relay found for ccid=${callControlId} (transcription)`);
+  const tAiDone = Date.now();
+  console.log(`[Latency] gather-resume ai-wait=${tAiDone - t0}ms  CallSid=${CallSid}`);
+  res.on('finish', () =>
+    console.log(`[Latency] gather-resume total=${Date.now()-t0}ms  CallSid=${CallSid}`)
+  );
+  return sendAiResponse(ai, session, clinic, CallSid, entry.speechResult || '', res);
+});
+
+// ── Route: no input ───────────────────────────────────────────────────────────
+
+router.post('/:slug/no-input', clinicMiddleware, (req, res) => {
+  const { CallSid } = req.body;
+  const clinic  = req.clinic;
+  const session = getSession(CallSid);
+  const lang    = session?.language || 'es';
+
+  if (session) {
+    session.silenceCount = (session.silenceCount || 0) + 1;
+
+    if (session.silenceCount >= 3) {
+      if (session.dbId) {
+        updateCall(CallSid, { status: 'abandoned' });
+        addTranscript(session.dbId, 'assistant', getTimeoutGoodbye(lang, clinic.name));
+        // Send missed-call SMS if caller is known
+        if (session.callerNumber && session.callerNumber !== 'anonymous') {
+          sendMissedCallSms(clinic, session.callerNumber)
+            .catch(e => console.error('[SMS] missed-call SMS failed:', e.message));
         }
       }
-
-    // ── TTS lifecycle — route speak.ended to relay ────────────────────────────
-    } else if (eventType === 'call.speak.started') {
-      console.log(`[Telnyx] speak.started  ccid=${callControlId}`);
-
-    } else if (eventType === 'call.speak.ended') {
-      console.log(`[Telnyx] speak.ended  ccid=${callControlId}`);
-      const relay = getTelnyxRelay(callControlId);
-      if (relay) relay.onSpeakEnded();
-
-    // ── Streaming lifecycle (informational) ───────────────────────────────────
-    } else if (eventType === 'streaming.started') {
-      console.log(`[Telnyx] Streaming confirmed started  ccid=${callControlId}`);
-
-    } else if (eventType === 'streaming.stopped') {
-      console.log(`[Telnyx] Streaming stopped  ccid=${callControlId}`);
+      endSession(CallSid);
+      return res.type('text/xml').send(endTwiml(getTimeoutGoodbye(lang, clinic.name), lang, clinic));
     }
 
+    // On 2nd silence, offer voicemail
+    if (session.silenceCount === 2) {
+      const prompt = lang === 'es'
+        ? 'No hemos recibido respuesta. Después del tono puede dejar un mensaje detallando su problema. Presione # cuando termine.'
+        : "We didn't receive a response. After the beep, please leave a message describing your issue. Press # when done.";
+      if (session.dbId) addTranscript(session.dbId, 'assistant', prompt);
+      return res.type('text/xml').send(voicemailTwiml(prompt, lang, clinic.slug, clinic));
+    }
+  }
+
+  res.type('text/xml').send(gatherTwiml(getNoInputMessage(lang), lang, clinic.slug, clinic));
+});
+
+// ── Route: Twilio status callback ─────────────────────────────────────────────
+
+router.post('/:slug/status', clinicMiddleware, (req, res) => {
+  const { CallSid, CallStatus, CallDuration } = req.body;
+  const clinic = req.clinic;
+  console.log(`[Webhook/${clinic.slug}] Status  CallSid=${CallSid}  status=${CallStatus}  duration=${CallDuration}s`);
+
+  try {
+    const call = getCallByCallSid(CallSid);
+    if (call) {
+      const terminal = ['completed', 'no-answer', 'busy', 'failed', 'canceled'];
+      if (terminal.includes(CallStatus)) {
+        updateCall(CallSid, {
+          duration: CallDuration ? parseInt(CallDuration, 10) : null,
+          status:   call.status === 'in_progress' ? 'abandoned' : call.status,
+        });
+        endSession(CallSid);
+      }
+    }
   } catch (err) {
-    console.error(`[Telnyx] webhook handler error (${eventType}):`, err.message);
+    console.error(`[Webhook/${clinic.slug}] status callback error:`, err.message);
   }
 
   res.status(204).send();
