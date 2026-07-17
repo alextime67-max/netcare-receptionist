@@ -226,12 +226,17 @@ Every reply MUST be a single-line JSON object — nothing before it, nothing aft
 Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
 
   let state              = 'GREETING';
+  let callEnded          = false;   // set true on hangup — blocks speak after call ends
   let lastSpeakCommandId = null;   // command_id of the most-recently accepted speak
   let dbId               = null;
   let callStart          = Date.now();
   const history          = [];
 
   async function speak(text, activeVoice, activeLang) {
+    if (callEnded) {
+      console.warn(`[Telnyx/${clinicName}] speak skipped — call already ended`);
+      return null;
+    }
     const language  = activeLang === 'es' ? 'es-MX' : 'en-US';
     const commandId = crypto.randomUUID();
     const payload   = { payload: text, voice: activeVoice, language, payload_type: 'text', command_id: commandId };
@@ -274,7 +279,7 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
 
       console.log(`[Telnyx/${clinicName}] Greeting (state=GREETING): "${greeting}"`);
       const greetCmdId = await speak(greeting, voiceId, lang);
-      if (!greetCmdId) {
+      if (!greetCmdId && !callEnded) {
         state = 'WAITING';
         console.warn(`[Telnyx/${clinicName}] Greeting speak failed → forced WAITING`);
       }
@@ -301,12 +306,14 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
       history.push({ role: 'user', content: text });
 
       try {
+        const t0  = Date.now();
         const msg = await anthropic.messages.create({
           model:      'claude-haiku-4-5-20251001',
           max_tokens: 350,
           system:     instructions,
           messages:   history,
         });
+        console.log(`[Telnyx/${clinicName}] Claude responded in ${Date.now() - t0}ms`);
 
         const raw        = msg.content?.[0]?.text?.trim() || '';
         console.log(`[Telnyx/${clinicName}] Claude raw: "${raw.slice(0, 150)}"`);
@@ -334,13 +341,18 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
         history.push({ role: 'assistant', content: reply });
         if (dbId) try { addTranscript(dbId, 'assistant', reply); } catch {}
 
+        if (callEnded) {
+          console.warn(`[Telnyx/${clinicName}] Claude ready but call already ended — discarding reply`);
+          return;
+        }
+
         // 500 ms pause — lets any pending call.speak.ended from the greeting turn arrive
         // before we send the new speak, so stale events cannot stomp the new command_id
         await new Promise(resolve => setTimeout(resolve, 500));
         console.log(`[Telnyx/${clinicName}] 500 ms pause done, sending speak  state=${state}`);
 
         const replyCmdId = await speak(reply, activeVoice, detectedLang);
-        if (!replyCmdId) {
+        if (!replyCmdId && !callEnded) {
           state = 'WAITING';
           console.warn(`[Telnyx/${clinicName}] Response speak failed -> forced WAITING`);
         }
@@ -374,6 +386,7 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
 
     // Called on call.hangup — saves duration + final status, unregisters relay
     cleanup() {
+      callEnded = true;
       const duration = Math.round((Date.now() - callStart) / 1000);
       if (dbId) try { updateCall(callControlId, { status: 'completed', duration }); } catch {}
       _telnyxRelays.delete(callControlId);

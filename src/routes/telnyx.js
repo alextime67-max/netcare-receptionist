@@ -112,10 +112,16 @@ router.post('/webhook', async (req, res) => {
 
       // Start continuous inbound transcription (call.transcription events from here on)
       const txLang = clinic.ai_language === 'en' ? 'en' : 'es';
-      await telnyxAction(callControlId, 'transcription_start', {
+      const txR = await telnyxAction(callControlId, 'transcription_start', {
         transcription_engine: 'B',
         language:             txLang,
       }, apiKey);
+      if (!txR.ok) {
+        console.error(`[Telnyx/${clinic.slug}] transcription_start failed (${txR.status}) — cannot listen. Hanging up.`);
+        relay.cleanup();
+        await telnyxAction(callControlId, 'hangup', {}, apiKey);
+        return;
+      }
       console.log(`[Telnyx/${clinic.slug}] Transcription started  engine=B  lang=${txLang}`);
 
       // Play opening greeting (state: GREETING)
@@ -152,6 +158,10 @@ router.post('/webhook', async (req, res) => {
 
     // ── 7. call.hangup — close call, save duration + transcript ──────────────
     if (eventType === 'call.hangup') {
+      const reason    = p.hangup_cause  || p.hangup_reason || 'unknown';
+      const causeCode = p.hangup_cause_code || '';
+      const src       = p.hangup_source || '';
+      console.log(`[Telnyx] call.hangup  ccid=${callControlId}  reason=${reason}  code=${causeCode}  src=${src}`);
       if (relay) relay.cleanup();
       _pendingCalls.delete(callControlId);
       return;
