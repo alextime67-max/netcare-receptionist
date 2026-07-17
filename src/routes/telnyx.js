@@ -113,11 +113,10 @@ router.post('/webhook', async (req, res) => {
       // Start continuous inbound transcription (call.transcription events from here on)
       const txLang = clinic.ai_language === 'en' ? 'en' : 'es';
       await telnyxAction(callControlId, 'transcription_start', {
-        transcription_engine:  'A',
-        transcription_tracks:  'inbound_track',
-        language:              txLang,
+        transcription_engine: 'B',
+        language:             txLang,
       }, apiKey);
-      console.log(`[Telnyx/${clinic.slug}] Transcription started  engine=A  tracks=inbound_track  lang=${txLang}`);
+      console.log(`[Telnyx/${clinic.slug}] Transcription started  engine=B  lang=${txLang}`);
 
       // Play opening greeting (state: GREETING)
       await relay.onCallAnswered();
