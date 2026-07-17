@@ -225,25 +225,40 @@ Every reply MUST be a single-line JSON object — nothing before it, nothing aft
 "text" : the exact words to speak — plain text, no markdown, no extra keys.
 Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
 
-  let state     = 'GREETING';
-  let dbId      = null;
-  let callStart = Date.now();
-  const history = [];
+  let state              = 'GREETING';
+  let lastSpeakCommandId = null;   // command_id of the most-recently accepted speak
+  let dbId               = null;
+  let callStart          = Date.now();
+  const history          = [];
 
   async function speak(text, activeVoice, activeLang) {
-    const language = activeLang === 'es' ? 'es-MX' : 'en-US';
+    const language  = activeLang === 'es' ? 'es-MX' : 'en-US';
+    const commandId = crypto.randomUUID();
+    const payload   = { payload: text, voice: activeVoice, language, payload_type: 'text', command_id: commandId };
+
+    console.log(`[Telnyx/${clinicName}] SPEAK cmd=${commandId.slice(0, 8)}  voice=…${activeVoice.slice(-8)}  lang=${language}  state=${state}  "${text.slice(0, 80)}"`);
+    console.log(`[Telnyx/${clinicName}] SPEAK payload: ${JSON.stringify(payload)}`);
+
     const r = await fetch(
       `${TELNYX_API}/calls/${encodeURIComponent(callControlId)}/actions/speak`,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body:    JSON.stringify({ payload: text, voice: activeVoice, language, payload_type: 'text' }),
+        body:    JSON.stringify(payload),
       }
     );
+
+    const responseText = await r.text().catch(() => '(unreadable)');
+    console.log(`[Telnyx/${clinicName}] SPEAK response: ${r.status}  body: ${responseText.slice(0, 300)}`);
+
     if (!r.ok) {
-      const t = await r.text().catch(() => '');
-      console.error(`[Telnyx/${clinicName}] speak failed: ${r.status} ${t}`);
+      console.error(`[Telnyx/${clinicName}] speak FAILED: ${r.status}  cmd=${commandId.slice(0, 8)}`);
+      return null;
     }
+
+    lastSpeakCommandId = commandId;
+    console.log(`[Telnyx/${clinicName}] speak OK  cmd=${commandId.slice(0, 8)} → stored as lastSpeakCommandId`);
+    return commandId;
   }
 
   const relay = {
@@ -257,12 +272,17 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
       history.push({ role: 'assistant', content: greeting });
       if (dbId) try { addTranscript(dbId, 'assistant', greeting); } catch {}
 
-      console.log(`[Telnyx/${clinicName}] Greeting: "${greeting}"`);
-      await speak(greeting, voiceId, lang);
+      console.log(`[Telnyx/${clinicName}] Greeting (state=GREETING): "${greeting}"`);
+      const greetCmdId = await speak(greeting, voiceId, lang);
+      if (!greetCmdId) {
+        state = 'WAITING';
+        console.warn(`[Telnyx/${clinicName}] Greeting speak failed → forced WAITING`);
+      }
     },
 
     // Called when Telnyx sends call.transcription with is_final=true
     async onTranscription(text) {
+      console.log(`[Telnyx/${clinicName}] call.transcription  state=${state}  text="${text.slice(0, 80)}"`);
       if (state !== 'WAITING') {
         console.log(`[Telnyx/${clinicName}] transcript discarded (state=${state}): "${text.slice(0, 40)}"`);
         return;
@@ -273,10 +293,11 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
         return;
       }
 
-      console.log(`[Telnyx/${clinicName}] Patient: "${text}"`);
+      console.log(`[Telnyx/${clinicName}] Patient said: "${text}"`);
       if (dbId) try { addTranscript(dbId, 'patient', text); } catch {}
 
       state = 'RESPONDING';
+      console.log(`[Telnyx/${clinicName}] state → RESPONDING  (calling Claude)`);
       history.push({ role: 'user', content: text });
 
       try {
@@ -288,6 +309,7 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
         });
 
         const raw        = msg.content?.[0]?.text?.trim() || '';
+        console.log(`[Telnyx/${clinicName}] Claude raw: "${raw.slice(0, 150)}"`);
         let reply        = raw;
         let detectedLang = lang;
 
@@ -312,7 +334,16 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
         history.push({ role: 'assistant', content: reply });
         if (dbId) try { addTranscript(dbId, 'assistant', reply); } catch {}
 
-        await speak(reply, activeVoice, detectedLang);
+        // 500 ms pause — lets any pending call.speak.ended from the greeting turn arrive
+        // before we send the new speak, so stale events cannot stomp the new command_id
+        await new Promise(resolve => setTimeout(resolve, 500));
+        console.log(`[Telnyx/${clinicName}] 500 ms pause done, sending speak  state=${state}`);
+
+        const replyCmdId = await speak(reply, activeVoice, detectedLang);
+        if (!replyCmdId) {
+          state = 'WAITING';
+          console.warn(`[Telnyx/${clinicName}] Response speak failed -> forced WAITING`);
+        }
       } catch (err) {
         console.error(`[Telnyx/${clinicName}] Claude/speak error:`, err.message);
         state = 'WAITING';
@@ -320,10 +351,24 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
     },
 
     // Called when call.speak.ended fires — transitions to WAITING so next transcript is processed
-    onSpeakEnded() {
+    onSpeakEnded(eventCommandId) {
+      const evtShort  = eventCommandId ? eventCommandId.slice(0, 8) : 'n/a';
+      const lastShort = lastSpeakCommandId ? lastSpeakCommandId.slice(0, 8) : 'n/a';
+      console.log(`[Telnyx/${clinicName}] speak.ended  event_cmd=${evtShort}  last_cmd=${lastShort}  state=${state}`);
+
+      // Ignore stale call.speak.ended from a previous speak command
+      if (eventCommandId && lastSpeakCommandId && eventCommandId !== lastSpeakCommandId) {
+        console.warn(`[Telnyx/${clinicName}] speak.ended IGNORED — stale cmd (expected ${lastShort}, got ${evtShort})`);
+        return;
+      }
+
+      const prev = state;
       if (state === 'GREETING' || state === 'RESPONDING') {
         state = 'WAITING';
-        console.log(`[Telnyx/${clinicName}] speak.ended → WAITING`);
+        lastSpeakCommandId = null;
+        console.log(`[Telnyx/${clinicName}] speak.ended: ${prev} -> WAITING  (ready for patient)`);
+      } else {
+        console.log(`[Telnyx/${clinicName}] speak.ended  state=${state} (no change)`);
       }
     },
 

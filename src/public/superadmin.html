@@ -4927,10 +4927,18 @@ async function voiceStart() {
   voiceSetStatus('Connecting to Ana…', 'blue');
 
   try {
-    const tokenRes = await fetch(`/superadmin/api/clinics/${clinicId}/realtime/session`, {
+    const _sessionUrl = `/superadmin/api/clinics/${clinicId}/realtime/session`;
+    console.log('[LiveVoice] POST', _sessionUrl, '  clinicId=', clinicId);
+    const tokenRes = await fetch(_sessionUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
     });
-    const tokenData = await tokenRes.json();
+    const _ct   = tokenRes.headers.get('content-type') || '(none)';
+    const _body = await tokenRes.text();
+    console.log('[LiveVoice] status:', tokenRes.status, ' content-type:', _ct);
+    console.log('[LiveVoice] body (first 200):', _body.slice(0, 200));
+    let tokenData;
+    try { tokenData = JSON.parse(_body); }
+    catch { throw new Error(`Server returned non-JSON (${tokenRes.status} ${_ct}): ${_body.slice(0, 120)}`); }
     if (!tokenRes.ok) throw new Error(tokenData.error || 'Session error');
     const wsToken = tokenData.ws_token;
     if (!wsToken) throw new Error('No session token returned from server');

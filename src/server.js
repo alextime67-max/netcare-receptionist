@@ -64,7 +64,7 @@ server.on('upgrade', (req, socket, head) => {
       kb.businessRules = getBusinessRules(clinicId);
       kb.trainingFaqs  = getTrainingFaqs(clinicId);
 
-      createBrowserRelay(ws, clinic, kb);
+      createBrowserRelay(ws, apiKey, clinic, kb);
     });
 
   } else {

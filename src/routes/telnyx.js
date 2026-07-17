@@ -111,11 +111,13 @@ router.post('/webhook', async (req, res) => {
       const relay = createTelnyxRelay(callControlId, callerPhone, clinic, kb, apiKey);
 
       // Start continuous inbound transcription (call.transcription events from here on)
+      const txLang = clinic.ai_language === 'en' ? 'en' : 'es';
       await telnyxAction(callControlId, 'transcription_start', {
-        transcription_engine: 'A',
-        language: clinic.ai_language === 'en' ? 'en' : 'es',
+        transcription_engine:  'A',
+        transcription_tracks:  'inbound_track',
+        language:              txLang,
       }, apiKey);
-      console.log(`[Telnyx/${clinic.slug}] Transcription started`);
+      console.log(`[Telnyx/${clinic.slug}] Transcription started  engine=A  tracks=inbound_track  lang=${txLang}`);
 
       // Play opening greeting (state: GREETING)
       await relay.onCallAnswered();
@@ -126,10 +128,12 @@ router.post('/webhook', async (req, res) => {
     const relay = getTelnyxRelay(callControlId);
 
     // ── 5. call.transcription — final transcript → Claude → speak ────────────
+    // Telnyx event: call.transcription (not call.transcription.ended)
     if (eventType === 'call.transcription') {
       const td      = p.transcription_data || {};
       const text    = (td.transcript || '').trim();
       const isFinal = td.is_final === true;
+      console.log(`[Telnyx] call.transcription  is_final=${isFinal}  text="${text.slice(0, 80)}"  ccid=…${callControlId.slice(-6)}`);
       if (!isFinal || !text) return;
       if (!relay) {
         console.warn(`[Telnyx] No relay for transcription  ccid=…${callControlId.slice(-6)}`);
@@ -141,7 +145,9 @@ router.post('/webhook', async (req, res) => {
 
     // ── 6. call.speak.ended — Ana finished speaking → WAITING ────────────────
     if (eventType === 'call.speak.ended') {
-      if (relay) relay.onSpeakEnded();
+      const eventCommandId = p.command_id || null;
+      console.log(`[Telnyx] call.speak.ended  cmd=${eventCommandId ? eventCommandId.slice(0, 8) : 'n/a'}  ccid=…${callControlId.slice(-6)}`);
+      if (relay) relay.onSpeakEnded(eventCommandId);
       return;
     }
 

@@ -214,13 +214,26 @@ router.post('/api/clinics/:id/ai/test', async (req, res) => {
 // ── Browser Live Chat session token ──────────────────────────────────────────
 
 router.post('/api/clinics/:id/realtime/session', (req, res) => {
-  const clinic = getClinicAiConfig(+req.params.id);
-  if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+  const rawId = req.params.id;
+  const id    = parseInt(rawId, 10);
+  console.log(`[LiveVoice] POST /api/clinics/${rawId}/realtime/session  parsed_id=${id}`);
 
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'Anthropic API key not configured on this server.' });
+  try {
+    if (!Number.isFinite(id)) return res.status(400).json({ error: `Invalid clinic id: "${rawId}"` });
 
-  const token = generateVoiceToken(+req.params.id);
-  res.json({ ws_token: token });
+    const clinic = getClinicAiConfig(id);
+    console.log(`[LiveVoice] getClinicAiConfig(${id}) → ${clinic ? `clinic="${clinic.name}"` : 'null'}`);
+    if (!clinic) return res.status(404).json({ error: 'Clinic not found' });
+
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'Anthropic API key not configured on this server.' });
+
+    const token = generateVoiceToken(id);
+    console.log(`[LiveVoice] token generated → ${token.slice(0, 8)}… (status 200)`);
+    res.json({ ws_token: token });
+  } catch (e) {
+    console.error('[LiveVoice] session endpoint error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Live stats (active call sessions) ────────────────────────────────────────
