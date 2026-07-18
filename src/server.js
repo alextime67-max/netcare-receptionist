@@ -44,8 +44,10 @@ const wss    = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
   const browserMatch = req.url?.match(/^\/realtime\/browser\/([a-f0-9]{32})$/);
+  const mediaMatch   = req.url?.match(/^\/realtime\/media\/([a-f0-9]{32})$/);
 
   if (browserMatch) {
+    // ── Live Voice browser chat (SuperAdmin) ──────────────────────────────────
     wss.handleUpgrade(req, socket, head, ws => {
       const { getClinicAiConfig, getKnowledgeBase, getBusinessRules, getTrainingFaqs } = require('./database/db');
       const { consumeVoiceToken, createBrowserRelay } = require('./services/realtime');
@@ -59,12 +61,37 @@ server.on('upgrade', (req, socket, head) => {
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) { ws.close(1008, 'Anthropic API key not configured'); return; }
 
-      // Enrich kb with Training Center data so buildRealtimeInstructions includes rules + FAQs
       const kb = getKnowledgeBase(clinicId) || {};
       kb.businessRules = getBusinessRules(clinicId);
       kb.trainingFaqs  = getTrainingFaqs(clinicId);
 
       createBrowserRelay(ws, apiKey, clinic, kb);
+    });
+
+  } else if (mediaMatch) {
+    // ── Deepgram media streaming (USE_STREAMING_STT=true) ────────────────────
+    wss.handleUpgrade(req, socket, head, ws => {
+      const { consumeMediaToken }    = require('./routes/telnyx');
+      const { getTelnyxRelay }       = require('./services/realtime');
+      const { createDeepgramRelay }  = require('./services/deepgram-relay');
+
+      const tokenData = consumeMediaToken(mediaMatch[1]);
+      if (!tokenData) {
+        console.warn(`[MediaStream] Invalid or expired token ${mediaMatch[1].slice(0, 8)}… — closing`);
+        ws.close(1008, 'Invalid or expired media token');
+        return;
+      }
+
+      const relay = getTelnyxRelay(tokenData.callControlId);
+      if (!relay) {
+        console.warn(`[MediaStream] No active relay for ccid=…${tokenData.callControlId?.slice(-6)} — closing`);
+        ws.close(1008, 'No active relay');
+        return;
+      }
+
+      console.log(`[MediaStream] Deepgram relay creating  clinic=${tokenData.clinic.name || tokenData.clinic.slug}  ccid=…${tokenData.callControlId?.slice(-6)}`);
+      const controller = createDeepgramRelay(ws, relay, tokenData.clinic, tokenData.kb || {});
+      if (controller) relay.setDeepgramController(controller);
     });
 
   } else {

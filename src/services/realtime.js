@@ -205,7 +205,7 @@ function getTelnyxRelay(callControlId) {
 //
 // Created in call.answered. Webhook routes events here via getTelnyxRelay().
 
-function createTelnyxRelay(callControlId, callerPhone, clinic, kb, apiKey) {
+function createTelnyxRelay(callControlId, callerPhone, clinic, kb, apiKey, sttFallbackFn) {
   const clinicName = clinic.name || 'the clinic';
   const lang       = clinic.ai_language || 'es';
   // Full Telnyx Ultra voice IDs — override via clinic.ai_voice_es / ai_voice_en
@@ -230,6 +230,7 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
   let lastSpeakCommandId = null;   // command_id of the most-recently accepted speak
   let dbId               = null;
   let callStart          = Date.now();
+  let deepgramController = null;   // set by setDeepgramController() when Deepgram relay is active
   const history          = [];
 
   async function speak(text, activeVoice, activeLang) {
@@ -285,9 +286,17 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
       }
     },
 
-    // Called when Telnyx sends call.transcription with is_final=true
-    async onTranscription(text) {
-      console.log(`[Telnyx/${clinicName}] call.transcription  state=${state}  text="${text.slice(0, 80)}"`);
+    // Called by Telnyx call.transcription (Telnyx STT) OR deepgram-relay.js (Deepgram STT)
+    // meta = { sttProvider, sttModel, confidence, turnIndex } — present only from Deepgram
+    async onTranscription(text, meta = {}) {
+      if (callEnded) {
+        console.log(`[Telnyx/${clinicName}] transcript discarded — call already ended`);
+        return;
+      }
+      const sttSrc  = meta.sttProvider || 'telnyx';
+      const confStr = meta.confidence != null ? ` conf=${meta.confidence.toFixed(2)}` : '';
+      console.log(`[Telnyx/${clinicName}] transcript [${sttSrc}]${confStr}  state=${state}  "${text.slice(0, 80)}"`);
+
       if (state !== 'WAITING') {
         console.log(`[Telnyx/${clinicName}] transcript discarded (state=${state}): "${text.slice(0, 40)}"`);
         return;
@@ -297,7 +306,16 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
         return;
       }
 
-      console.log(`[Telnyx/${clinicName}] Patient said: "${text}"`);
+      console.log(`[Telnyx/${clinicName}] Patient said [${sttSrc}]: "${text}"`);
+      console.log(`[TURN_LOG] ${JSON.stringify({
+        event:       'patient_speech',
+        clinic:      clinicName,
+        sttProvider: sttSrc,
+        sttModel:    meta.sttModel  || (sttSrc === 'deepgram' ? 'nova-3-medical' : 'telnyx-engine-b'),
+        confidence:  meta.confidence ?? null,
+        turnIndex:   meta.turnIndex  ?? null,
+        text,
+      })}`);
       if (dbId) try { addTranscript(dbId, 'patient', text); } catch {}
 
       state = 'RESPONDING';
@@ -383,9 +401,31 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
       }
     },
 
+    // Called by deepgram-relay.js when Deepgram fails — activates sttFallbackFn (Telnyx engine B)
+    async onSttFallback(provider) {
+      console.log(`[Telnyx/${clinicName}] onSttFallback → ${provider}`);
+      if (callEnded) return;
+      if (typeof sttFallbackFn === 'function') {
+        try { await sttFallbackFn(); } catch (e) {
+          console.error(`[Telnyx/${clinicName}] STT fallback error:`, e.message);
+        }
+      }
+    },
+
+    // Called from server.js after createDeepgramRelay() so cleanup() can close it on hangup
+    setDeepgramController(controller) {
+      deepgramController = controller;
+      console.log(`[Telnyx/${clinicName}] Deepgram controller registered`);
+    },
+
     // Called on call.hangup — saves duration + final status, unregisters relay
     cleanup() {
       callEnded = true;
+      if (deepgramController) {
+        try { deepgramController.close(); } catch {}
+        deepgramController = null;
+        console.log(`[Telnyx/${clinicName}] Deepgram relay closed on hangup`);
+      }
       const duration = Math.round((Date.now() - callStart) / 1000);
       if (dbId) try { updateCall(callControlId, { status: 'completed', duration }); } catch {}
       _telnyxRelays.delete(callControlId);

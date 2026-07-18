@@ -1,4 +1,5 @@
 'use strict';
+const crypto  = require('crypto');
 const express = require('express');
 const router  = express.Router();
 
@@ -21,6 +22,18 @@ const { createTelnyxRelay, getTelnyxRelay } = require('../services/realtime');
 // Pending calls: callControlId → { clinic, callerPhone, apiKey }
 // Populated in call.initiated, consumed in call.answered, cleaned on call.hangup
 const _pendingCalls = new Map();
+
+// Media streaming tokens (USE_STREAMING_STT=true only):
+//   token → { callControlId, clinic, kb, apiKey, txLang }
+// Populated in call.answered, consumed in server.js WebSocket upgrade handler.
+// 30-second TTL — auto-cleared if Telnyx never opens the WebSocket.
+const _pendingMediaTokens = new Map();
+
+function consumeMediaToken(token) {
+  const data = _pendingMediaTokens.get(token) || null;
+  if (data) _pendingMediaTokens.delete(token);
+  return data;
+}
 
 const TELNYX_API = 'https://api.telnyx.com/v2';
 
@@ -94,7 +107,7 @@ router.post('/webhook', async (req, res) => {
       return;
     }
 
-    // ── 2. call.answered — create relay, start transcription, send greeting ──
+    // ── 2. call.answered — create relay, start STT, send greeting ────────────
     if (eventType === 'call.answered') {
       const pending = _pendingCalls.get(callControlId);
       if (!pending) {
@@ -107,11 +120,54 @@ router.post('/webhook', async (req, res) => {
       kb.businessRules = getBusinessRules(clinic.id);
       kb.trainingFaqs  = getTrainingFaqs(clinic.id);
 
-      // Create relay — registers itself in _telnyxRelays keyed by callControlId
+      const txLang = clinic.ai_language === 'en' ? 'en' : 'es';
+
+      if (process.env.USE_STREAMING_STT === 'true') {
+        // ── Deepgram path: streaming_start → WebSocket → deepgram-relay ────────
+        const mediaToken = crypto.randomUUID().replace(/-/g, '');
+        _pendingMediaTokens.set(mediaToken, { callControlId, clinic, kb, apiKey, txLang });
+        setTimeout(() => _pendingMediaTokens.delete(mediaToken), 30_000);
+
+        // Build WSS base URL from APP_URL env (https→wss, http→ws)
+        const baseWss = (process.env.APP_URL || 'https://netcarephone.com')
+          .replace(/^https:\/\//, 'wss://')
+          .replace(/^http:\/\//, 'ws://')
+          .replace(/\/$/, '');
+        const streamUrl = `${baseWss}/realtime/media/${mediaToken}`;
+
+        // Fallback fn: if Deepgram fails mid-call, activate Telnyx engine B
+        const sttFallbackFn = async () => {
+          console.log(`[Telnyx/${clinic.slug}] STT fallback → Telnyx engine B  lang=${txLang}`);
+          const fbR = await telnyxAction(callControlId, 'transcription_start', {
+            transcription_engine: 'B', language: txLang,
+          }, apiKey);
+          console.log(`[Telnyx/${clinic.slug}] STT fallback transcription_start: ${fbR.ok ? 'OK' : fbR.status}`);
+        };
+
+        // Create relay with fallback capability
+        const relay = createTelnyxRelay(callControlId, callerPhone, clinic, kb, apiKey, sttFallbackFn);
+
+        const stR = await telnyxAction(callControlId, 'streaming_start', {
+          stream_track: 'inbound_track',
+          target_url:   streamUrl,
+        }, apiKey);
+
+        if (!stR.ok) {
+          const stBody = await stR.text().catch(() => '');
+          console.error(`[Telnyx/${clinic.slug}] streaming_start FAILED (${stR.status}) body="${stBody.slice(0, 200)}" — fallback to Telnyx STT`);
+          _pendingMediaTokens.delete(mediaToken);
+          await sttFallbackFn();
+        } else {
+          console.log(`[Telnyx/${clinic.slug}] Deepgram streaming started  token=${mediaToken.slice(0, 8)}…  url=${streamUrl}`);
+        }
+
+        await relay.onCallAnswered();
+        return;
+      }
+
+      // ── Existing Telnyx STT path — unchanged ──────────────────────────────
       const relay = createTelnyxRelay(callControlId, callerPhone, clinic, kb, apiKey);
 
-      // Start continuous inbound transcription (call.transcription events from here on)
-      const txLang = clinic.ai_language === 'en' ? 'en' : 'es';
       const txR = await telnyxAction(callControlId, 'transcription_start', {
         transcription_engine: 'B',
         language:             txLang,
@@ -124,7 +180,6 @@ router.post('/webhook', async (req, res) => {
       }
       console.log(`[Telnyx/${clinic.slug}] Transcription started  engine=B  lang=${txLang}`);
 
-      // Play opening greeting (state: GREETING)
       await relay.onCallAnswered();
       return;
     }
@@ -173,3 +228,4 @@ router.post('/webhook', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.consumeMediaToken = consumeMediaToken;
