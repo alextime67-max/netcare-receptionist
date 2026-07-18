@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 const crypto  = require('crypto');
 const express = require('express');
 const router  = express.Router();
@@ -131,12 +131,15 @@ router.post('/webhook', async (req, res) => {
         _pendingMediaTokens.set(mediaToken, { callControlId, clinic, kb, apiKey, txLang });
         setTimeout(() => _pendingMediaTokens.delete(mediaToken), 30_000);
 
-        // Build WSS base URL from APP_URL env (https→wss, http→ws)
-        const baseWss = (process.env.APP_URL || 'https://netcarephone.com')
-          .replace(/^https:\/\//, 'wss://')
-          .replace(/^http:\/\//, 'ws://')
-          .replace(/\/$/, '');
-        const streamUrl = `${baseWss}/realtime/media/${mediaToken}`;
+        // Build WebSocket URL for Telnyx to connect to our media relay.
+        // MEDIA_STREAM_URL_BASE bypasses Cloudflare CDN so Telnyx can reach us directly
+        // (e.g. ws://SERVER_IP:3000). Falls back to wss://APP_URL for standard setups.
+        const mediaBase = process.env.MEDIA_STREAM_URL_BASE
+          || (process.env.APP_URL || 'https://netcarephone.com')
+            .replace(/^https:\/\//, 'wss://')
+            .replace(/^http:\/\//, 'ws://')
+            .replace(/\/$/, '');
+        const streamUrl = `${mediaBase}/realtime/media/${mediaToken}`;
         console.log(`[Telnyx/${clinic.slug}] streaming_start → ${streamUrl}`);
 
         // Fallback fn: if Deepgram fails mid-call, activate Telnyx engine B
