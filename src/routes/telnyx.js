@@ -149,7 +149,7 @@ router.post('/webhook', async (req, res) => {
 
         const stR = await telnyxAction(callControlId, 'streaming_start', {
           stream_track: 'inbound_track',
-          target_url:   streamUrl,
+          stream_url:   streamUrl,
         }, apiKey);
 
         if (!stR.ok) {
