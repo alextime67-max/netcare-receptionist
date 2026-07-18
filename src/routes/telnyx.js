@@ -122,7 +122,10 @@ router.post('/webhook', async (req, res) => {
 
       const txLang = clinic.ai_language === 'en' ? 'en' : 'es';
 
-      if (process.env.USE_STREAMING_STT === 'true') {
+      const useStreaming = process.env.USE_STREAMING_STT;
+      console.log(`[Telnyx/${clinic.slug}] USE_STREAMING_STT=${JSON.stringify(useStreaming)}`);
+
+      if (useStreaming === 'true') {
         // ── Deepgram path: streaming_start → WebSocket → deepgram-relay ────────
         const mediaToken = crypto.randomUUID().replace(/-/g, '');
         _pendingMediaTokens.set(mediaToken, { callControlId, clinic, kb, apiKey, txLang });
@@ -134,6 +137,7 @@ router.post('/webhook', async (req, res) => {
           .replace(/^http:\/\//, 'ws://')
           .replace(/\/$/, '');
         const streamUrl = `${baseWss}/realtime/media/${mediaToken}`;
+        console.log(`[Telnyx/${clinic.slug}] streaming_start → ${streamUrl}`);
 
         // Fallback fn: if Deepgram fails mid-call, activate Telnyx engine B
         const sttFallbackFn = async () => {
@@ -152,9 +156,11 @@ router.post('/webhook', async (req, res) => {
           stream_url:   streamUrl,
         }, apiKey);
 
+        console.log(`[Telnyx/${clinic.slug}] streaming_start HTTP ${stR.status} ok=${stR.ok}`);
+
         if (!stR.ok) {
           const stBody = await stR.text().catch(() => '');
-          console.error(`[Telnyx/${clinic.slug}] streaming_start FAILED (${stR.status}) body="${stBody.slice(0, 200)}" — fallback to Telnyx STT`);
+          console.error(`[Telnyx/${clinic.slug}] streaming_start FAILED (${stR.status}) body="${stBody.slice(0, 300)}" — fallback to Telnyx STT`);
           _pendingMediaTokens.delete(mediaToken);
           await sttFallbackFn();
         } else {
