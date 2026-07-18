@@ -23,6 +23,7 @@ const {
   getAllCalls, getCallCount, getCallWithTranscript,
   getCallVolumeByDay, getCallAnalyticsSummary,
   getKnowledgeBase, upsertKnowledgeBase, upsertKbSources, saveWebsiteUrl, getUnansweredQuestions,
+  getClinicSttConfig, updateClinicSttConfig,
   getCostConfig, saveCostConfig, getCostAlerts,
   getTrainingSources, getTrainingSourceText, addTrainingSource, deleteTrainingSource,
   getTrainingFaqs, addTrainingFaq, updateTrainingFaq, deleteTrainingFaq,
@@ -171,6 +172,24 @@ router.put('/api/clinics/:id/ai', (req, res) => {
   try {
     if (!getClinicById(+req.params.id)) return res.status(404).json({ error: 'Not found' });
     updateClinicAiConfig(+req.params.id, req.body);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── STT config (Deepgram, Phase 1) ───────────────────────────────────────────
+
+router.get('/api/clinics/:id/stt', (req, res) => {
+  try {
+    const cfg = getClinicSttConfig(+req.params.id);
+    if (!cfg) return res.status(404).json({ error: 'Not found' });
+    res.json(cfg);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/clinics/:id/stt', (req, res) => {
+  try {
+    if (!getClinicById(+req.params.id)) return res.status(404).json({ error: 'Not found' });
+    updateClinicSttConfig(+req.params.id, req.body);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

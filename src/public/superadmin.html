@@ -1838,6 +1838,80 @@
         <p class="text-xs text-slate-400 mt-1.5">Injected at the end of the system prompt with highest priority. Overrides template and business config instructions.</p>
       </div>
 
+      <!-- STT / Speech Recognition Settings (Deepgram) -->
+      <div class="border-t border-slate-100 pt-5" id="stt-settings-panel">
+        <div class="flex items-center gap-2 mb-1">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">STT — Speech Recognition</p>
+          <span class="text-xs bg-sky-100 text-sky-700 border border-sky-200 font-semibold px-2 py-0.5 rounded-full">Deepgram</span>
+        </div>
+        <p class="text-xs text-slate-400 mb-4">Applies when <code class="bg-slate-100 px-1 rounded text-slate-600">USE_STREAMING_STT=true</code> in server config. Current Telnyx STT stays active while this flag is off — changing these settings has no effect on live calls until Phase 3 is deployed.</p>
+
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="form-label">STT Provider</label>
+            <select id="stt-provider" class="form-input bg-white">
+              <option value="telnyx">Telnyx (current — always active)</option>
+              <option value="deepgram">Deepgram (when flag is on)</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Deepgram Model</label>
+            <select id="stt-model" class="form-input bg-white">
+              <option value="nova-3-medical">Nova-3 Medical (recommended)</option>
+              <option value="nova-3">Nova-3 General</option>
+              <option value="nova-2-medical">Nova-2 Medical</option>
+              <option value="nova-2-general">Nova-2 General (fallback)</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Language Mode</label>
+            <select id="stt-language-mode" class="form-input bg-white">
+              <option value="multilingual">Auto-detect (ES + EN)</option>
+              <option value="es">Spanish only</option>
+              <option value="en">English only</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Max Retries <span class="normal-case font-normal text-slate-400">before transfer/message</span></label>
+            <input type="number" id="stt-max-retries" class="form-input" min="1" max="5" value="3">
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">
+            Confidence Threshold &nbsp;
+            <span id="stt-sensitivity-display" class="normal-case font-normal text-slate-500 font-mono">0.65</span>
+          </label>
+          <input type="range" id="stt-sensitivity" class="w-full accent-sky-600" min="0" max="1" step="0.05" value="0.65"
+            oninput="document.getElementById('stt-sensitivity-display').textContent = parseFloat(this.value).toFixed(2)">
+          <div class="flex justify-between text-xs text-slate-400 mt-0.5">
+            <span>0.00 — tolerant</span>
+            <span>Below this → Ana asks to repeat</span>
+            <span>1.00 — strict</span>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">Custom Boost Words <span class="normal-case font-normal text-slate-400">— one per line, added to recognition vocabulary</span></label>
+          <textarea id="stt-custom-words" rows="4" class="form-input resize-y font-mono text-xs"
+            placeholder="Hialeah&#10;Homestead&#10;Coral Gables&#10;Dr. Rodriguez&#10;Metformin&#10;Lisinopril"></textarea>
+          <p class="text-xs text-slate-400 mt-1">MDcare, Medicare, Medicaid, Aetna, Humana, Cigna, United Healthcare are always included automatically.</p>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">Transfer To After Max Retries <span class="normal-case font-normal text-slate-400">— E.164 phone or blank (Ana takes a message instead)</span></label>
+          <input type="text" id="stt-transfer-number" class="form-input" placeholder="+13055550100 or leave blank to take a message">
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="saveSttConfig()" id="save-stt-btn"
+            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+            Save STT Settings
+          </button>
+          <span id="stt-save-msg" class="text-sm hidden"></span>
+        </div>
+      </div>
+
       <!-- Save AI button -->
       <div class="border-t border-slate-100 pt-4 flex items-center gap-3">
         <button type="button" onclick="saveAiConfig()" id="save-ai-inline-btn"
@@ -2536,7 +2610,7 @@ async function loadAiConfig(clinicId) {
     let faqs = [];
     try { faqs = JSON.parse(c.ai_faq || '[]'); } catch {}
     (Array.isArray(faqs) ? faqs : []).forEach(f => addFaqRow(f.q, f.a));
-    // Reset simulator when config loads
+    loadSttConfig(clinicId);
     resetSimulator();
   } catch {}
 }
@@ -2594,6 +2668,69 @@ async function saveAiConfig() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save AI Settings';
+  }
+}
+
+// ── STT Config (Deepgram, Phase 1) ────────────────────────────────────────────
+
+async function loadSttConfig(clinicId) {
+  try {
+    const r = await fetch(`/superadmin/api/clinics/${clinicId}/stt`);
+    if (!r.ok) return;
+    const c = await r.json();
+    document.getElementById('stt-provider').value      = c.stt_provider      || 'telnyx';
+    document.getElementById('stt-model').value         = c.stt_model         || 'nova-3-medical';
+    document.getElementById('stt-language-mode').value = c.stt_language_mode || 'multilingual';
+    const sens = parseFloat(c.stt_sensitivity ?? 0.65);
+    document.getElementById('stt-sensitivity').value               = sens;
+    document.getElementById('stt-sensitivity-display').textContent = sens.toFixed(2);
+    document.getElementById('stt-max-retries').value   = c.stt_max_retries   ?? 3;
+    document.getElementById('stt-transfer-number').value = c.stt_transfer_number || '';
+    let words = '';
+    if (c.stt_custom_words) {
+      try { words = JSON.parse(c.stt_custom_words).join('\n'); } catch { words = c.stt_custom_words; }
+    }
+    document.getElementById('stt-custom-words').value = words;
+  } catch {}
+}
+
+async function saveSttConfig() {
+  const id = document.getElementById('edit-id').value;
+  if (!id) return;
+  const btn = document.getElementById('save-stt-btn');
+  const msg = document.getElementById('stt-save-msg');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  msg.className = 'text-sm hidden';
+
+  const wordsArr = document.getElementById('stt-custom-words').value
+    .split('\n').map(w => w.trim()).filter(Boolean);
+
+  const body = {
+    sttProvider:       document.getElementById('stt-provider').value,
+    sttModel:          document.getElementById('stt-model').value,
+    sttLanguageMode:   document.getElementById('stt-language-mode').value,
+    sttSensitivity:    parseFloat(document.getElementById('stt-sensitivity').value),
+    sttMaxRetries:     parseInt(document.getElementById('stt-max-retries').value, 10),
+    sttTransferNumber: document.getElementById('stt-transfer-number').value.trim() || null,
+    sttCustomWords:    JSON.stringify(wordsArr),
+  };
+
+  try {
+    const r = await fetch(`/superadmin/api/clinics/${id}/stt`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Save failed');
+    msg.textContent = '✓ STT settings saved';
+    msg.className   = 'text-sm text-emerald-600';
+    setTimeout(() => { msg.className = 'text-sm hidden'; }, 3000);
+  } catch(e) {
+    msg.textContent = '✗ ' + e.message;
+    msg.className   = 'text-sm text-red-600';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save STT Settings';
   }
 }
 

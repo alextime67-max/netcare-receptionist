@@ -257,6 +257,17 @@ function initDb() {
   // ── Migrations: Timezone for smart time-based greeting ───────────────────
   _addColumnIfMissing('clinics', 'timezone', "TEXT DEFAULT 'America/New_York'");
 
+  // ── Migrations: Deepgram STT settings (per-clinic, Phase 1) ──────────────
+  // These columns are read by deepgram-relay.js when USE_STREAMING_STT=true.
+  // The current Telnyx STT path is unaffected until Phase 3 wires them in.
+  _addColumnIfMissing('clinics', 'stt_provider',        "TEXT DEFAULT 'telnyx'");
+  _addColumnIfMissing('clinics', 'stt_model',           "TEXT DEFAULT 'nova-3-medical'");
+  _addColumnIfMissing('clinics', 'stt_language_mode',   "TEXT DEFAULT 'multilingual'");
+  _addColumnIfMissing('clinics', 'stt_sensitivity',     'REAL DEFAULT 0.65');
+  _addColumnIfMissing('clinics', 'stt_custom_words',    'TEXT');
+  _addColumnIfMissing('clinics', 'stt_max_retries',     'INTEGER DEFAULT 3');
+  _addColumnIfMissing('clinics', 'stt_transfer_number', 'TEXT');
+
   // ── Migrations: Telnyx Integration ──────────────────────────────────────────
 
   _addColumnIfMissing('clinics', 'telnyx_api_key', 'TEXT');
@@ -1120,6 +1131,40 @@ function getCallAnalyticsSummary(clinicId) {
 
 // ── Portal helpers ────────────────────────────────────────────────────────────
 
+// ── STT config helpers (Deepgram, Phase 1) ───────────────────────────────────
+
+function getClinicSttConfig(id) {
+  return db.prepare(`
+    SELECT id, stt_provider, stt_model, stt_language_mode,
+           stt_sensitivity, stt_custom_words, stt_max_retries, stt_transfer_number
+    FROM clinics WHERE id = ?
+  `).get(id);
+}
+
+function updateClinicSttConfig(id, data) {
+  const allowed = [
+    'stt_provider', 'stt_model', 'stt_language_mode',
+    'stt_sensitivity', 'stt_custom_words', 'stt_max_retries', 'stt_transfer_number',
+  ];
+  const map = {
+    stt_provider:        data.sttProvider,
+    stt_model:           data.sttModel,
+    stt_language_mode:   data.sttLanguageMode,
+    stt_sensitivity:     data.sttSensitivity != null ? +data.sttSensitivity : undefined,
+    stt_custom_words:    data.sttCustomWords,
+    stt_max_retries:     data.sttMaxRetries != null ? +data.sttMaxRetries : undefined,
+    stt_transfer_number: data.sttTransferNumber,
+  };
+  const filtered = Object.fromEntries(
+    allowed.filter(k => map[k] !== undefined).map(k => [k, map[k] ?? null])
+  );
+  if (!Object.keys(filtered).length) return;
+  const sets = Object.keys(filtered).map(k => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE clinics SET ${sets} WHERE id = ?`).run(...Object.values(filtered), id);
+  const row = db.prepare('SELECT slug FROM clinics WHERE id = ?').get(id);
+  if (row) invalidateClinicCache(row.slug);
+}
+
 function updateClinicTelnyx(id, data) {
   const allowed = ['telnyx_api_key', 'telnyx_phone'];
   const map = {
@@ -1407,6 +1452,8 @@ module.exports = {
   getClinicBilling,
   getClinicAiConfig,
   updateClinicAiConfig,
+  getClinicSttConfig,
+  updateClinicSttConfig,
   deleteClinic,
   getGlobalStats,
   // calls
