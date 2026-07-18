@@ -292,8 +292,7 @@ Do NOT wrap in code fences. Do NOT add any text outside the JSON.`;
         console.log(`[Telnyx/${clinicName}] transcript discarded (state=${state}): "${text.slice(0, 40)}"`);
         return;
       }
-      const words = text.trim().split(/\s+/).filter(w => w.length > 1);
-      if (words.length < 2) {
+      if (text.trim().length < 2) {
         console.log(`[Telnyx/${clinicName}] transcript too short, ignoring: "${text}"`);
         return;
       }
